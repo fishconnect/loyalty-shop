@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>ระบบสะสมแต้มร้านอาหาร</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    font-family: -apple-system, "Segoe UI", "Sarabun", sans-serif;
+    margin: 0; background: #f3f4f6; color: #111827;
+    padding-bottom: 80px;
+  }
+  header {
+    background: #ea580c; color: #fff; padding: 14px 16px;
+    position: sticky; top: 0; z-index: 10;
+    box-shadow: 0 2px 6px rgba(0,0,0,.1);
+  }
+  header h1 { margin: 0; font-size: 18px; font-weight: 700; }
+  header .sub { font-size: 12px; opacity: .9; }
+
+  .tabs {
+    display: flex; background: #fff; border-bottom: 1px solid #e5e7eb;
+    position: sticky; top: 56px; z-index: 9;
+  }
+  .tab {
+    flex: 1; padding: 12px 6px; text-align: center; font-size: 13px;
+    font-weight: 600; color: #6b7280; cursor: pointer;
+    border-bottom: 3px solid transparent;
+  }
+  .tab.active { color: #ea580c; border-bottom-color: #ea580c; }
+
+  .page { display: none; padding: 16px; }
+  .page.active { display: block; }
+
+  .card {
+    background: #fff; border-radius: 12px; padding: 16px;
+    margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.05);
+  }
+  .card h2 { margin: 0 0 12px; font-size: 16px; }
+  .card h3 { margin: 0 0 8px; font-size: 14px; color: #374151; }
+
+  label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: #374151; }
+  .req { color: #dc2626; }
+  input, select, textarea {
+    width: 100%; padding: 10px 12px; font-size: 16px;
+    border: 1px solid #d1d5db; border-radius: 8px; background: #fff;
+    margin-bottom: 12px; font-family: inherit;
+  }
+  input:focus, select:focus { outline: none; border-color: #ea580c; }
+
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; }
+
+  button {
+    padding: 12px 16px; font-size: 15px; font-weight: 600;
+    border: none; border-radius: 8px; cursor: pointer;
+    font-family: inherit;
+  }
+  .btn-primary { background: #ea580c; color: #fff; width: 100%; }
+  .btn-primary:active { background: #c2410c; }
+  .btn-secondary { background: #e5e7eb; color: #111827; }
+  .btn-success { background: #16a34a; color: #fff; }
+  .btn-danger { background: #dc2626; color: #fff; }
+  .btn-ghost { background: transparent; color: #6b7280; }
+
+  .toggle-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 0; margin-bottom: 8px;
+  }
+  .toggle-row input[type="checkbox"] { width: 20px; height: 20px; margin: 0; }
+  .toggle-row label { margin: 0; }
+
+  .stat {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+    margin-bottom: 12px;
+  }
+  .stat-box {
+    background: #fff; padding: 12px; border-radius: 10px; text-align: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,.05);
+  }
+  .stat-box .num { font-size: 22px; font-weight: 700; color: #ea580c; }
+  .stat-box .lbl { font-size: 11px; color: #6b7280; }
+
+  .progress {
+    background: #f3f4f6; border-radius: 8px; overflow: hidden;
+    height: 24px; position: relative; margin: 8px 0;
+  }
+  .progress-bar {
+    background: linear-gradient(90deg, #fb923c, #ea580c);
+    height: 100%; transition: width .3s;
+  }
+  .progress-text {
+    position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; font-size: 12px; font-weight: 700; color: #111827;
+  }
+
+  .customer-item, .order-item {
+    background: #fff; padding: 12px; border-radius: 10px;
+    margin-bottom: 8px; box-shadow: 0 1px 2px rgba(0,0,0,.04);
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 8px; cursor: pointer;
+  }
+  .customer-item .info { flex: 1; min-width: 0; }
+  .customer-item .name { font-weight: 600; font-size: 15px; }
+  .customer-item .phone { font-size: 12px; color: #6b7280; }
+  .customer-item .meta { font-size: 12px; color: #374151; margin-top: 4px; }
+
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 999px;
+    font-size: 11px; font-weight: 700;
+  }
+  .badge-reward { background: #fef3c7; color: #92400e; }
+  .badge-near { background: #fee2e2; color: #991b1b; }
+  .badge-noPhone { background: #dbeafe; color: #1e40af; }
+
+  .empty { text-align: center; color: #9ca3af; padding: 24px; font-size: 14px; }
+
+  .modal-bg {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5);
+    z-index: 100; align-items: center; justify-content: center; padding: 20px;
+  }
+  .modal-bg.show { display: flex; }
+  .modal {
+    background: #fff; border-radius: 14px; padding: 20px; width: 100%;
+    max-width: 400px; max-height: 90vh; overflow-y: auto;
+  }
+  .modal h2 { margin-top: 0; }
+
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: #111827; color: #fff; padding: 12px 20px; border-radius: 999px;
+    font-size: 14px; z-index: 200; opacity: 0;
+    transition: opacity .3s; pointer-events: none; white-space: nowrap;
+  }
+  .toast.show { opacity: 1; }
+
+  .hint { font-size: 12px; color: #6b7280; margin-top: -8px; margin-bottom: 12px; }
+
+  .search-box { margin-bottom: 12px; }
+
+  .footer-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .footer-actions button { flex: 1; }
+
+  /* Autocomplete */
+  .ac-wrap { position: relative; }
+  .ac-list {
+    position: absolute; top: 100%; left: 0; right: 0;
+    background: #fff; border: 1px solid #d1d5db; border-radius: 8px;
+    max-height: 240px; overflow-y: auto; z-index: 50;
+    box-shadow: 0 4px 12px rgba(0,0,0,.1);
+    margin-top: -8px;
+  }
+  .ac-item {
+    padding: 10px 12px; cursor: pointer; border-bottom: 1px solid #f3f4f6;
+  }
+  .ac-item:hover, .ac-item.selected { background: #fff7ed; }
+  .ac-item:last-child { border-bottom: none; }
+  .ac-item .n { font-weight: 600; }
+  .ac-item .p { font-size: 12px; color: #6b7280; }
+  .ac-create { color: #ea580c; font-weight: 600; }
+
+  .selected-customer {
+    background: #fff7ed; border: 1px solid #fed7aa; border-radius: 8px;
+    padding: 10px 12px; margin-bottom: 12px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .selected-customer .x {
+    background: transparent; border: none; color: #6b7280; font-size: 18px;
+    cursor: pointer; padding: 4px 8px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🍱 ระบบสะสมแต้มร้านอาหาร</h1>
+  <div class="sub">กิน <span id="goalDisplay">20</span> กล่อง ฟรี 1 กล่อง</div>
+</header>
+
+<div class="tabs">
+  <div class="tab active" data-page="order">บันทึก</div>
+  <div class="tab" data-page="check">เช็ก/แลก</div>
+  <div class="tab" data-page="customers">ลูกค้า</div>
+  <div class="tab" data-page="reports">รายงาน</div>
+  <div class="tab" data-page="settings">ตั้งค่า</div>
+</div>
+
+<!-- ========== บันทึกออเดอร์ ========== -->
+<div class="page active" id="page-order">
+  <div class="card">
+    <h2>📝 บันทึกออเดอร์ใหม่</h2>
+
+    <div id="selectedCustomerBox" style="display:none"></div>
+
+    <div id="newCustomerLookup">
+      <label>ค้นหาลูกค้า (ชื่อ หรือ เบอร์)</label>
+      <div class="ac-wrap">
+        <input type="text" id="orderLookup" placeholder="พิมพ์ชื่อหรือเบอร์..." autocomplete="off">
+        <div class="ac-list" id="orderAcList" style="display:none"></div>
+      </div>
+      <div class="hint">พิมพ์เพื่อค้นหา หรือพิมพ์ชื่อใหม่แล้วกด "เพิ่มลูกค้าใหม่"</div>
+    </div>
+
+    <div id="newCustomerFields" style="display:none">
+      <label>ชื่อคนกิน <span class="req">*</span></label>
+      <input type="text" id="newCustName" placeholder="คุณ...">
+
+      <label>เบอร์โทร (ไม่บังคับ)</label>
+      <input type="tel" id="newCustPhone" placeholder="0812345678" inputmode="numeric">
+      <div class="hint">ถ้าไม่กรอกเบอร์ จะใช้ชื่อเป็นตัวระบุ</div>
+    </div>
+
+    <label>จำนวนกล่อง <span class="req">*</span></label>
+    <input type="number" id="orderBoxes" min="1" value="1" inputmode="numeric">
+
+    <div class="toggle-row">
+      <input type="checkbox" id="isProxy">
+      <label for="isProxy">มีตัวแทนสั่งให้ (สิทธิ์ไปคนกิน ไม่ใช่คนสั่งแทน)</label>
+    </div>
+
+    <div id="proxyFields" style="display:none">
+      <label>ชื่อ/เบอร์ คนสั่งแทน</label>
+      <input type="text" id="proxyInfo" placeholder="ชื่อหรือเบอร์คนสั่งแทน">
+    </div>
+
+    <label>หมายเหตุ</label>
+    <input type="text" id="orderNote" placeholder="เมนู, ที่อยู่ส่ง ฯลฯ">
+
+    <button class="btn-primary" onclick="saveOrder()">✅ บันทึกออเดอร์</button>
+  </div>
+</div>
+
+<!-- ========== เช็ก/แลก ========== -->
+<div class="page" id="page-check">
+  <div class="card">
+    <h2>🎁 เช็กสิทธิ์ / แลกฟรี</h2>
+    <label>ค้นหาลูกค้า (ชื่อ หรือ เบอร์)</label>
+    <div class="ac-wrap">
+      <input type="text" id="checkLookup" placeholder="พิมพ์ชื่อหรือเบอร์..." autocomplete="off">
+      <div class="ac-list" id="checkAcList" style="display:none"></div>
+    </div>
+    <div id="checkResult"></div>
+  </div>
+</div>
+
+<!-- ========== ลูกค้า ========== -->
+<div class="page" id="page-customers">
+  <div class="card">
+    <h2>👥 ทะเบียนลูกค้า</h2>
+    <input type="text" class="search-box" id="custSearch" placeholder="ค้นหาชื่อหรือเบอร์..." oninput="renderCustomers()">
+    <div id="customersList"></div>
+  </div>
+</div>
+
+<!-- ========== รายงาน ========== -->
+<div class="page" id="page-reports">
+  <div class="stat">
+    <div class="stat-box"><div class="num" id="statCustomers">0</div><div class="lbl">ลูกค้า</div></div>
+    <div class="stat-box"><div class="num" id="statBoxes">0</div><div class="lbl">กล่องสะสมรวม</div></div>
+    <div class="stat-box"><div class="num" id="statRedeemed">0</div><div class="lbl">แลกฟรีไป</div></div>
+  </div>
+
+  <div class="card">
+    <h2>🔥 ใกล้ครบ (≥80%)</h2>
+    <div id="nearList"></div>
+  </div>
+
+  <div class="card">
+    <h2>🏆 ลูกค้า Top 10</h2>
+    <div id="topList"></div>
+  </div>
+
+  <div class="card">
+    <h2>📋 ออเดอร์ล่าสุด</h2>
+    <div id="recentOrders"></div>
+  </div>
+</div>
+
+<!-- ========== ตั้งค่า ========== -->
+<div class="page" id="page-settings">
+  <div class="card">
+    <h2>⚙️ ตั้งค่า</h2>
+    <label>เป้าหมายสะสม (กล่อง/รางวัล)</label>
+    <input type="number" id="settingGoal" min="1" value="20">
+    <button class="btn-primary" onclick="saveSettings()">บันทึกการตั้งค่า</button>
+  </div>
+
+  <div class="card">
+    <h2>💾 สำรอง / กู้คืนข้อมูล</h2>
+    <p class="hint">ข้อมูลเก็บใน browser ของเครื่องนี้เท่านั้น แนะนำให้ Export เก็บไว้สม่ำเสมอ</p>
+    <div class="footer-actions">
+      <button class="btn-secondary" onclick="exportData()">⬇️ Export JSON</button>
+      <button class="btn-secondary" onclick="document.getElementById('importFile').click()">⬆️ Import JSON</button>
+      <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)">
+    </div>
+    <div style="height:8px"></div>
+    <button class="btn-secondary" onclick="exportCSV()">📊 Export CSV (ออเดอร์)</button>
+    <div style="height:8px"></div>
+    <button class="btn-danger" onclick="resetAll()">🗑️ ล้างข้อมูลทั้งหมด</button>
+  </div>
+
+  <div class="card">
+    <h3>วิธีใช้</h3>
+    <p style="font-size:13px;line-height:1.6;color:#374151">
+      1. แท็บ <b>บันทึก</b> → พิมพ์<b>ชื่อหรือเบอร์</b>คนกิน เลือกจากรายการ หรือเพิ่มใหม่<br>
+      2. ลูกค้าใหม่ — กรอกแค่ชื่อก็พอ (เบอร์เป็น optional)<br>
+      3. มีตัวแทนสั่ง → ติ๊ก toggle เพื่อระบุคนสั่งแทน — สิทธิ์ตกที่คนกินเสมอ<br>
+      4. แท็บ <b>เช็ก/แลก</b> ค้นหาด้วยชื่อ/เบอร์ แล้วกดแลกฟรี<br>
+      5. Export JSON เก็บไว้ใน Drive/iCloud เป็นประจำ
+    </p>
+  </div>
+</div>
+
+<div class="modal-bg" id="modal">
+  <div class="modal">
+    <h2 id="modalTitle"></h2>
+    <div id="modalBody"></div>
+    <div class="footer-actions" style="margin-top:16px">
+      <button class="btn-secondary" onclick="closeModal()">ปิด</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const STORAGE_KEY = 'loyaltyShopV2';
+let db = loadDB();
+let selectedCustomerId = null;
+let checkSelectedId = null;
+
+function loadDB() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return migrate(JSON.parse(raw));
+    // try migrate from v1
+    const v1 = localStorage.getItem('loyaltyShopV1');
+    if (v1) return migrateFromV1(JSON.parse(v1));
+  } catch (e) {}
+  return { customers: {}, orders: [], redemptions: [], settings: { goal: 20 } };
+}
+
+function migrate(data) {
+  if (!data.settings) data.settings = { goal: 20 };
+  // ensure each customer has id
+  Object.keys(data.customers).forEach(k => {
+    const c = data.customers[k];
+    if (!c.id) c.id = k;
+  });
+  return data;
+}
+
+function migrateFromV1(v1) {
+  const out = { customers: {}, orders: [], redemptions: [], settings: v1.settings || { goal: 20 } };
+  Object.values(v1.customers || {}).forEach(c => {
+    const id = c.phone;
+    out.customers[id] = { id, name: c.name, phone: c.phone, total_boxes: c.total_boxes, redeemed_count: c.redeemed_count, joined: c.joined };
+  });
+  (v1.orders || []).forEach(o => out.orders.push({ ...o, customer_id: o.customer_phone }));
+  (v1.redemptions || []).forEach(r => out.redemptions.push({ ...r, customer_id: r.customer_phone }));
+  return out;
+}
+
+function saveDB() { localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); }
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+function normalizePhone(p) { return (p || '').replace(/\D/g, ''); }
+function normName(s) { return (s || '').trim().toLowerCase(); }
+
+function fmtDate(iso) {
+  const d = new Date(iso);
+  return d.toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+function genId() { return 'C' + Date.now() + Math.floor(Math.random()*1000); }
+
+function findCustomers(q) {
+  const norm = q.trim().toLowerCase();
+  const phoneNorm = normalizePhone(q);
+  if (!norm) return [];
+  return Object.values(db.customers).filter(c => {
+    if (c.name.toLowerCase().includes(norm)) return true;
+    if (phoneNorm && c.phone && c.phone.includes(phoneNorm)) return true;
+    return false;
+  });
+}
+
+function getCustomer(id) { return db.customers[id] || null; }
+
+function rewardsAvailable(c) {
+  if (!c) return 0;
+  const goal = db.settings.goal || 20;
+  return Math.floor(c.total_boxes / goal) - c.redeemed_count;
+}
+
+function progressToNext(c) {
+  const goal = db.settings.goal || 20;
+  if (!c) return { current: 0, goal, pct: 0 };
+  const earnedRewards = Math.floor(c.total_boxes / goal);
+  const remainder = c.total_boxes - earnedRewards * goal;
+  const display = (rewardsAvailable(c) > 0 && remainder === 0) ? goal : remainder;
+  return { current: display, goal, pct: Math.min(100, (display / goal) * 100) };
+}
+
+// ========== Tabs ==========
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('page-' + t.dataset.page).classList.add('active');
+    if (t.dataset.page === 'customers') renderCustomers();
+    if (t.dataset.page === 'reports') renderReports();
+    if (t.dataset.page === 'settings') document.getElementById('settingGoal').value = db.settings.goal;
+  });
+});
+
+// ========== Order: Autocomplete ==========
+const orderLookup = document.getElementById('orderLookup');
+const orderAc = document.getElementById('orderAcList');
+
+orderLookup.addEventListener('input', () => {
+  const q = orderLookup.value.trim();
+  if (!q) { orderAc.style.display = 'none'; return; }
+  const matches = findCustomers(q).slice(0, 8);
+  let html = matches.map(c => {
+    const r = rewardsAvailable(c);
+    return `<div class="ac-item" onclick="selectCustomer('${c.id}')">
+      <div class="n">${c.name} ${r>0?`<span class="badge badge-reward">🎁 ${r}</span>`:''}</div>
+      <div class="p">${c.phone || 'ไม่มีเบอร์'} · สะสม ${c.total_boxes}</div>
+    </div>`;
+  }).join('');
+  html += `<div class="ac-item ac-create" onclick="showNewCustomerForm()">+ เพิ่มลูกค้าใหม่: "${q}"</div>`;
+  orderAc.innerHTML = html;
+  orderAc.style.display = 'block';
+});
+
+orderLookup.addEventListener('blur', () => {
+  setTimeout(() => orderAc.style.display = 'none', 200);
+});
+
+function selectCustomer(id) {
+  selectedCustomerId = id;
+  const c = getCustomer(id);
+  const r = rewardsAvailable(c);
+  document.getElementById('selectedCustomerBox').style.display = 'block';
+  document.getElementById('selectedCustomerBox').className = 'selected-customer';
+  document.getElementById('selectedCustomerBox').innerHTML = `
+    <div>
+      <div style="font-weight:700">${c.name} ${r>0?`<span class="badge badge-reward">🎁 ฟรี ${r}</span>`:''}</div>
+      <div style="font-size:12px;color:#6b7280">${c.phone || '— ไม่มีเบอร์'} · สะสม ${c.total_boxes}/${db.settings.goal}</div>
+    </div>
+    <button class="x" onclick="clearSelectedCustomer()">×</button>
+  `;
+  document.getElementById('newCustomerLookup').style.display = 'none';
+  document.getElementById('newCustomerFields').style.display = 'none';
+  orderAc.style.display = 'none';
+}
+
+function clearSelectedCustomer() {
+  selectedCustomerId = null;
+  document.getElementById('selectedCustomerBox').style.display = 'none';
+  document.getElementById('newCustomerLookup').style.display = 'block';
+  document.getElementById('newCustomerFields').style.display = 'none';
+  document.getElementById('orderLookup').value = '';
+  document.getElementById('newCustName').value = '';
+  document.getElementById('newCustPhone').value = '';
+}
+
+function showNewCustomerForm() {
+  const q = orderLookup.value.trim();
+  document.getElementById('newCustomerFields').style.display = 'block';
+  // if input looks like phone, put in phone field; else name
+  if (/^\d{4,}$/.test(normalizePhone(q))) {
+    document.getElementById('newCustPhone').value = normalizePhone(q);
+    document.getElementById('newCustName').focus();
+  } else {
+    document.getElementById('newCustName').value = q;
+    document.getElementById('newCustPhone').focus();
+  }
+  orderAc.style.display = 'none';
+}
+
+function saveOrder() {
+  const boxes = parseInt(document.getElementById('orderBoxes').value) || 0;
+  if (boxes < 1) return toast('⚠️ จำนวนกล่องต้อง ≥ 1');
+
+  let customer;
+  if (selectedCustomerId) {
+    customer = getCustomer(selectedCustomerId);
+  } else {
+    // creating new
+    const name = document.getElementById('newCustName').value.trim();
+    const phone = normalizePhone(document.getElementById('newCustPhone').value);
+    if (!name && !phone) return toast('⚠️ กรุณาเลือกลูกค้า หรือกรอกชื่อ/เบอร์ใหม่');
+    if (!name) return toast('⚠️ กรุณากรอกชื่อคนกิน');
+
+    // check for duplicate name + no phone scenario
+    const dupName = Object.values(db.customers).find(c => c.name === name && !c.phone && !phone);
+    if (dupName) {
+      if (!confirm(`มีลูกค้าชื่อ "${name}" อยู่แล้ว ต้องการใช้คนเดิมหรือไม่?\n\nกด OK = ใช้คนเดิม\nกด Cancel = สร้างเป็นคนใหม่`)) {
+        // create new
+      } else {
+        customer = dupName;
+      }
+    }
+
+    if (!customer) {
+      const id = phone || genId();
+      if (db.customers[id]) {
+        customer = db.customers[id];
+        if (customer.name === 'ไม่ระบุชื่อ' && name) customer.name = name;
+      } else {
+        customer = {
+          id, name: name || 'ไม่ระบุชื่อ', phone: phone || '',
+          total_boxes: 0, redeemed_count: 0,
+          joined: new Date().toISOString()
+        };
+        db.customers[id] = customer;
+      }
+    }
+  }
+
+  const isProxy = document.getElementById('isProxy').checked;
+  const proxyInfo = document.getElementById('proxyInfo').value.trim();
+  const note = document.getElementById('orderNote').value.trim();
+
+  const before = customer.total_boxes;
+  customer.total_boxes += boxes;
+
+  db.orders.push({
+    id: 'O' + Date.now(),
+    date: new Date().toISOString(),
+    customer_id: customer.id,
+    customer_name: customer.name,
+    boxes,
+    ordered_by: isProxy ? proxyInfo : '',
+    note
+  });
+
+  saveDB();
+
+  const goal = db.settings.goal;
+  const beforeR = Math.floor(before / goal);
+  const afterR = Math.floor(customer.total_boxes / goal);
+  if (afterR > beforeR) {
+    showModal('🎉 ลูกค้าได้รับสิทธิ์ฟรี!',
+      `<p><b>${customer.name}</b>${customer.phone?` (${customer.phone})`:''}<br>สะสมครบ ${goal} กล่อง — ได้สิทธิ์ฟรี <b>${afterR - beforeR}</b> กล่อง</p>
+       <p class="hint">รวมสิทธิ์คงเหลือ: <b>${rewardsAvailable(customer)}</b> กล่อง</p>`);
+  } else {
+    toast(`✅ บันทึกแล้ว · ${customer.name} สะสม ${customer.total_boxes}/${goal}`);
+  }
+
+  // Reset form
+  clearSelectedCustomer();
+  document.getElementById('orderBoxes').value = '1';
+  document.getElementById('isProxy').checked = false;
+  document.getElementById('proxyFields').style.display = 'none';
+  document.getElementById('proxyInfo').value = '';
+  document.getElementById('orderNote').value = '';
+}
+
+document.getElementById('isProxy').addEventListener('change', e => {
+  document.getElementById('proxyFields').style.display = e.target.checked ? 'block' : 'none';
+});
+
+// ========== Check / Redeem ==========
+const checkLookup = document.getElementById('checkLookup');
+const checkAc = document.getElementById('checkAcList');
+
+checkLookup.addEventListener('input', () => {
+  const q = checkLookup.value.trim();
+  if (!q) { checkAc.style.display = 'none'; checkSelectedId = null; document.getElementById('checkResult').innerHTML = ''; return; }
+  const matches = findCustomers(q).slice(0, 8);
+  if (!matches.length) { checkAc.style.display = 'none'; document.getElementById('checkResult').innerHTML = '<div class="empty">ไม่พบลูกค้า</div>'; return; }
+  checkAc.innerHTML = matches.map(c => {
+    const r = rewardsAvailable(c);
+    return `<div class="ac-item" onclick="selectCheckCustomer('${c.id}')">
+      <div class="n">${c.name} ${r>0?`<span class="badge badge-reward">🎁 ${r}</span>`:''}</div>
+      <div class="p">${c.phone || 'ไม่มีเบอร์'} · สะสม ${c.total_boxes}</div>
+    </div>`;
+  }).join('');
+  checkAc.style.display = 'block';
+});
+
+checkLookup.addEventListener('blur', () => {
+  setTimeout(() => checkAc.style.display = 'none', 200);
+});
+
+function selectCheckCustomer(id) {
+  checkSelectedId = id;
+  const c = getCustomer(id);
+  checkLookup.value = c.name + (c.phone ? ` (${c.phone})` : '');
+  checkAc.style.display = 'none';
+  renderCheck();
+}
+
+function renderCheck() {
+  const box = document.getElementById('checkResult');
+  if (!checkSelectedId) { box.innerHTML = ''; return; }
+  const c = getCustomer(checkSelectedId);
+  if (!c) { box.innerHTML = '<div class="empty">ไม่พบลูกค้า</div>'; return; }
+  const r = rewardsAvailable(c);
+  const prog = progressToNext(c);
+  box.innerHTML = `
+    <div style="text-align:center;padding:8px 0">
+      <div style="font-size:18px;font-weight:700">${c.name}</div>
+      <div style="color:#6b7280;font-size:13px">${c.phone || '— ไม่มีเบอร์ —'}</div>
+    </div>
+    <div class="progress">
+      <div class="progress-bar" style="width:${prog.pct}%"></div>
+      <div class="progress-text">${prog.current} / ${prog.goal} กล่อง</div>
+    </div>
+    <div class="stat" style="margin-top:12px">
+      <div class="stat-box"><div class="num">${c.total_boxes}</div><div class="lbl">สะสมรวม</div></div>
+      <div class="stat-box"><div class="num">${c.redeemed_count}</div><div class="lbl">แลกไป</div></div>
+      <div class="stat-box"><div class="num" style="color:${r>0?'#16a34a':'#ea580c'}">${r}</div><div class="lbl">สิทธิ์ฟรี</div></div>
+    </div>
+    ${r > 0 ? `<button class="btn-success" style="width:100%;margin-top:8px" onclick="redeem('${c.id}')">🎁 แลกข้าวฟรี 1 กล่อง</button>` : ''}
+    <button class="btn-ghost" style="width:100%;margin-top:4px" onclick="showHistory('${c.id}')">📜 ดูประวัติ</button>
+    <button class="btn-ghost" style="width:100%" onclick="editCustomer('${c.id}')">✏️ แก้ไขข้อมูล</button>
+  `;
+}
+
+function redeem(id) {
+  const c = getCustomer(id);
+  if (!c) return;
+  if (rewardsAvailable(c) < 1) return toast('⚠️ ไม่มีสิทธิ์ฟรีให้แลก');
+  if (!confirm(`ยืนยันแลกข้าวฟรี 1 กล่อง สำหรับ ${c.name}?`)) return;
+  c.redeemed_count += 1;
+  db.redemptions.push({
+    id: 'R' + Date.now(),
+    date: new Date().toISOString(),
+    customer_id: c.id,
+    customer_name: c.name,
+    boxes_used: db.settings.goal
+  });
+  saveDB();
+  toast(`🎉 แลกฟรีสำเร็จ! ${c.name}`);
+  renderCheck();
+}
+
+function showHistory(id) {
+  const c = getCustomer(id);
+  if (!c) return;
+  const orders = db.orders.filter(o => o.customer_id === id).reverse();
+  const reds = db.redemptions.filter(r => r.customer_id === id).reverse();
+  let html = '<h3>ออเดอร์</h3>';
+  html += orders.length ? orders.map(o => `
+    <div class="order-item" style="cursor:default">
+      <div>
+        <div>${fmtDate(o.date)} · <b>${o.boxes} กล่อง</b></div>
+        <div style="font-size:12px;color:#6b7280">
+          ${o.ordered_by ? `สั่งแทนโดย ${o.ordered_by}` : 'สั่งเอง'}
+          ${o.note ? ` · ${o.note}` : ''}
+        </div>
+      </div>
+    </div>`).join('') : '<div class="empty">ไม่มีข้อมูล</div>';
+  html += '<h3 style="margin-top:12px">การแลกฟรี</h3>';
+  html += reds.length ? reds.map(r => `
+    <div class="order-item" style="cursor:default">
+      <div>${fmtDate(r.date)} · ใช้ ${r.boxes_used} กล่อง</div>
+    </div>`).join('') : '<div class="empty">ยังไม่เคยแลก</div>';
+  showModal(`ประวัติ: ${c.name}`, html);
+}
+
+function editCustomer(id) {
+  const c = getCustomer(id);
+  if (!c) return;
+  const html = `
+    <label>ชื่อ</label>
+    <input type="text" id="edName" value="${c.name.replace(/"/g,'&quot;')}">
+    <label>เบอร์โทร</label>
+    <input type="tel" id="edPhone" value="${c.phone || ''}" inputmode="numeric">
+    <button class="btn-primary" onclick="saveEdit('${id}')">บันทึก</button>
+    <div style="height:8px"></div>
+    <button class="btn-danger" style="width:100%" onclick="deleteCustomer('${id}')">🗑️ ลบลูกค้า</button>
+  `;
+  showModal('แก้ไขข้อมูลลูกค้า', html);
+}
+
+function saveEdit(id) {
+  const c = getCustomer(id);
+  const name = document.getElementById('edName').value.trim();
+  const phone = normalizePhone(document.getElementById('edPhone').value);
+  if (!name) return toast('⚠️ ต้องมีชื่อ');
+  c.name = name;
+  c.phone = phone;
+  saveDB();
+  closeModal();
+  toast('✅ แก้ไขแล้ว');
+  if (checkSelectedId === id) renderCheck();
+  renderCustomers();
+}
+
+function deleteCustomer(id) {
+  if (!confirm('ลบลูกค้านี้? (ออเดอร์/การแลกในอดีตจะยังอยู่)')) return;
+  delete db.customers[id];
+  saveDB();
+  closeModal();
+  toast('🗑️ ลบแล้ว');
+  if (checkSelectedId === id) {
+    checkSelectedId = null;
+    document.getElementById('checkLookup').value = '';
+    document.getElementById('checkResult').innerHTML = '';
+  }
+  renderCustomers();
+}
+
+// ========== Customers List ==========
+function renderCustomers() {
+  const q = document.getElementById('custSearch').value.toLowerCase();
+  const list = Object.values(db.customers)
+    .filter(c => !q || c.name.toLowerCase().includes(q) || (c.phone && c.phone.includes(q)))
+    .sort((a, b) => b.total_boxes - a.total_boxes);
+  const box = document.getElementById('customersList');
+  if (!list.length) { box.innerHTML = '<div class="empty">ยังไม่มีลูกค้า</div>'; return; }
+  box.innerHTML = list.map(c => {
+    const r = rewardsAvailable(c);
+    const prog = progressToNext(c);
+    const near = prog.pct >= 80 && r === 0;
+    return `
+      <div class="customer-item" onclick="goToCheck('${c.id}')">
+        <div class="info">
+          <div class="name">${c.name}
+            ${r > 0 ? `<span class="badge badge-reward">🎁 ฟรี ${r}</span>` : ''}
+            ${near ? '<span class="badge badge-near">ใกล้ครบ</span>' : ''}
+            ${!c.phone ? '<span class="badge badge-noPhone">ไม่มีเบอร์</span>' : ''}
+          </div>
+          <div class="phone">${c.phone || '—'}</div>
+          <div class="meta">สะสมรวม ${c.total_boxes} · แลกไป ${c.redeemed_count} · ความคืบหน้า ${prog.current}/${prog.goal}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function goToCheck(id) {
+  checkSelectedId = id;
+  const c = getCustomer(id);
+  document.querySelector('[data-page=check]').click();
+  document.getElementById('checkLookup').value = c.name + (c.phone ? ` (${c.phone})` : '');
+  renderCheck();
+}
+
+// ========== Reports ==========
+function renderReports() {
+  const customers = Object.values(db.customers);
+  document.getElementById('statCustomers').textContent = customers.length;
+  document.getElementById('statBoxes').textContent = customers.reduce((s, c) => s + c.total_boxes, 0);
+  document.getElementById('statRedeemed').textContent = customers.reduce((s, c) => s + c.redeemed_count, 0);
+
+  const near = customers
+    .map(c => ({ c, prog: progressToNext(c), r: rewardsAvailable(c) }))
+    .filter(x => x.prog.pct >= 80 && x.r === 0)
+    .sort((a, b) => b.prog.pct - a.prog.pct);
+  document.getElementById('nearList').innerHTML = near.length
+    ? near.map(x => `<div class="customer-item" onclick="goToCheck('${x.c.id}')"><div class="info"><div class="name">${x.c.name}</div><div class="phone">${x.c.phone || '—'}</div><div class="meta">สะสม ${x.prog.current}/${x.prog.goal}</div></div></div>`).join('')
+    : '<div class="empty">— ยังไม่มี —</div>';
+
+  const top = [...customers].sort((a, b) => b.total_boxes - a.total_boxes).slice(0, 10);
+  document.getElementById('topList').innerHTML = top.length
+    ? top.map((c, i) => `<div class="customer-item" onclick="goToCheck('${c.id}')"><div class="info"><div class="name">#${i+1} ${c.name}</div><div class="phone">${c.phone || '—'}</div><div class="meta">รวม ${c.total_boxes} กล่อง · แลก ${c.redeemed_count}</div></div></div>`).join('')
+    : '<div class="empty">— ยังไม่มี —</div>';
+
+  const recent = db.orders.slice(-15).reverse();
+  document.getElementById('recentOrders').innerHTML = recent.length
+    ? recent.map(o => {
+        const c = getCustomer(o.customer_id);
+        const name = c?.name || o.customer_name || '?';
+        return `<div class="order-item" style="cursor:default"><div><div><b>${name}</b> · ${o.boxes} กล่อง</div><div style="font-size:12px;color:#6b7280">${fmtDate(o.date)}${o.ordered_by ? ` · สั่งแทน: ${o.ordered_by}` : ''}${o.note?` · ${o.note}`:''}</div></div></div>`;
+      }).join('')
+    : '<div class="empty">— ยังไม่มี —</div>';
+}
+
+// ========== Settings ==========
+function saveSettings() {
+  const g = parseInt(document.getElementById('settingGoal').value) || 20;
+  db.settings.goal = g;
+  document.getElementById('goalDisplay').textContent = g;
+  saveDB();
+  toast('✅ บันทึกการตั้งค่าแล้ว');
+}
+
+function exportData() {
+  const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `loyalty-backup-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importData(e) {
+  const f = e.target.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const obj = JSON.parse(ev.target.result);
+      if (!obj.customers || !obj.orders) throw new Error('invalid');
+      if (!confirm('ทับข้อมูลปัจจุบันด้วยไฟล์นี้?')) return;
+      db = migrate(obj);
+      saveDB();
+      toast('✅ Import สำเร็จ');
+      document.getElementById('goalDisplay').textContent = db.settings.goal;
+      renderReports();
+    } catch (err) {
+      toast('⚠️ ไฟล์ไม่ถูกต้อง');
+    }
+  };
+  reader.readAsText(f);
+  e.target.value = '';
+}
+
+function exportCSV() {
+  const rows = [['date','customer_name','customer_phone','boxes','ordered_by','note']];
+  db.orders.forEach(o => {
+    const c = getCustomer(o.customer_id);
+    rows.push([o.date, c?.name || o.customer_name || '', c?.phone || '', o.boxes, o.ordered_by || '', (o.note||'').replace(/[",\n]/g,' ')]);
+  });
+  const csv = '\uFEFF' + rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `orders-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function resetAll() {
+  if (!confirm('ลบข้อมูลทั้งหมด? (ลูกค้า, ออเดอร์, การแลก) — แนะนำให้ Export ก่อน')) return;
+  if (!confirm('ยืนยันอีกครั้ง: ข้อมูลจะหายถาวร')) return;
+  db = { customers: {}, orders: [], redemptions: [], settings: { goal: 20 } };
+  saveDB();
+  toast('🗑️ ล้างข้อมูลแล้ว');
+  document.getElementById('goalDisplay').textContent = 20;
+  renderReports();
+}
+
+// ========== Modal ==========
+function showModal(title, body) {
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalBody').innerHTML = body;
+  document.getElementById('modal').classList.add('show');
+}
+function closeModal() { document.getElementById('modal').classList.remove('show'); }
+document.getElementById('modal').addEventListener('click', e => {
+  if (e.target.id === 'modal') closeModal();
+});
+
+// ========== Init ==========
+document.getElementById('goalDisplay').textContent = db.settings.goal || 20;
+</script>
+</body>
+</html>
