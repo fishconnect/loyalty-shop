@@ -219,16 +219,6 @@
     <label>จำนวนกล่อง <span class="req">*</span></label>
     <input type="number" id="orderBoxes" min="1" value="1" inputmode="numeric">
 
-    <div class="toggle-row">
-      <input type="checkbox" id="isProxy">
-      <label for="isProxy">มีตัวแทนสั่งให้ (สิทธิ์ไปคนกิน ไม่ใช่คนสั่งแทน)</label>
-    </div>
-
-    <div id="proxyFields" style="display:none">
-      <label>ชื่อ/เบอร์ คนสั่งแทน</label>
-      <input type="text" id="proxyInfo" placeholder="ชื่อหรือเบอร์คนสั่งแทน">
-    </div>
-
     <label>หมายเหตุ</label>
     <input type="text" id="orderNote" placeholder="เมนู, ที่อยู่ส่ง ฯลฯ">
 
@@ -267,6 +257,16 @@
   </div>
 
   <div class="card">
+    <h2>💰 ยอดขาย</h2>
+    <div id="salesReport"></div>
+  </div>
+
+  <div class="card">
+    <h2>📅 ยอดขาย 7 วันล่าสุด</h2>
+    <div id="dailyChart"></div>
+  </div>
+
+  <div class="card">
     <h2>🔥 ใกล้ครบ (≥80%)</h2>
     <div id="nearList"></div>
   </div>
@@ -288,6 +288,11 @@
     <h2>⚙️ ตั้งค่า</h2>
     <label>เป้าหมายสะสม (กล่อง/รางวัล)</label>
     <input type="number" id="settingGoal" min="1" value="20">
+
+    <label>ราคาต่อกล่อง (บาท)</label>
+    <input type="number" id="settingPrice" min="0" value="50">
+    <div class="hint">ใช้คำนวณยอดขายในรายงาน</div>
+
     <button class="btn-primary" onclick="saveSettings()">บันทึกการตั้งค่า</button>
   </div>
 
@@ -321,7 +326,7 @@
   <div class="modal">
     <h2 id="modalTitle"></h2>
     <div id="modalBody"></div>
-    <div class="footer-actions" style="margin-top:16px">
+    <div class="footer-actions" id="modalFooter" style="margin-top:16px">
       <button class="btn-secondary" onclick="closeModal()">ปิด</button>
     </div>
   </div>
@@ -343,15 +348,20 @@ function loadDB() {
     const v1 = localStorage.getItem('loyaltyShopV1');
     if (v1) return migrateFromV1(JSON.parse(v1));
   } catch (e) {}
-  return { customers: {}, orders: [], redemptions: [], settings: { goal: 20 } };
+  return { customers: {}, orders: [], redemptions: [], settings: { goal: 20, pricePerBox: 50 } };
 }
 
 function migrate(data) {
   if (!data.settings) data.settings = { goal: 20 };
-  // ensure each customer has id
+  if (data.settings.pricePerBox == null) data.settings.pricePerBox = 50;
   Object.keys(data.customers).forEach(k => {
     const c = data.customers[k];
     if (!c.id) c.id = k;
+  });
+  // backfill price for old orders
+  (data.orders || []).forEach(o => {
+    if (o.price_per_box == null) o.price_per_box = data.settings.pricePerBox;
+    if (o.total == null) o.total = (o.boxes || 0) * o.price_per_box;
   });
   return data;
 }
@@ -423,7 +433,10 @@ document.querySelectorAll('.tab').forEach(t => {
     document.getElementById('page-' + t.dataset.page).classList.add('active');
     if (t.dataset.page === 'customers') renderCustomers();
     if (t.dataset.page === 'reports') renderReports();
-    if (t.dataset.page === 'settings') document.getElementById('settingGoal').value = db.settings.goal;
+    if (t.dataset.page === 'settings') {
+      document.getElementById('settingGoal').value = db.settings.goal;
+      document.getElementById('settingPrice').value = db.settings.pricePerBox || 50;
+    }
   });
 });
 
@@ -533,9 +546,8 @@ function saveOrder() {
     }
   }
 
-  const isProxy = document.getElementById('isProxy').checked;
-  const proxyInfo = document.getElementById('proxyInfo').value.trim();
   const note = document.getElementById('orderNote').value.trim();
+  const price = db.settings.pricePerBox || 50;
 
   const before = customer.total_boxes;
   customer.total_boxes += boxes;
@@ -546,7 +558,8 @@ function saveOrder() {
     customer_id: customer.id,
     customer_name: customer.name,
     boxes,
-    ordered_by: isProxy ? proxyInfo : '',
+    price_per_box: price,
+    total: boxes * price,
     note
   });
 
@@ -555,26 +568,56 @@ function saveOrder() {
   const goal = db.settings.goal;
   const beforeR = Math.floor(before / goal);
   const afterR = Math.floor(customer.total_boxes / goal);
-  if (afterR > beforeR) {
-    showModal('🎉 ลูกค้าได้รับสิทธิ์ฟรี!',
-      `<p><b>${customer.name}</b>${customer.phone?` (${customer.phone})`:''}<br>สะสมครบ ${goal} กล่อง — ได้สิทธิ์ฟรี <b>${afterR - beforeR}</b> กล่อง</p>
-       <p class="hint">รวมสิทธิ์คงเหลือ: <b>${rewardsAvailable(customer)}</b> กล่อง</p>`);
+  const newRewards = afterR - beforeR;
+
+  // Reset form first
+  clearSelectedCustomer();
+  document.getElementById('orderBoxes').value = '1';
+  document.getElementById('orderNote').value = '';
+
+  if (newRewards > 0) {
+    showRedeemPrompt(customer.id, newRewards, price);
   } else {
     toast(`✅ บันทึกแล้ว · ${customer.name} สะสม ${customer.total_boxes}/${goal}`);
   }
-
-  // Reset form
-  clearSelectedCustomer();
-  document.getElementById('orderBoxes').value = '1';
-  document.getElementById('isProxy').checked = false;
-  document.getElementById('proxyFields').style.display = 'none';
-  document.getElementById('proxyInfo').value = '';
-  document.getElementById('orderNote').value = '';
 }
 
-document.getElementById('isProxy').addEventListener('change', e => {
-  document.getElementById('proxyFields').style.display = e.target.checked ? 'block' : 'none';
-});
+function showRedeemPrompt(customerId, newRewards, price) {
+  const c = getCustomer(customerId);
+  if (!c) return;
+  const goal = db.settings.goal;
+  const totalAvail = rewardsAvailable(c);
+  const body = `
+    <div style="text-align:center;padding:8px 0">
+      <div style="font-size:48px">🎉</div>
+      <p style="font-size:16px;margin:8px 0"><b>${c.name}</b><br>สะสมครบ <b>${goal}</b> กล่อง!</p>
+      <p style="color:#3d5e3d;font-weight:600;margin:4px 0">ได้สิทธิ์ข้าวฟรี ${newRewards} กล่อง 🍱</p>
+      <p class="hint" style="margin:4px 0">สิทธิ์ฟรีคงเหลือทั้งหมด: <b>${totalAvail}</b> กล่อง</p>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-direction:column">
+      <button class="btn-success" onclick="redeemFromPrompt('${customerId}')" style="width:100%">🎁 แลกข้าวฟรีตอนนี้เลย</button>
+      <button class="btn-secondary" onclick="closeModal()" style="width:100%">💾 สะสมต่อ (แลกทีหลัง)</button>
+    </div>
+  `;
+  showModal('🎉 ลูกค้าได้สิทธิ์ฟรี!', body, true);
+}
+
+function redeemFromPrompt(id) {
+  const c = getCustomer(id);
+  if (!c) return;
+  if (rewardsAvailable(c) < 1) { closeModal(); return toast('⚠️ ไม่มีสิทธิ์'); }
+  c.redeemed_count += 1;
+  db.redemptions.push({
+    id: 'R' + Date.now(),
+    date: new Date().toISOString(),
+    customer_id: c.id,
+    customer_name: c.name,
+    boxes_used: db.settings.goal
+  });
+  saveDB();
+  closeModal();
+  toast(`🎉 แลกข้าวฟรีให้ ${c.name} แล้ว!`);
+}
 
 // ========== Check / Redeem ==========
 const checkLookup = document.getElementById('checkLookup');
@@ -658,16 +701,16 @@ function showHistory(id) {
   const orders = db.orders.filter(o => o.customer_id === id).reverse();
   const reds = db.redemptions.filter(r => r.customer_id === id).reverse();
   let html = '<h3>ออเดอร์</h3>';
-  html += orders.length ? orders.map(o => `
+  html += orders.length ? orders.map(o => {
+    const total = (o.total != null) ? o.total : (o.boxes || 0) * (o.price_per_box || db.settings.pricePerBox || 50);
+    return `
     <div class="order-item" style="cursor:default">
       <div>
-        <div>${fmtDate(o.date)} · <b>${o.boxes} กล่อง</b></div>
-        <div style="font-size:12px;color:#6b7280">
-          ${o.ordered_by ? `สั่งแทนโดย ${o.ordered_by}` : 'สั่งเอง'}
-          ${o.note ? ` · ${o.note}` : ''}
-        </div>
+        <div>${fmtDate(o.date)} · <b>${o.boxes} กล่อง</b> · <span style="color:#3d5e3d">฿${Math.round(total).toLocaleString('th-TH')}</span></div>
+        ${o.note ? `<div style="font-size:12px;color:#6b7280">${o.note}</div>` : ''}
       </div>
-    </div>`).join('') : '<div class="empty">ไม่มีข้อมูล</div>';
+    </div>`;
+  }).join('') : '<div class="empty">ไม่มีข้อมูล</div>';
   html += '<h3 style="margin-top:12px">การแลกฟรี</h3>';
   html += reds.length ? reds.map(r => `
     <div class="order-item" style="cursor:default">
@@ -754,11 +797,81 @@ function goToCheck(id) {
 }
 
 // ========== Reports ==========
+function fmtBaht(n) { return '฿' + Math.round(n).toLocaleString('th-TH'); }
+
+function dayKey(iso) { return new Date(iso).toLocaleDateString('en-CA'); }
+function startOfDay(d) { d.setHours(0,0,0,0); return d; }
+
 function renderReports() {
   const customers = Object.values(db.customers);
   document.getElementById('statCustomers').textContent = customers.length;
   document.getElementById('statBoxes').textContent = customers.reduce((s, c) => s + c.total_boxes, 0);
   document.getElementById('statRedeemed').textContent = customers.reduce((s, c) => s + c.redeemed_count, 0);
+
+  // ===== Sales =====
+  const price = db.settings.pricePerBox || 50;
+  const now = new Date();
+  const todayKey = dayKey(now);
+  const weekAgo = startOfDay(new Date(now)); weekAgo.setDate(weekAgo.getDate() - 6);
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  let totalBoxes = 0, totalRevenue = 0;
+  let todayBoxes = 0, todayRevenue = 0;
+  let weekBoxes = 0, weekRevenue = 0;
+  let monthBoxes = 0, monthRevenue = 0;
+
+  db.orders.forEach(o => {
+    const d = new Date(o.date);
+    const b = o.boxes || 0;
+    const total = (o.total != null) ? o.total : b * (o.price_per_box || price);
+    totalBoxes += b; totalRevenue += total;
+    if (dayKey(o.date) === todayKey) { todayBoxes += b; todayRevenue += total; }
+    if (d >= weekAgo) { weekBoxes += b; weekRevenue += total; }
+    if (d >= monthStart) { monthBoxes += b; monthRevenue += total; }
+  });
+
+  const freeBoxes = customers.reduce((s,c)=>s+c.redeemed_count,0);
+  const freeCost = freeBoxes * price;
+  const netRevenue = totalRevenue - freeCost;
+
+  document.getElementById('salesReport').innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:14px">
+      <tr style="border-bottom:1px solid #f3f4f6"><td style="padding:8px 0">วันนี้</td><td style="text-align:right;font-weight:600">${todayBoxes} กล่อง</td><td style="text-align:right;font-weight:700;color:#3d5e3d;padding-left:8px">${fmtBaht(todayRevenue)}</td></tr>
+      <tr style="border-bottom:1px solid #f3f4f6"><td style="padding:8px 0">7 วันล่าสุด</td><td style="text-align:right;font-weight:600">${weekBoxes} กล่อง</td><td style="text-align:right;font-weight:700;color:#3d5e3d;padding-left:8px">${fmtBaht(weekRevenue)}</td></tr>
+      <tr style="border-bottom:1px solid #f3f4f6"><td style="padding:8px 0">เดือนนี้</td><td style="text-align:right;font-weight:600">${monthBoxes} กล่อง</td><td style="text-align:right;font-weight:700;color:#3d5e3d;padding-left:8px">${fmtBaht(monthRevenue)}</td></tr>
+      <tr style="border-bottom:1px solid #f3f4f6"><td style="padding:8px 0">รวมทั้งหมด</td><td style="text-align:right;font-weight:600">${totalBoxes} กล่อง</td><td style="text-align:right;font-weight:700;color:#3d5e3d;padding-left:8px">${fmtBaht(totalRevenue)}</td></tr>
+      <tr><td colspan="2" style="padding:8px 0;color:#6b7280;font-size:12px">ต้นทุนของแถม (${freeBoxes} กล่องฟรี)</td><td style="text-align:right;color:#dc2626;font-weight:600">-${fmtBaht(freeCost)}</td></tr>
+      <tr style="border-top:2px solid #3d5e3d"><td style="padding:10px 0;font-weight:700">ยอดสุทธิ</td><td></td><td style="text-align:right;font-weight:800;color:#3d5e3d;font-size:16px">${fmtBaht(netRevenue)}</td></tr>
+    </table>
+    <div class="hint" style="margin-top:8px">ราคาต่อกล่อง: ${fmtBaht(price)} (เปลี่ยนได้ในตั้งค่า)</div>
+  `;
+
+  // ===== Daily chart 7 days =====
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now); d.setDate(d.getDate() - i);
+    days.push({ key: dayKey(d), label: d.toLocaleDateString('th-TH', { weekday:'short', day:'numeric' }), boxes: 0, revenue: 0 });
+  }
+  db.orders.forEach(o => {
+    const k = dayKey(o.date);
+    const day = days.find(x => x.key === k);
+    if (day) {
+      day.boxes += o.boxes || 0;
+      day.revenue += (o.total != null) ? o.total : (o.boxes || 0) * (o.price_per_box || price);
+    }
+  });
+  const maxRev = Math.max(...days.map(d=>d.revenue), 1);
+  document.getElementById('dailyChart').innerHTML = days.map(d => `
+    <div style="margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+        <span>${d.label}${d.key===todayKey?' (วันนี้)':''}</span>
+        <span><b>${d.boxes}</b> กล่อง · <b style="color:#3d5e3d">${fmtBaht(d.revenue)}</b></span>
+      </div>
+      <div style="background:#f3f4f6;border-radius:4px;height:8px;overflow:hidden">
+        <div style="background:linear-gradient(90deg,#7ab87a,#3d5e3d);height:100%;width:${(d.revenue/maxRev)*100}%"></div>
+      </div>
+    </div>
+  `).join('');
 
   const near = customers
     .map(c => ({ c, prog: progressToNext(c), r: rewardsAvailable(c) }))
@@ -778,7 +891,8 @@ function renderReports() {
     ? recent.map(o => {
         const c = getCustomer(o.customer_id);
         const name = c?.name || o.customer_name || '?';
-        return `<div class="order-item" style="cursor:default"><div><div><b>${name}</b> · ${o.boxes} กล่อง</div><div style="font-size:12px;color:#6b7280">${fmtDate(o.date)}${o.ordered_by ? ` · สั่งแทน: ${o.ordered_by}` : ''}${o.note?` · ${o.note}`:''}</div></div></div>`;
+        const total = (o.total != null) ? o.total : (o.boxes || 0) * (o.price_per_box || price);
+        return `<div class="order-item" style="cursor:default"><div style="flex:1"><div><b>${name}</b> · ${o.boxes} กล่อง · <span style="color:#3d5e3d;font-weight:600">${fmtBaht(total)}</span></div><div style="font-size:12px;color:#6b7280">${fmtDate(o.date)}${o.note?` · ${o.note}`:''}</div></div></div>`;
       }).join('')
     : '<div class="empty">— ยังไม่มี —</div>';
 }
@@ -786,7 +900,9 @@ function renderReports() {
 // ========== Settings ==========
 function saveSettings() {
   const g = parseInt(document.getElementById('settingGoal').value) || 20;
+  const p = parseFloat(document.getElementById('settingPrice').value);
   db.settings.goal = g;
+  db.settings.pricePerBox = isNaN(p) ? 50 : p;
   document.getElementById('goalDisplay').textContent = g;
   saveDB();
   toast('✅ บันทึกการตั้งค่าแล้ว');
@@ -825,10 +941,13 @@ function importData(e) {
 }
 
 function exportCSV() {
-  const rows = [['date','customer_name','customer_phone','boxes','ordered_by','note']];
+  const price = db.settings.pricePerBox || 50;
+  const rows = [['date','customer_name','boxes','price_per_box','total','note']];
   db.orders.forEach(o => {
     const c = getCustomer(o.customer_id);
-    rows.push([o.date, c?.name || o.customer_name || '', c?.phone || '', o.boxes, o.ordered_by || '', (o.note||'').replace(/[",\n]/g,' ')]);
+    const pp = o.price_per_box || price;
+    const total = (o.total != null) ? o.total : (o.boxes || 0) * pp;
+    rows.push([o.date, c?.name || o.customer_name || '', o.boxes, pp, total, (o.note||'').replace(/[",\n]/g,' ')]);
   });
   const csv = '\uFEFF' + rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
   const blob = new Blob([csv], { type: 'text/csv' });
@@ -843,7 +962,7 @@ function exportCSV() {
 function resetAll() {
   if (!confirm('ลบข้อมูลทั้งหมด? (ลูกค้า, ออเดอร์, การแลก) — แนะนำให้ Export ก่อน')) return;
   if (!confirm('ยืนยันอีกครั้ง: ข้อมูลจะหายถาวร')) return;
-  db = { customers: {}, orders: [], redemptions: [], settings: { goal: 20 } };
+  db = { customers: {}, orders: [], redemptions: [], settings: { goal: 20, pricePerBox: 50 } };
   saveDB();
   toast('🗑️ ล้างข้อมูลแล้ว');
   document.getElementById('goalDisplay').textContent = 20;
@@ -851,9 +970,10 @@ function resetAll() {
 }
 
 // ========== Modal ==========
-function showModal(title, body) {
+function showModal(title, body, hideFooter) {
   document.getElementById('modalTitle').textContent = title;
   document.getElementById('modalBody').innerHTML = body;
+  document.getElementById('modalFooter').style.display = hideFooter ? 'none' : 'flex';
   document.getElementById('modal').classList.add('show');
 }
 function closeModal() { document.getElementById('modal').classList.remove('show'); }
