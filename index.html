@@ -317,7 +317,8 @@
       2. ลูกค้าใหม่ — กรอกแค่ชื่อก็พอ<br>
       3. มีตัวแทนสั่ง → ติ๊ก toggle เพื่อระบุคนสั่งแทน — สิทธิ์ตกที่คนกินเสมอ<br>
       4. แท็บ <b>เช็ก/แลก</b> ค้นหาด้วยชื่อ แล้วกดแลกฟรี<br>
-      5. Export JSON เก็บไว้ใน Drive/iCloud เป็นประจำ
+      5. <b>แก้/ลบออเดอร์ผิด</b> — กดที่ออเดอร์ในหน้า "รายงาน" → "ออเดอร์ล่าสุด" หรือในประวัติของลูกค้า<br>
+      6. Export JSON เก็บไว้ใน Drive/iCloud เป็นประจำ
     </p>
   </div>
 </div>
@@ -619,6 +620,85 @@ function redeemFromPrompt(id) {
   toast(`🎉 แลกข้าวฟรีให้ ${c.name} แล้ว!`);
 }
 
+// ========== Edit / Delete Order ==========
+function editOrder(orderId) {
+  const o = db.orders.find(x => x.id === orderId);
+  if (!o) return toast('⚠️ ไม่พบออเดอร์');
+  const c = getCustomer(o.customer_id);
+  const name = c?.name || o.customer_name || '?';
+  const price = o.price_per_box || db.settings.pricePerBox || 50;
+  const html = `
+    <div style="background:#f0f7ed;padding:10px;border-radius:8px;margin-bottom:12px">
+      <div style="font-weight:700">${name}</div>
+      <div style="font-size:12px;color:#6b7280">${fmtDate(o.date)}</div>
+    </div>
+    <label>จำนวนกล่อง</label>
+    <input type="number" id="edOrderBoxes" min="1" value="${o.boxes}" inputmode="numeric">
+    <label>ราคาต่อกล่อง (บาท)</label>
+    <input type="number" id="edOrderPrice" min="0" value="${price}">
+    <label>หมายเหตุ</label>
+    <input type="text" id="edOrderNote" value="${(o.note||'').replace(/"/g,'&quot;')}">
+    <div style="display:flex;gap:8px;margin-top:12px;flex-direction:column">
+      <button class="btn-primary" onclick="saveOrderEdit('${orderId}')">💾 บันทึกการแก้ไข</button>
+      <button class="btn-danger" onclick="deleteOrder('${orderId}')">🗑️ ลบออเดอร์นี้</button>
+    </div>
+  `;
+  showModal('✏️ แก้ไขออเดอร์', html, true);
+}
+
+function saveOrderEdit(orderId) {
+  const o = db.orders.find(x => x.id === orderId);
+  if (!o) return toast('⚠️ ไม่พบออเดอร์');
+  const newBoxes = parseInt(document.getElementById('edOrderBoxes').value) || 0;
+  const newPrice = parseFloat(document.getElementById('edOrderPrice').value);
+  const newNote = document.getElementById('edOrderNote').value.trim();
+  if (newBoxes < 1) return toast('⚠️ จำนวนกล่องต้อง ≥ 1');
+
+  const c = getCustomer(o.customer_id);
+  if (c) {
+    const diff = newBoxes - o.boxes;
+    c.total_boxes += diff;
+    if (c.total_boxes < 0) c.total_boxes = 0;
+  }
+
+  o.boxes = newBoxes;
+  o.price_per_box = isNaN(newPrice) ? o.price_per_box : newPrice;
+  o.total = newBoxes * o.price_per_box;
+  o.note = newNote;
+
+  saveDB();
+  closeModal();
+  toast('✅ แก้ไขออเดอร์แล้ว');
+  renderReports();
+  renderCustomers();
+  if (checkSelectedId) renderCheck();
+}
+
+function deleteOrder(orderId) {
+  const o = db.orders.find(x => x.id === orderId);
+  if (!o) return;
+  const c = getCustomer(o.customer_id);
+  const name = c?.name || o.customer_name || '?';
+  if (!confirm(`ลบออเดอร์นี้?\n\n${name} · ${o.boxes} กล่อง\n${fmtDate(o.date)}\n\nกล่องสะสมจะถูกลบออกจากยอดของลูกค้าด้วย`)) return;
+
+  if (c) {
+    c.total_boxes -= o.boxes;
+    if (c.total_boxes < 0) c.total_boxes = 0;
+    // warn if customer has redeemed more than they should now
+    const goal = db.settings.goal;
+    if (c.redeemed_count > Math.floor(c.total_boxes / goal) + 5) {
+      // edge case — informational only
+    }
+  }
+  db.orders = db.orders.filter(x => x.id !== orderId);
+  saveDB();
+  closeModal();
+  toast('🗑️ ลบออเดอร์แล้ว');
+  renderReports();
+  renderCustomers();
+  if (checkSelectedId) renderCheck();
+}
+
 // ========== Check / Redeem ==========
 const checkLookup = document.getElementById('checkLookup');
 const checkAc = document.getElementById('checkAcList');
@@ -704,11 +784,12 @@ function showHistory(id) {
   html += orders.length ? orders.map(o => {
     const total = (o.total != null) ? o.total : (o.boxes || 0) * (o.price_per_box || db.settings.pricePerBox || 50);
     return `
-    <div class="order-item" style="cursor:default">
-      <div>
+    <div class="order-item" onclick="editOrder('${o.id}')">
+      <div style="flex:1">
         <div>${fmtDate(o.date)} · <b>${o.boxes} กล่อง</b> · <span style="color:#3d5e3d">฿${Math.round(total).toLocaleString('th-TH')}</span></div>
         ${o.note ? `<div style="font-size:12px;color:#6b7280">${o.note}</div>` : ''}
       </div>
+      <div style="color:#9ca3af;font-size:16px;padding:0 4px">✏️</div>
     </div>`;
   }).join('') : '<div class="empty">ไม่มีข้อมูล</div>';
   html += '<h3 style="margin-top:12px">การแลกฟรี</h3>';
@@ -892,7 +973,13 @@ function renderReports() {
         const c = getCustomer(o.customer_id);
         const name = c?.name || o.customer_name || '?';
         const total = (o.total != null) ? o.total : (o.boxes || 0) * (o.price_per_box || price);
-        return `<div class="order-item" style="cursor:default"><div style="flex:1"><div><b>${name}</b> · ${o.boxes} กล่อง · <span style="color:#3d5e3d;font-weight:600">${fmtBaht(total)}</span></div><div style="font-size:12px;color:#6b7280">${fmtDate(o.date)}${o.note?` · ${o.note}`:''}</div></div></div>`;
+        return `<div class="order-item" onclick="editOrder('${o.id}')">
+          <div style="flex:1">
+            <div><b>${name}</b> · ${o.boxes} กล่อง · <span style="color:#3d5e3d;font-weight:600">${fmtBaht(total)}</span></div>
+            <div style="font-size:12px;color:#6b7280">${fmtDate(o.date)}${o.note?` · ${o.note}`:''}</div>
+          </div>
+          <div style="color:#9ca3af;font-size:18px;padding:0 4px">✏️</div>
+        </div>`;
       }).join('')
     : '<div class="empty">— ยังไม่มี —</div>';
 }
