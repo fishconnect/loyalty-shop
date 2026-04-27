@@ -758,19 +758,42 @@ function fmtReceiptDate(iso) {
   return d.toLocaleString('th-TH', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' });
 }
 
+function getBTPrinter() {
+  // Local connection first
+  if (window.btPrinter?.chr) return window.btPrinter;
+  // Try parent window (when running in iframe)
+  try {
+    if (window.parent !== window && window.parent.btPrinter?.chr) return window.parent.btPrinter;
+  } catch (e) {}
+  return null;
+}
+
 function printOrderReceipt(orderId) {
   const orderSrc = cloudOrders !== null ? cloudOrders : (loadDB().pendingOrders || []);
   const order = orderSrc.find(o => o.id === orderId);
   if (!order) return toast('⚠️ ไม่พบ order');
 
+  const bt = getBTPrinter();
+  if (bt) {
+    printViaBluetooth(order, bt).then(r => {
+      if (r.success) toast('🖨️ ส่งไปเครื่องปริ้น Bluetooth');
+      else { toast('⚠️ BT failed → ใช้ browser print แทน'); browserPrint(order); }
+    });
+    return;
+  }
+  browserPrint(order);
+}
+
+function browserPrint(order) {
   const itemsHTML = order.items.map(it => {
     const free = it.freeQty || 0;
     const paid = it.qty - free;
     const lineTotal = it.price * paid;
     const freeStr = free > 0 ? ` <span class="rc-free">[ฟรี ${free}]</span>` : '';
+    const noteStr = it.note ? `<div style="font-size:10pt;font-style:italic;color:#000;margin:1mm 0 0 4mm">📝 ${it.note}</div>` : '';
     return `
       <div class="rc-item">
-        <div class="name">${it.qty}× ${it.name}${freeStr}</div>
+        <div class="name">${it.qty}× ${it.name}${freeStr}${noteStr}</div>
         <div class="price">${free > 0 && paid === 0 ? 'ฟรี' : '฿' + lineTotal}</div>
       </div>
     `;
@@ -799,6 +822,176 @@ function printOrderReceipt(orderId) {
   `;
   document.getElementById('printArea').innerHTML = html;
   setTimeout(() => window.print(), 100);
+}
+
+// ========== Web Bluetooth Thermal Printer ==========
+const BT_SERVICES = [
+  '000018f0-0000-1000-8000-00805f9b34fb', // common BLE thermal
+  '49535343-fe7d-4ae5-8fa9-9fafd205e455', // Microchip RN4870/71
+  '0000ff00-0000-1000-8000-00805f9b34fb', // Goojprt
+  '0000ff12-0000-1000-8000-00805f9b34fb', // some Chinese printers
+  'e7810a71-73ae-499d-8c15-faa9aef0c3f2'  // Sunmi
+];
+
+async function connectBluetoothPrinter() {
+  if (!navigator.bluetooth) {
+    alert('⚠️ เบราว์เซอร์นี้ไม่รองรับ Web Bluetooth\nใช้ Chrome บน Android หรือ Desktop');
+    return;
+  }
+  try {
+    const device = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: BT_SERVICES
+    });
+    toast('🔵 กำลังเชื่อมต่อ ' + device.name);
+    const server = await device.gatt.connect();
+
+    let chr = null;
+    const services = await server.getPrimaryServices();
+    for (const svc of services) {
+      try {
+        const chars = await svc.getCharacteristics();
+        const writable = chars.find(c => c.properties.write || c.properties.writeWithoutResponse);
+        if (writable) { chr = writable; break; }
+      } catch (e) {}
+    }
+
+    if (!chr) {
+      alert('❌ ไม่พบ characteristic ที่เขียนได้ เครื่องนี้อาจไม่ใช่ printer หรือไม่ compatible');
+      return;
+    }
+
+    window.btPrinter = { device, server, chr };
+    localStorage.setItem('btPrinterName', device.name || 'Unknown');
+
+    // Handle disconnect
+    device.addEventListener('gattserverdisconnected', () => {
+      window.btPrinter = null;
+      toast('🔴 เครื่องปริ้นหลุดการเชื่อมต่อ');
+      updateBTStatus();
+    });
+
+    toast('✅ เชื่อมต่อ ' + device.name + ' สำเร็จ');
+    updateBTStatus();
+  } catch (err) {
+    if (err.name !== 'NotFoundError') alert('❌ เชื่อมต่อล้มเหลว: ' + err.message);
+  }
+}
+
+function disconnectBT() {
+  if (window.btPrinter?.device?.gatt?.connected) {
+    window.btPrinter.device.gatt.disconnect();
+  }
+  window.btPrinter = null;
+  localStorage.removeItem('btPrinterName');
+  updateBTStatus();
+  toast('🔴 ตัดการเชื่อมต่อแล้ว');
+}
+
+function updateBTStatus() {
+  const el = document.getElementById('btStatus');
+  if (!el) return;
+  const name = localStorage.getItem('btPrinterName');
+  const connected = !!window.btPrinter?.chr;
+  if (connected) {
+    el.innerHTML = `🔵 เชื่อมต่อ: <b>${name}</b>`;
+    el.style.color = '#16a34a';
+  } else if (name) {
+    el.innerHTML = `🔴 ไม่ได้เชื่อมต่อ (${name})`;
+    el.style.color = '#dc2626';
+  } else {
+    el.innerHTML = '⚫ ยังไม่ได้ตั้ง';
+    el.style.color = '#6b7280';
+  }
+}
+
+async function printViaBluetooth(order, btRef) {
+  const bt = btRef || window.btPrinter;
+  if (!bt?.chr) return { error: 'ยังไม่ได้เชื่อมต่อ' };
+  try {
+    const data = buildESCPOS(order);
+    const CHUNK = 200;
+    for (let i = 0; i < data.length; i += CHUNK) {
+      await bt.chr.writeValue(data.slice(i, i + CHUNK));
+      await new Promise(r => setTimeout(r, 30));
+    }
+    return { success: true };
+  } catch (e) {
+    console.error('BT print error', e);
+    return { error: e.message };
+  }
+}
+
+function buildESCPOS(order) {
+  const ESC = 0x1B, GS = 0x1D, NL = 0x0A;
+  const out = [];
+  const enc = new TextEncoder();
+  const bytes = (s) => { for (const b of enc.encode(s)) out.push(b); };
+  const ln = (s) => { bytes(s || ''); out.push(NL); };
+
+  // Init
+  out.push(ESC, 0x40);
+  // Try Thai codepage TIS-620 (CP874 = 30 in some printers)
+  out.push(ESC, 0x74, 0x14); // codepage 20 (some printers map TIS-620 here)
+
+  // Center + double size header
+  out.push(ESC, 0x61, 0x01);
+  out.push(ESC, 0x21, 0x10); // double height
+  ln('ครัวผู้ใหญ่ปอง');
+  out.push(ESC, 0x21, 0x00); // reset
+  ln('Tel: 061-962-3696');
+  ln('--------------------------------');
+
+  out.push(ESC, 0x61, 0x00); // left
+  ln('Order: #' + order.id.slice(-6));
+  ln('Time : ' + fmtReceiptDate(order.date));
+  ln('Cust : ' + order.customer_name);
+  if (order.customer_phone) ln('Phone: ' + order.customer_phone);
+  ln('--------------------------------');
+
+  for (const it of order.items) {
+    const free = it.freeQty || 0;
+    const paid = it.qty - free;
+    const lineTotal = it.price * paid;
+    const right = (free > 0 && paid === 0) ? 'FREE' : '฿' + lineTotal;
+    const namePart = it.qty + 'x ' + it.name;
+    // Pad to 32 chars total
+    const padding = Math.max(1, 32 - namePart.length - right.length);
+    ln(namePart + ' '.repeat(padding) + right);
+    if (free > 0) ln('   [FREE x' + free + ']');
+    if (it.note) ln('   note: ' + it.note);
+  }
+  ln('--------------------------------');
+
+  if (order.discount) {
+    const orig = order.original_total || (order.total + order.discount);
+    ln('Subtotal           ฿' + orig);
+    ln('Free ' + order.free_boxes_used + ' box(es)  -฿' + order.discount);
+  }
+
+  // Total — bold + double size
+  out.push(ESC, 0x61, 0x02); // right align
+  out.push(ESC, 0x21, 0x30); // double width + height
+  ln('TOTAL ฿' + order.total);
+  out.push(ESC, 0x21, 0x00); // reset
+  out.push(ESC, 0x61, 0x01); // center
+
+  ln('--------------------------------');
+  ln('ขอบคุณที่อุดหนุน 🙏');
+  ln('loyalty.fishconnect.co/points.html');
+  ln('');
+  ln('');
+  ln('');
+
+  // Cut paper
+  out.push(GS, 0x56, 0x42, 0x00);
+
+  return new Uint8Array(out);
+}
+
+// Auto-restore BT name (but doesn't auto-reconnect — must click button)
+if (localStorage.getItem('btPrinterName')) {
+  setTimeout(updateBTStatus, 500);
 }
 
 // Auto-print new orders (toggle in admin settings)

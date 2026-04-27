@@ -544,18 +544,31 @@
 
   <div class="card">
     <h2>🖨️ เครื่องปริ้นใบเสร็จ</h2>
-    <p class="hint">รองรับ Thermal printer 80mm — pair กับเครื่องผ่าน Bluetooth/USB ที่ระดับ OS ก่อน</p>
+    <p class="hint">รองรับ Thermal Printer กระดาษ 80mm — เชื่อมต่อ Bluetooth ตรง หรือใช้ระบบของ OS</p>
+
+    <div style="background:#ebf0ff;padding:12px;border-radius:10px;margin-bottom:12px">
+      <div style="font-weight:700;color:#1652F0;margin-bottom:8px">🔵 Bluetooth (ตรง — แนะนำ)</div>
+      <div id="btStatus" style="font-size:13px;margin-bottom:8px">⚫ ยังไม่ได้ตั้ง</div>
+      <div style="display:flex;gap:6px">
+        <button onclick="connectBluetoothPrinter()" style="flex:1;padding:10px;background:#1652F0;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer">🔵 เชื่อมต่อ Bluetooth</button>
+        <button onclick="disconnectBT()" style="padding:10px 14px;background:#fff;color:#dc2626;border:1.5px solid #dc2626;border-radius:8px;font-weight:700;cursor:pointer">ตัดการเชื่อมต่อ</button>
+      </div>
+      <div class="hint" style="margin-top:8px;font-size:11.5px">
+        💡 รองรับ Chrome บน Android/Mac/Windows · iOS Safari ไม่รองรับ Web Bluetooth (ใช้ AirPrint แทน)
+      </div>
+    </div>
+
     <div class="toggle-row">
       <input type="checkbox" id="autoPrintToggle" onchange="saveAutoPrint()">
       <label for="autoPrintToggle" style="margin:0">🔔 พิมพ์ใบเสร็จอัตโนมัติเมื่อมี order ใหม่</label>
     </div>
-    <button class="btn-secondary" onclick="testPrintReceipt()" style="width:100%;margin-top:8px">🖨️ ทดสอบพิมพ์ใบเสร็จ</button>
-    <div class="hint" style="margin-top:10px;line-height:1.5">
-      <b>วิธีตั้งค่า:</b><br>
-      1. เปิด Bluetooth บน tablet/มือถือ → pair กับเครื่องปริ้น<br>
-      2. (Android) ติดตั้ง driver จากแอปของผู้ผลิต<br>
-      3. (iPad) ใช้ AirPrint / driver ของผู้ผลิต<br>
-      4. ทดสอบพิมพ์ที่นี่ → กระดาษ 80mm ออก = พร้อมใช้
+    <button class="btn-secondary" onclick="testPrintReceipt()" style="width:100%;margin-top:8px">🖨️ ทดสอบพิมพ์ใบเสร็จ (ใช้ระบบ OS Print)</button>
+
+    <div class="hint" style="margin-top:10px;line-height:1.6;font-size:12px">
+      <b>📋 ตั้งค่าเครื่องปริ้น 80mm:</b><br>
+      <b>วิธี A (แนะนำ — Bluetooth ตรง):</b> เปิด Bluetooth บนเครื่อง → กด "🔵 เชื่อมต่อ" ด้านบน → เลือกเครื่อง<br>
+      <b>วิธี B (ผ่าน OS):</b> Pair Bluetooth/USB ที่ OS → ติดตั้ง driver → ใช้ปุ่ม "ทดสอบพิมพ์"<br>
+      📝 รองรับ ESC/POS · กระดาษ 80mm × 80mm
     </div>
   </div>
 
@@ -1603,6 +1616,76 @@ function renderMenuManager() {
   `).join('');
 }
 
+// ========== Web Bluetooth Printer ==========
+const BT_SERVICES = [
+  '000018f0-0000-1000-8000-00805f9b34fb',
+  '49535343-fe7d-4ae5-8fa9-9fafd205e455',
+  '0000ff00-0000-1000-8000-00805f9b34fb',
+  '0000ff12-0000-1000-8000-00805f9b34fb',
+  'e7810a71-73ae-499d-8c15-faa9aef0c3f2'
+];
+
+async function connectBluetoothPrinter() {
+  if (!navigator.bluetooth) {
+    alert('⚠️ เบราว์เซอร์นี้ไม่รองรับ Web Bluetooth\nใช้ Chrome บน Android หรือ Desktop');
+    return;
+  }
+  try {
+    const device = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: BT_SERVICES
+    });
+    toast('🔵 กำลังเชื่อมต่อ ' + device.name);
+    const server = await device.gatt.connect();
+    let chr = null;
+    const services = await server.getPrimaryServices();
+    for (const svc of services) {
+      try {
+        const chars = await svc.getCharacteristics();
+        const writable = chars.find(c => c.properties.write || c.properties.writeWithoutResponse);
+        if (writable) { chr = writable; break; }
+      } catch (e) {}
+    }
+    if (!chr) { alert('❌ ไม่พบ characteristic ที่เขียนได้'); return; }
+
+    window.btPrinter = { device, server, chr };
+    localStorage.setItem('btPrinterName', device.name || 'Printer');
+    device.addEventListener('gattserverdisconnected', () => {
+      window.btPrinter = null;
+      toast('🔴 เครื่องปริ้นหลุด');
+      updateBTStatus();
+    });
+    toast('✅ เชื่อมต่อ ' + device.name + ' สำเร็จ');
+    updateBTStatus();
+  } catch (err) {
+    if (err.name !== 'NotFoundError') alert('❌ เชื่อมต่อล้มเหลว: ' + err.message);
+  }
+}
+
+function disconnectBT() {
+  if (window.btPrinter?.device?.gatt?.connected) window.btPrinter.device.gatt.disconnect();
+  window.btPrinter = null;
+  localStorage.removeItem('btPrinterName');
+  updateBTStatus();
+  toast('🔴 ตัดการเชื่อมต่อแล้ว');
+}
+
+function updateBTStatus() {
+  const el = document.getElementById('btStatus');
+  if (!el) return;
+  const name = localStorage.getItem('btPrinterName');
+  if (window.btPrinter?.chr) {
+    el.innerHTML = `🔵 เชื่อมต่อ: <b>${name}</b>`;
+    el.style.color = '#16a34a';
+  } else if (name) {
+    el.innerHTML = `🔴 ไม่ได้เชื่อมต่อ (${name}) — กดเชื่อมต่อใหม่`;
+    el.style.color = '#dc2626';
+  } else {
+    el.innerHTML = '⚫ ยังไม่ได้ตั้ง';
+    el.style.color = '#6b7280';
+  }
+}
+
 // ========== Thermal Printer ==========
 function saveAutoPrint() {
   const enabled = document.getElementById('autoPrintToggle').checked;
@@ -1611,6 +1694,26 @@ function saveAutoPrint() {
 }
 
 function testPrintReceipt() {
+  // If BT printer connected, send test via BT
+  if (window.btPrinter?.chr) {
+    const testOrder = {
+      id: 'TEST00',
+      date: new Date().toISOString(),
+      customer_name: 'ทดสอบพิมพ์',
+      customer_phone: '0812345678',
+      items: [
+        { name: 'ข้าวผัดหมูสับ', qty: 2, price: 50 },
+        { name: 'ก๋วยเตี๋ยว', qty: 1, price: 30, note: 'เผ็ดน้อย' }
+      ],
+      total: 130,
+      note: ''
+    };
+    sendBTTestPrint(testOrder).then(r => {
+      toast(r.success ? '✅ ส่งไปเครื่องปริ้น Bluetooth แล้ว' : '❌ ' + r.error);
+    });
+    return;
+  }
+  // Fallback: browser print
   const html = `
     <div class="rc-h1">ครัวผู้ใหญ่ปอง</div>
     <div class="rc-sub">📞 061-962-3696</div>
@@ -1636,6 +1739,58 @@ function testPrintReceipt() {
 function initPrinterToggle() {
   const t = document.getElementById('autoPrintToggle');
   if (t) t.checked = localStorage.getItem('autoPrint') === '1';
+  updateBTStatus();
+}
+
+// Build ESC/POS for BT test print
+async function sendBTTestPrint(order) {
+  if (!window.btPrinter?.chr) return { error: 'ไม่ได้เชื่อมต่อ' };
+  try {
+    const ESC = 0x1B, GS = 0x1D, NL = 0x0A;
+    const out = [];
+    const enc = new TextEncoder();
+    const bytes = s => { for (const b of enc.encode(s)) out.push(b); };
+    const ln = s => { bytes(s || ''); out.push(NL); };
+
+    out.push(ESC, 0x40);
+    out.push(ESC, 0x74, 0x14);
+    out.push(ESC, 0x61, 0x01);
+    out.push(ESC, 0x21, 0x10);
+    ln('ครัวผู้ใหญ่ปอง');
+    out.push(ESC, 0x21, 0x00);
+    ln('Tel: 061-962-3696');
+    ln('--------------------------------');
+    out.push(ESC, 0x61, 0x00);
+    ln('TEST PRINT');
+    ln('Time: ' + new Date().toLocaleString('th-TH'));
+    ln('--------------------------------');
+    for (const it of order.items) {
+      const total = it.price * it.qty;
+      ln(it.qty + 'x ' + it.name);
+      ln('   ฿' + total);
+      if (it.note) ln('   note: ' + it.note);
+    }
+    ln('--------------------------------');
+    out.push(ESC, 0x61, 0x02);
+    out.push(ESC, 0x21, 0x30);
+    ln('TOTAL ฿' + order.total);
+    out.push(ESC, 0x21, 0x00);
+    out.push(ESC, 0x61, 0x01);
+    ln('--------------------------------');
+    ln('TEST OK');
+    ln(''); ln(''); ln('');
+    out.push(GS, 0x56, 0x42, 0x00);
+
+    const data = new Uint8Array(out);
+    const CHUNK = 200;
+    for (let i = 0; i < data.length; i += CHUNK) {
+      await window.btPrinter.chr.writeValue(data.slice(i, i + CHUNK));
+      await new Promise(r => setTimeout(r, 30));
+    }
+    return { success: true };
+  } catch (e) {
+    return { error: e.message };
+  }
 }
 
 // ========== Item Editor (modal) ==========
