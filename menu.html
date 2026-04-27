@@ -26,7 +26,23 @@
     box-shadow: 0 2px 8px rgba(22,82,240,.08);
   }
   header img.logo { height: 52px; width: 52px; object-fit: contain; border-radius: 12px; box-shadow: 0 2px 6px rgba(0,0,0,.1); }
+  header .call-btn {
+    background: linear-gradient(135deg, #16a34a, #15803d); color: #fff;
+    width: 44px; height: 44px; border-radius: 50%;
+    display: grid; place-items: center; text-decoration: none;
+    font-size: 20px; box-shadow: 0 3px 10px rgba(22,163,74,.3);
+    flex-shrink: 0;
+  }
   header .info { flex: 1; }
+  .item.unavailable { opacity: .5; pointer-events: none; }
+  .item.unavailable .add-ic { background: #9ca3af !important; box-shadow: none; }
+  .item .out-badge {
+    position: absolute; top: 8px; right: 8px;
+    background: #dc2626; color: #fff;
+    padding: 3px 10px; border-radius: 999px;
+    font-size: 11px; font-weight: 800;
+    box-shadow: 0 2px 6px rgba(220,38,38,.3);
+  }
   header h1 { font-size: 18px; color: #0a1530; font-weight: 800; line-height: 1.2; }
   header .sub {
     font-size: 11.5px; color: #0738C9; margin-top: 3px; font-weight: 600;
@@ -449,6 +465,7 @@
     <h1>ครัวผู้ใหญ่ปอง</h1>
     <div class="sub">🍽️ อาหารตามสั่ง · ก๋วยเตี๋ยว</div>
   </div>
+  <a href="tel:0619623696" class="call-btn" title="โทรร้าน">📞</a>
 </header>
 
 <nav class="cats" id="cats"></nav>
@@ -570,9 +587,14 @@ function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEven
 const STORAGE_KEY = 'loyaltyShopV2';
 let cart = JSON.parse(sessionStorage.getItem('cartV2') || '[]'); // [{cartId, mainId, qty, addOnIds:[], note}]
 
+// Effective menu (with admin overrides applied)
+let menuConfig = JSON.parse(localStorage.getItem('menuConfig') || '{"overrides":{},"custom":[]}');
+let EFFECTIVE_MENU = window.applyMenuConfig ? window.applyMenuConfig(menuConfig) : MENU;
+function getEffectiveMenu() { return EFFECTIVE_MENU; }
+
 // Get all add-on items from add-on category
-function getAddOnCategory() { return MENU.find(c => c.isAddOn); }
-function getAddOns() { return getAddOnCategory()?.items || []; }
+function getAddOnCategory() { return EFFECTIVE_MENU.find(c => c.isAddOn); }
+function getAddOns() { return (getAddOnCategory()?.items || []).filter(a => a.available !== false); }
 
 function loadDB() {
   try {
@@ -593,7 +615,7 @@ function toast(msg, warn) {
 function normPhone(p) { return (p || '').replace(/\D/g, ''); }
 
 function findItem(id) {
-  for (const c of MENU) {
+  for (const c of EFFECTIVE_MENU) {
     const it = c.items.find(i => i.id === id);
     if (it) return { item: it, cat: c };
   }
@@ -605,7 +627,7 @@ function renderMenu() {
   const cats = document.getElementById('cats');
   const main = document.getElementById('menuMain');
   // Hide add-on category from main list
-  const visibleCats = MENU.filter(c => !c.isAddOn);
+  const visibleCats = EFFECTIVE_MENU.filter(c => !c.isAddOn);
 
   cats.innerHTML = '<div class="cats-inner">' +
     visibleCats.map((c, i) => `<button class="cat-btn ${i===0?'active':''}" onclick="scrollToCat('cat-${i}')">${c.emoji} ${c.cat}</button>`).join('') +
@@ -618,24 +640,25 @@ function renderMenu() {
         <h2 class="section-title">
           <span class="emoji">${c.emoji}</span>
           <span>${c.cat}</span>
-          ${isCheap ? '<span class="price-tag">฿30</span>' : '<span class="price-tag">฿50</span>'}
         </h2>
         <div class="items">
           ${c.items.map(it => {
             const qtyInCart = cart.filter(l => l.mainId === it.id).reduce((s, l) => s + l.qty, 0);
+            const isOut = it.available === false;
             return `
-            <div class="item ${qtyInCart > 0 ? 'has-qty' : ''}" onclick="openCustomize('${it.id}')">
+            <div class="item ${qtyInCart > 0 ? 'has-qty' : ''} ${isOut ? 'unavailable' : ''}" onclick="${isOut?'':`openCustomize('${it.id}')`}">
               <div class="img">
                 <img src="${SHOP_INFO.defaultImage}" alt="">
                 <div class="overlay-emoji">${c.emoji}</div>
                 ${qtyInCart > 0 ? `<div class="qty-badge">${qtyInCart}</div>` : ''}
+                ${isOut ? '<div class="out-badge">หมด</div>' : ''}
               </div>
               <div class="body">
                 <div class="name">${it.name}</div>
                 ${it.note ? `<div class="note">${it.note}</div>` : ''}
                 <div class="price">฿${it.price}</div>
               </div>
-              <div class="add-ic">+</div>
+              <div class="add-ic">${isOut?'×':'+'}</div>
             </div>
           `}).join('')}
         </div>
@@ -643,6 +666,17 @@ function renderMenu() {
     `;
   }).join('');
 }
+
+// Subscribe to menu config changes from cloud
+whenCloudReady(() => {
+  window.cloud.onMenuConfig(config => {
+    menuConfig = config || { overrides: {}, custom: [] };
+    localStorage.setItem('menuConfig', JSON.stringify(menuConfig));
+    EFFECTIVE_MENU = window.applyMenuConfig(menuConfig);
+    renderMenu();
+    updateCartBar();
+  });
+});
 
 function scrollToCat(id) {
   const el = document.getElementById(id);

@@ -74,6 +74,35 @@ window.cloud = {
     return onSnapshot(doc(fdb, 'orders', String(id)), snap => {
       cb(snap.exists() ? snap.data() : null);
     }, err => console.warn('[cloud] onOrder', err));
+  },
+
+  // Menu config (overrides + custom items)
+  async saveMenuConfig(config) {
+    try { await setDoc(doc(fdb, 'settings', 'menu'), config, { merge: true }); }
+    catch (e) { console.warn('[cloud] saveMenuConfig', e); }
+  },
+  async getMenuConfig() {
+    try {
+      const s = await getDoc(doc(fdb, 'settings', 'menu'));
+      return s.exists() ? s.data() : { overrides: {}, custom: [] };
+    } catch (e) { return { overrides: {}, custom: [] }; }
+  },
+  onMenuConfig(cb) {
+    return onSnapshot(doc(fdb, 'settings', 'menu'), snap => {
+      cb(snap.exists() ? snap.data() : { overrides: {}, custom: [] });
+    });
+  },
+
+  // Admin password
+  async saveAdminPassword(pwd) {
+    try { await setDoc(doc(fdb, 'settings', 'admin'), { password: pwd }, { merge: true }); }
+    catch (e) { console.warn('[cloud] saveAdminPassword', e); }
+  },
+  async getAdminPassword() {
+    try {
+      const s = await getDoc(doc(fdb, 'settings', 'admin'));
+      return s.exists() ? (s.data().password || '1234') : '1234';
+    } catch (e) { return '1234'; }
   }
 };
 

@@ -129,6 +129,39 @@
 </head>
 <body>
 
+<!-- Login overlay (only when standalone — iframe shares parent session) -->
+<div id="loginOverlay" style="display:none;position:fixed;inset:0;background:linear-gradient(135deg,#1652F0,#0738C9);z-index:9999;align-items:center;justify-content:center;padding:20px">
+  <div style="background:#fff;border-radius:20px;padding:32px 24px;width:100%;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,.3);text-align:center">
+    <img src="logo.jpg" style="width:64px;height:64px;border-radius:14px;margin:0 auto 12px;display:block">
+    <h2 style="color:#0a1530;margin-bottom:4px;font-size:20px">เข้าสู่ระบบครัว</h2>
+    <div style="color:#5c6982;font-size:13px;margin-bottom:20px">ครัวผู้ใหญ่ปอง</div>
+    <input id="loginPwd" type="password" placeholder="รหัสผ่าน" style="width:100%;padding:14px;border:2px solid #d1ddff;border-radius:12px;font-size:16px;text-align:center;letter-spacing:.2em;margin-bottom:12px;font-family:inherit;box-sizing:border-box" onkeydown="if(event.key==='Enter')doLogin()">
+    <button onclick="doLogin()" style="width:100%;padding:14px;background:linear-gradient(135deg,#4F7AFF,#1652F0);color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:800;cursor:pointer">เข้าสู่ระบบ</button>
+    <div id="loginErr" style="color:#dc2626;font-size:13px;margin-top:10px;display:none">รหัสผ่านไม่ถูก</div>
+  </div>
+</div>
+
+<script>
+  const isEmbedded = new URLSearchParams(location.search).get('embed') === '1';
+  function isLoggedIn() { return sessionStorage.getItem('admin_logged_in') === '1'; }
+  function doLogin() {
+    const pwd = document.getElementById('loginPwd').value;
+    const stored = localStorage.getItem('admin_pwd') || '1234';
+    if (pwd === stored) {
+      sessionStorage.setItem('admin_logged_in', '1');
+      document.getElementById('loginOverlay').style.display = 'none';
+    } else {
+      document.getElementById('loginErr').style.display = 'block';
+      document.getElementById('loginPwd').value = '';
+    }
+  }
+  // Standalone (not in iframe) requires login
+  if (!isEmbedded && !isLoggedIn()) {
+    document.getElementById('loginOverlay').style.display = 'flex';
+    setTimeout(() => document.getElementById('loginPwd')?.focus(), 100);
+  }
+</script>
+
 <header id="pageHeader">
   <img class="logo" src="logo.jpg" alt="logo">
   <div class="info">
@@ -162,6 +195,24 @@
 </main>
 
 <div class="toast" id="toast"></div>
+
+<!-- Order edit modal -->
+<div id="editModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;align-items:flex-end;justify-content:center">
+  <div style="background:#fff;width:100%;max-width:520px;border-radius:20px 20px 0 0;max-height:92vh;overflow-y:auto;padding:20px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <h3 style="font-size:18px;color:#1652F0;margin:0">✏️ แก้ไข Order</h3>
+      <button onclick="closeEdit()" style="background:transparent;border:none;font-size:24px;color:#6b7280;cursor:pointer">×</button>
+    </div>
+    <div id="editBody"></div>
+    <button onclick="addEditItem()" style="width:100%;padding:10px;background:#ebf0ff;color:#1652F0;border:1.5px dashed #1652F0;border-radius:10px;font-weight:700;margin:10px 0;cursor:pointer">➕ เพิ่มรายการ</button>
+    <label style="display:block;font-size:13px;font-weight:600;color:#0a1530;margin:14px 0 4px">หมายเหตุพิเศษ</label>
+    <input type="text" id="editNote" placeholder="เช่น เผ็ดน้อย, ไม่ใส่ผัก" style="width:100%;padding:12px;border:1px solid #d1ddff;border-radius:8px;font-size:14px;font-family:inherit;box-sizing:border-box">
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button onclick="closeEdit()" style="flex:1;padding:14px;background:#fff;color:#6b7280;border:1.5px solid #d1d5db;border-radius:10px;font-weight:700;cursor:pointer">ยกเลิก</button>
+      <button onclick="saveEdit()" style="flex:2;padding:14px;background:#1652F0;color:#fff;border:none;border-radius:10px;font-weight:800;cursor:pointer">💾 บันทึก</button>
+    </div>
+  </div>
+</div>
 
 <audio id="ding" preload="auto">
   <source src="data:audio/wav;base64,UklGRkIBAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YR4BAAAAAACA/n/8f/p/+H/2f/N/8H/sf+h/5H/gf9p/1n/Rf8t/xX/Af7p/tH+vf6l/o3+ef5h/k3+Of4N/fn94f3J/bX9o/2N/Xn9Yf1N/Tn9Jf0R/QH86fzZ/Mn8tfyl/JX8gfxx/GH8VfxJ/Dn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8I" type="audio/wav">
@@ -279,6 +330,7 @@ function render() {
         ${o.status === 'pending' ? `
           <div class="order-actions">
             <button class="btn-cancel" onclick="cancelOrder('${o.id}')">ยกเลิก</button>
+            <button onclick="editOrderModal('${o.id}')" style="background:#ebf0ff;color:#1652F0;border:1.5px solid #1652F0;flex:0;max-width:90px">✏️ แก้</button>
             <button class="btn-done" onclick="markDone('${o.id}')">✓ ทำเสร็จแล้ว</button>
           </div>
         ` : ''}
@@ -354,6 +406,79 @@ async function markDone(orderId) {
   } else {
     toast(`✓ เสร็จ! ${customer.name} สะสม ${customer.total_boxes}/${goal}`);
   }
+}
+
+// ========== Edit Order ==========
+let editingOrder = null;
+let editingItems = [];
+
+function editOrderModal(orderId) {
+  const orderSrc = cloudOrders !== null ? cloudOrders : (loadDB().pendingOrders || []);
+  const order = orderSrc.find(o => o.id === orderId);
+  if (!order) return;
+  editingOrder = order;
+  editingItems = JSON.parse(JSON.stringify(order.items || []));
+  document.getElementById('editNote').value = order.note || '';
+  renderEditBody();
+  document.getElementById('editModal').style.display = 'flex';
+}
+
+function renderEditBody() {
+  const total = editingItems.reduce((s, it) => s + it.price * it.qty, 0);
+  document.getElementById('editBody').innerHTML = `
+    <div style="background:#f7f8fb;padding:10px;border-radius:8px;font-size:13px;color:#5c6982;margin-bottom:10px">
+      <b>${editingOrder.customer_name}</b> · ${editingOrder.customer_phone || '—'}
+    </div>
+    ${editingItems.map((it, i) => `
+      <div style="display:flex;gap:6px;align-items:center;padding:8px 0;border-bottom:1px solid #f3f4f6">
+        <input type="text" value="${(it.name || '').replace(/"/g,'&quot;')}" oninput="editingItems[${i}].name=this.value" style="flex:2;padding:8px;font-size:13px;border:1px solid #e2e7ef;border-radius:6px;font-family:inherit" placeholder="ชื่อรายการ">
+        <input type="number" value="${it.qty}" min="1" oninput="editingItems[${i}].qty=parseInt(this.value)||1;renderEditBody()" style="width:50px;padding:8px;font-size:13px;border:1px solid #e2e7ef;border-radius:6px;text-align:center;font-family:inherit" placeholder="qty">
+        <input type="number" value="${it.price}" min="0" oninput="editingItems[${i}].price=parseFloat(this.value)||0;renderEditBody()" style="width:60px;padding:8px;font-size:13px;border:1px solid #e2e7ef;border-radius:6px;text-align:center;font-family:inherit" placeholder="ราคา">
+        <button onclick="removeEditItem(${i})" style="background:transparent;border:none;color:#dc2626;font-size:18px;padding:0 6px;cursor:pointer">×</button>
+      </div>
+    `).join('')}
+    <div style="text-align:right;font-weight:800;color:#1652F0;font-size:18px;margin-top:10px;padding:8px;background:#ebf0ff;border-radius:8px">รวม: ฿${total}</div>
+  `;
+}
+
+function removeEditItem(i) {
+  if (editingItems.length === 1) return toast('⚠️ ต้องมีอย่างน้อย 1 รายการ');
+  editingItems.splice(i, 1);
+  renderEditBody();
+}
+
+function addEditItem() {
+  editingItems.push({ id: 'manual-' + Date.now(), name: '', mainName: '', qty: 1, price: 50, addOns: [], note: '' });
+  renderEditBody();
+}
+
+function closeEdit() {
+  document.getElementById('editModal').style.display = 'none';
+  editingOrder = null;
+}
+
+async function saveEdit() {
+  if (!editingOrder) return;
+  const total = editingItems.reduce((s, it) => s + it.price * it.qty, 0);
+  const note = document.getElementById('editNote').value.trim();
+  const updates = {
+    items: editingItems.map(it => ({ ...it, mainName: it.mainName || it.name })),
+    total,
+    note,
+    edited_at: new Date().toISOString()
+  };
+  // Local update
+  const db = loadDB();
+  const idx = (db.pendingOrders || []).findIndex(o => o.id === editingOrder.id);
+  if (idx >= 0) {
+    db.pendingOrders[idx] = { ...db.pendingOrders[idx], ...updates };
+    saveDB(db);
+  }
+  // Cloud update
+  if (window.cloud?.ready) await window.cloud.updateOrder(editingOrder.id, updates);
+  toast('✅ แก้ไขแล้ว · รวม ฿' + total);
+  closeEdit();
+  render();
 }
 
 async function cancelOrder(orderId) {

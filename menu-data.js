@@ -110,3 +110,37 @@ window.countMainDishes = function(items) {
   });
   return count;
 };
+
+// Apply overrides + custom items from Firestore config
+window.applyMenuConfig = function(config) {
+  config = config || { overrides: {}, custom: [] };
+  const ov = config.overrides || {};
+  const custom = config.custom || [];
+
+  let result = MENU.map(cat => ({
+    ...cat,
+    items: cat.items.map(it => {
+      const o = ov[it.id];
+      if (!o) return { ...it, available: true };
+      return {
+        ...it,
+        ...(o.name ? { name: o.name } : {}),
+        ...(o.price != null ? { price: Number(o.price) } : {}),
+        available: o.available !== false
+      };
+    })
+  }));
+
+  // Append custom items into their categories (or create new category)
+  custom.forEach(c => {
+    const item = { id: c.id, name: c.name, price: Number(c.price), available: c.available !== false };
+    const targetCat = result.find(cat => cat.cat === c.category);
+    if (targetCat) {
+      targetCat.items.push(item);
+    } else {
+      result.push({ cat: c.category || 'อื่นๆ', emoji: c.emoji || '🍽️', items: [item] });
+    }
+  });
+
+  return result;
+};
