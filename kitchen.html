@@ -125,6 +125,30 @@
     transition: opacity .3s; pointer-events: none; white-space: nowrap;
   }
   .toast.show { opacity: 1; }
+
+  /* ========== Thermal Receipt Print ========== */
+  #printArea { display: none; }
+  @media print {
+    body * { visibility: hidden; }
+    #printArea, #printArea * { visibility: visible !important; }
+    #printArea {
+      display: block !important;
+      position: absolute; left: 0; top: 0; width: 80mm;
+      padding: 4mm; font-family: 'Sarabun', monospace;
+      color: #000; background: #fff;
+    }
+    @page { size: 80mm auto; margin: 0; }
+  }
+  .rc-h1 { text-align: center; font-size: 16pt; font-weight: 800; margin: 0 0 2mm; }
+  .rc-sub { text-align: center; font-size: 9pt; margin: 0 0 2mm; }
+  .rc-divider { border: 0; border-top: 1px dashed #000; margin: 2mm 0; }
+  .rc-row { display: flex; justify-content: space-between; font-size: 11pt; margin: 1mm 0; }
+  .rc-item { display: flex; justify-content: space-between; align-items: flex-start; font-size: 12pt; margin: 1.5mm 0; }
+  .rc-item .name { flex: 1; padding-right: 4mm; }
+  .rc-item .price { font-weight: 700; white-space: nowrap; }
+  .rc-total { text-align: right; font-size: 14pt; font-weight: 900; margin: 2mm 0; }
+  .rc-foot { text-align: center; font-size: 9pt; margin: 3mm 0 0; }
+  .rc-free { color: #000; font-weight: 700; }
 </style>
 </head>
 <body>
@@ -196,6 +220,9 @@
 </main>
 
 <div class="toast" id="toast"></div>
+
+<!-- Print receipt area (hidden until print) -->
+<div id="printArea"></div>
 
 <!-- Order edit modal -->
 <div id="editModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;align-items:flex-end;justify-content:center">
@@ -382,8 +409,9 @@ function render() {
           <div class="order-actions">
             <button class="btn-cancel" onclick="cancelOrder('${o.id}')">ยกเลิก</button>
             ${(status==='pending'||status==='confirmed'||status==='cooking') ? `
-              <button onclick="editOrderModal('${o.id}')" style="background:#ebf0ff;color:#1652F0;border:1.5px solid #1652F0;flex:0;max-width:80px">✏️ แก้</button>
+              <button onclick="editOrderModal('${o.id}')" style="background:#ebf0ff;color:#1652F0;border:1.5px solid #1652F0;flex:0;max-width:60px">✏️</button>
             ` : ''}
+            <button onclick="printOrderReceipt('${o.id}')" style="background:#fef3c7;color:#92400e;border:1.5px solid #f59e0b;flex:0;max-width:60px" title="พิมพ์ใบเสร็จ">🖨️</button>
             ${stat.next ? `
               <button class="btn-done" style="background:${stat.color}" onclick="advanceStatus('${o.id}','${stat.next}')">${stat.nextLabel}</button>
             ` : ''}
@@ -673,6 +701,70 @@ async function finalizeOrder(orderId) {
   }
 }
 
+// ========== Print Thermal Receipt ==========
+function fmtReceiptDate(iso) {
+  const d = new Date(iso);
+  return d.toLocaleString('th-TH', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' });
+}
+
+function printOrderReceipt(orderId) {
+  const orderSrc = cloudOrders !== null ? cloudOrders : (loadDB().pendingOrders || []);
+  const order = orderSrc.find(o => o.id === orderId);
+  if (!order) return toast('⚠️ ไม่พบ order');
+
+  const itemsHTML = order.items.map(it => {
+    const free = it.freeQty || 0;
+    const paid = it.qty - free;
+    const lineTotal = it.price * paid;
+    const freeStr = free > 0 ? ` <span class="rc-free">[ฟรี ${free}]</span>` : '';
+    return `
+      <div class="rc-item">
+        <div class="name">${it.qty}× ${it.name}${freeStr}</div>
+        <div class="price">${free > 0 && paid === 0 ? 'ฟรี' : '฿' + lineTotal}</div>
+      </div>
+    `;
+  }).join('');
+
+  const html = `
+    <div class="rc-h1">ครัวผู้ใหญ่ปอง</div>
+    <div class="rc-sub">📞 061-962-3696</div>
+    <hr class="rc-divider">
+    <div class="rc-row"><span>Order</span><span><b>#${order.id.slice(-6)}</b></span></div>
+    <div class="rc-row"><span>เวลา</span><span>${fmtReceiptDate(order.date)}</span></div>
+    <div class="rc-row"><span>ลูกค้า</span><span><b>${order.customer_name}</b></span></div>
+    ${order.customer_phone ? `<div class="rc-row"><span>เบอร์</span><span>${order.customer_phone}</span></div>` : ''}
+    <hr class="rc-divider">
+    ${itemsHTML}
+    ${order.note ? `<hr class="rc-divider"><div style="font-size:11pt"><b>หมายเหตุ:</b> ${order.note}</div>` : ''}
+    <hr class="rc-divider">
+    ${order.discount ? `
+      <div class="rc-row"><span>ยอดเต็ม</span><span>฿${order.original_total || (order.total + order.discount)}</span></div>
+      <div class="rc-row"><span>🎁 ฟรี ${order.free_boxes_used} กล่อง</span><span>-฿${order.discount}</span></div>
+    ` : ''}
+    <div class="rc-total">รวม ฿${order.total}</div>
+    <hr class="rc-divider">
+    <div class="rc-foot">ขอบคุณที่อุดหนุน 🙏</div>
+    <div class="rc-foot" style="margin-top:1mm">สะสมแต้ม → loyalty.fishconnect.co/points.html</div>
+  `;
+  document.getElementById('printArea').innerHTML = html;
+  setTimeout(() => window.print(), 100);
+}
+
+// Auto-print new orders (toggle in admin settings)
+const printedOrderIds = new Set();
+function maybeAutoPrint(orders) {
+  if (localStorage.getItem('autoPrint') !== '1') return;
+  orders.forEach(o => {
+    if (o.status === 'pending' && !printedOrderIds.has(o.id)) {
+      printedOrderIds.add(o.id);
+      // Skip on first load (avoid printing all existing pending orders)
+      if (firstOrderLoad) return;
+      printOrderReceipt(o.id);
+    }
+  });
+}
+let firstOrderLoad = true;
+
 // ========== Edit Order ==========
 let editingOrder = null;
 let editingItems = [];
@@ -793,6 +885,9 @@ whenCloudReady(() => {
     db.pendingOrders = orders;
     saveDB(db);
     render();
+    // Auto-print new pending orders (skip first load)
+    maybeAutoPrint(orders);
+    firstOrderLoad = false;
   });
   window.cloud.onCustomers(customers => {
     cloudCustomers = customers;

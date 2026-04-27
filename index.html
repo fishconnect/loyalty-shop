@@ -175,6 +175,29 @@
     cursor: pointer; padding: 4px 8px;
   }
 
+  /* ========== Thermal Receipt Print ========== */
+  #printArea { display: none; }
+  @media print {
+    body * { visibility: hidden; }
+    #printArea, #printArea * { visibility: visible !important; }
+    #printArea {
+      display: block !important;
+      position: absolute; left: 0; top: 0; width: 80mm;
+      padding: 4mm; font-family: 'Sarabun', monospace;
+      color: #000; background: #fff;
+    }
+    @page { size: 80mm auto; margin: 0; }
+  }
+  .rc-h1 { text-align: center; font-size: 16pt; font-weight: 800; margin: 0 0 2mm; }
+  .rc-sub { text-align: center; font-size: 9pt; margin: 0 0 2mm; }
+  .rc-divider { border: 0; border-top: 1px dashed #000; margin: 2mm 0; }
+  .rc-row { display: flex; justify-content: space-between; font-size: 11pt; margin: 1mm 0; }
+  .rc-item { display: flex; justify-content: space-between; align-items: flex-start; font-size: 12pt; margin: 1.5mm 0; }
+  .rc-item .name { flex: 1; padding-right: 4mm; }
+  .rc-item .price { font-weight: 700; white-space: nowrap; }
+  .rc-total { text-align: right; font-size: 14pt; font-weight: 900; margin: 2mm 0; }
+  .rc-foot { text-align: center; font-size: 9pt; margin: 3mm 0 0; }
+
   /* ========== Dashboard ========== */
   .range-btn {
     padding: 8px 14px; border-radius: 999px;
@@ -520,6 +543,23 @@
   </div>
 
   <div class="card">
+    <h2>🖨️ เครื่องปริ้นใบเสร็จ</h2>
+    <p class="hint">รองรับ Thermal printer 80mm — pair กับเครื่องผ่าน Bluetooth/USB ที่ระดับ OS ก่อน</p>
+    <div class="toggle-row">
+      <input type="checkbox" id="autoPrintToggle" onchange="saveAutoPrint()">
+      <label for="autoPrintToggle" style="margin:0">🔔 พิมพ์ใบเสร็จอัตโนมัติเมื่อมี order ใหม่</label>
+    </div>
+    <button class="btn-secondary" onclick="testPrintReceipt()" style="width:100%;margin-top:8px">🖨️ ทดสอบพิมพ์ใบเสร็จ</button>
+    <div class="hint" style="margin-top:10px;line-height:1.5">
+      <b>วิธีตั้งค่า:</b><br>
+      1. เปิด Bluetooth บน tablet/มือถือ → pair กับเครื่องปริ้น<br>
+      2. (Android) ติดตั้ง driver จากแอปของผู้ผลิต<br>
+      3. (iPad) ใช้ AirPrint / driver ของผู้ผลิต<br>
+      4. ทดสอบพิมพ์ที่นี่ → กระดาษ 80mm ออก = พร้อมใช้
+    </div>
+  </div>
+
+  <div class="card">
     <h2>🔐 บัญชี Admin</h2>
     <label>รหัสผ่านปัจจุบัน</label>
     <input type="password" id="adminPwdNew" placeholder="ตั้งรหัสใหม่">
@@ -578,6 +618,9 @@
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- Print receipt area (hidden until print) -->
+<div id="printArea"></div>
 
 <script type="module" src="firebase.js"></script>
 <script src="menu-data.js"></script>
@@ -725,6 +768,7 @@ document.querySelectorAll('.tab').forEach(t => {
       document.getElementById('settingGoal').value = db.settings.goal;
       document.getElementById('settingPrice').value = db.settings.pricePerBox || 50;
       renderMenuManager();
+      initPrinterToggle();
     }
     // Lazy-load iframes (use dataset flag because empty src resolves to current URL)
     if (t.dataset.page === 'menu') {
@@ -1557,6 +1601,41 @@ function renderMenuManager() {
       </div>
     </div>
   `).join('');
+}
+
+// ========== Thermal Printer ==========
+function saveAutoPrint() {
+  const enabled = document.getElementById('autoPrintToggle').checked;
+  localStorage.setItem('autoPrint', enabled ? '1' : '0');
+  toast(enabled ? '🔔 พิมพ์อัตโนมัติเปิดแล้ว' : '🔕 ปิดการพิมพ์อัตโนมัติ');
+}
+
+function testPrintReceipt() {
+  const html = `
+    <div class="rc-h1">ครัวผู้ใหญ่ปอง</div>
+    <div class="rc-sub">📞 061-962-3696</div>
+    <hr class="rc-divider">
+    <div class="rc-row"><span>Order</span><span><b>#TEST00</b></span></div>
+    <div class="rc-row"><span>เวลา</span><span>${new Date().toLocaleString('th-TH', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' })}</span></div>
+    <div class="rc-row"><span>ลูกค้า</span><span><b>ทดสอบพิมพ์</b></span></div>
+    <hr class="rc-divider">
+    <div class="rc-item"><div class="name">2× ข้าวผัดหมูสับ</div><div class="price">฿100</div></div>
+    <div class="rc-item"><div class="name">1× ก๋วยเตี๋ยวต้มยำ</div><div class="price">฿30</div></div>
+    <div class="rc-item"><div class="name">1× ไข่ดาวสุก</div><div class="price">฿5</div></div>
+    <hr class="rc-divider">
+    <div class="rc-total">รวม ฿135</div>
+    <hr class="rc-divider">
+    <div class="rc-foot">✅ ทดสอบพิมพ์สำเร็จ</div>
+    <div class="rc-foot" style="margin-top:1mm">ขอบคุณ 🙏</div>
+  `;
+  document.getElementById('printArea').innerHTML = html;
+  setTimeout(() => window.print(), 100);
+}
+
+// Init toggle from localStorage on settings tab open
+function initPrinterToggle() {
+  const t = document.getElementById('autoPrintToggle');
+  if (t) t.checked = localStorage.getItem('autoPrint') === '1';
 }
 
 // ========== Item Editor (modal) ==========
