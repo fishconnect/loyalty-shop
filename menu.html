@@ -384,6 +384,61 @@
   }
   .customer-found.ok { background: #dcfce7; color: #166534; }
   .customer-found.new { background: #fef3c7; color: #92400e; }
+
+  /* User Widget — appears on returning visitors */
+  .user-widget {
+    margin: 12px 16px 0;
+    padding: 14px 16px; border-radius: 16px;
+    display: none; align-items: center; gap: 12px;
+    border: 2px solid #fed7aa;
+    background: linear-gradient(135deg, #fff7ed, #fef3c7);
+    box-shadow: 0 4px 14px rgba(234,88,12,.12);
+    animation: slide-down .4s ease;
+  }
+  .user-widget.show { display: flex; }
+  @keyframes slide-down {
+    from { opacity: 0; transform: translateY(-12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .user-widget .avatar {
+    width: 48px; height: 48px; border-radius: 50%;
+    background: linear-gradient(135deg, #f97316, #ea580c); color: #fff;
+    display: grid; place-items: center;
+    font-weight: 900; font-size: 20px;
+    flex-shrink: 0;
+    box-shadow: 0 3px 10px rgba(234,88,12,.35);
+  }
+  .user-widget .info { flex: 1; min-width: 0; }
+  .user-widget .name { font-weight: 800; font-size: 15px; color: #1f2937; line-height: 1.2; }
+  .user-widget .meta { font-size: 12px; color: #92400e; margin-top: 3px; font-weight: 600; }
+  .user-widget .action {
+    background: linear-gradient(135deg, #f97316, #ea580c); color: #fff;
+    padding: 10px 16px; border-radius: 999px; font-size: 13px; font-weight: 800;
+    text-decoration: none; white-space: nowrap;
+    box-shadow: 0 3px 10px rgba(234,88,12,.3);
+  }
+  .user-widget.cooking {
+    background: linear-gradient(135deg, #fef9c3, #fde68a);
+    border-color: #f59e0b;
+  }
+  .user-widget.cooking .avatar {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    animation: pulse-cook 1.5s ease-in-out infinite;
+  }
+  @keyframes pulse-cook {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.08); }
+  }
+  .user-widget.done {
+    background: linear-gradient(135deg, #dcfce7, #bbf7d0);
+    border-color: #16a34a;
+  }
+  .user-widget.done .avatar { background: linear-gradient(135deg, #22c55e, #16a34a); }
+  .user-widget.done .action { background: linear-gradient(135deg, #22c55e, #15803d); }
+  .user-widget .reward-pill {
+    display: inline-block; background: #fef3c7; color: #92400e;
+    padding: 2px 8px; border-radius: 999px; font-size: 11px; margin-left: 6px;
+  }
 </style>
 </head>
 <body>
@@ -397,6 +452,9 @@
 </header>
 
 <nav class="cats" id="cats"></nav>
+
+<!-- Returning customer widget -->
+<div class="user-widget" id="userWidget"></div>
 
 <script>
   // Embed/shop mode adjustments
@@ -892,6 +950,14 @@ function submitOrder() {
     } catch (e) { console.warn('cloud sync failed, order saved locally', e); }
   });
 
+  // Remember customer for next visit (only customer mode)
+  if (!isShopMode && phone) {
+    localStorage.setItem('lastCustomerPhone', phone);
+    if (customer.name && customer.name !== 'ไม่ระบุชื่อ') {
+      localStorage.setItem('lastCustomerName', customer.name);
+    }
+  }
+
   cart = [];
   sessionStorage.removeItem('cartV2');
 
@@ -911,9 +977,101 @@ function submitOrder() {
   }
 }
 
+// ============ Returning Customer ============
+const isShopMode = new URLSearchParams(location.search).get('mode') === 'shop';
+const lastPhone = localStorage.getItem('lastCustomerPhone');
+const lastName = localStorage.getItem('lastCustomerName');
+
+function renderUserWidget(customer, pendingOrder, recentDoneOrder) {
+  const w = document.getElementById('userWidget');
+  if (!w) return;
+  if (isShopMode) { w.classList.remove('show'); return; } // Don't show in shop mode
+
+  if (pendingOrder) {
+    w.className = 'user-widget cooking show';
+    w.innerHTML = `
+      <div class="avatar">👨‍🍳</div>
+      <div class="info">
+        <div class="name">กำลังทำอาหารให้คุณ...</div>
+        <div class="meta">Order #${pendingOrder.id.slice(-6)} · ${pendingOrder.items.length} รายการ · ฿${pendingOrder.total}</div>
+      </div>
+      <a class="action" href="status.html?order=${pendingOrder.id}&phone=${pendingOrder.customer_phone || pendingOrder.customer_id}">ดูสถานะ →</a>
+    `;
+  } else if (recentDoneOrder) {
+    w.className = 'user-widget done show';
+    w.innerHTML = `
+      <div class="avatar">✓</div>
+      <div class="info">
+        <div class="name">order ที่แล้วเสร็จแล้ว 🎉</div>
+        <div class="meta">${recentDoneOrder.items.length} รายการ · ฿${recentDoneOrder.total}</div>
+      </div>
+      <a class="action" href="status.html?order=${recentDoneOrder.id}&phone=${recentDoneOrder.customer_phone || recentDoneOrder.customer_id}">ดูแต้ม →</a>
+    `;
+  } else if (customer) {
+    const goal = 20;
+    const rewards = Math.floor(customer.total_boxes / goal) - customer.redeemed_count;
+    const initial = customer.name.charAt(0) || '?';
+    w.className = 'user-widget show';
+    w.innerHTML = `
+      <div class="avatar">${initial}</div>
+      <div class="info">
+        <div class="name">สวัสดี ${customer.name} 👋</div>
+        <div class="meta">สะสม ${customer.total_boxes}/${goal} กล่อง${rewards>0?` <span class="reward-pill">🎁 ฟรี ${rewards}</span>`:''}</div>
+      </div>
+      <a class="action" href="javascript:openCart()">สั่งใหม่</a>
+    `;
+  } else {
+    w.classList.remove('show');
+  }
+}
+
+function initReturningCustomer() {
+  if (!lastPhone || isShopMode) return;
+  const db = loadDB();
+  const customer = db.customers[lastPhone];
+  if (customer) renderUserWidget(customer, null, null);
+
+  whenCloudReady(async () => {
+    // Get fresh customer data
+    const cloudCust = await window.cloud.getCustomer(lastPhone);
+    if (cloudCust) {
+      db.customers[lastPhone] = cloudCust;
+      saveDB(db);
+    }
+    // Subscribe to orders, find this customer's pending or recent done
+    window.cloud.onOrders(orders => {
+      const myOrders = orders.filter(o =>
+        o.customer_phone === lastPhone || o.customer_id === lastPhone
+      );
+      const pending = myOrders.find(o => o.status === 'pending');
+      let recentDone = null;
+      if (!pending) {
+        // Show "done" banner if order completed within 30 min
+        const cutoff = Date.now() - 30 * 60 * 1000;
+        recentDone = myOrders
+          .filter(o => o.status === 'done' && new Date(o.completed_at || o.date).getTime() > cutoff)
+          .sort((a, b) => new Date(b.completed_at || b.date) - new Date(a.completed_at || a.date))[0];
+      }
+      renderUserWidget(cloudCust || customer, pending, recentDone);
+    });
+  });
+}
+
+// Pre-fill phone in cart for returning customer
+const origOpenCart = openCart;
+openCart = function() {
+  origOpenCart();
+  if (lastPhone && !document.getElementById('custPhone').value) {
+    document.getElementById('custPhone').value = lastPhone;
+    if (lastName) document.getElementById('custFullName').value = lastName;
+    checkCustomer();
+  }
+};
+
 // ============ Init ============
 renderMenu();
 updateCartBar();
+initReturningCustomer();
 
 window.addEventListener('scroll', () => {
   const visibleCats = MENU.filter(c => !c.isAddOn);
