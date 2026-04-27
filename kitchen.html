@@ -424,12 +424,15 @@ function render() {
             const lineTotal = it.price * paid;
             return `
             <div class="order-item-row">
-              <div class="name">${it.name}${free>0?` <span style="background:#16a34a;color:#fff;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:800;margin-left:4px">ฟรี ${free}</span>`:''}</div>
+              <div class="name">
+                <div>${it.name}${free>0?` <span style="background:#16a34a;color:#fff;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:800;margin-left:4px">ฟรี ${free}</span>`:''}</div>
+                ${it.note ? `<div style="margin-top:4px;background:#fef3c7;color:#92400e;padding:4px 10px;border-radius:6px;font-size:13px;font-weight:700;border-left:3px solid #f59e0b;display:inline-block">📝 ${it.note}</div>` : ''}
+              </div>
               <div class="qty">×${it.qty}</div>
               <div class="price">${free>0 && paid===0 ? '<span style="color:#16a34a;font-weight:700">ฟรี</span>' : '฿' + lineTotal}</div>
             </div>
           `;}).join('')}
-          ${o.note ? `<div class="order-note"><b>หมายเหตุ:</b> ${o.note}</div>` : ''}
+          ${o.note ? `<div class="order-note"><b>หมายเหตุรวม:</b> ${o.note}</div>` : ''}
           ${o.discount ? `<div style="margin-top:8px;padding:8px 10px;background:#dcfce7;border-radius:6px;font-size:13px;color:#166534;font-weight:700">🎁 ได้ข้าวฟรี ${o.free_boxes_used} กล่อง ราคา ฿${o.discount}</div>` : ''}
         </div>
         <div class="order-foot">
