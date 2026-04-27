@@ -1580,14 +1580,14 @@ function openItemEditor(itemId) {
   // Build category list
   const cats = (window.MENU || []).map(c => c.cat);
 
-  document.getElementById('editorTitle').textContent = editingIsCustom ? '✏️ แก้ไขเมนูที่เพิ่ม' : '✏️ แก้ไขเมนู';
+  document.getElementById('editorTitle').textContent = `✏️ ${foundItem.name.slice(0, 30)}${foundItem.name.length > 30 ? '…' : ''}`;
   document.getElementById('editorName').value = foundItem.name;
   document.getElementById('editorPrice').value = foundItem.price;
   document.getElementById('editorAvailable').checked = foundItem.available !== false;
   document.getElementById('editorIsAddOn').checked = !!isAddOn;
   document.getElementById('editorCat').innerHTML = cats.map(c => `<option value="${c}" ${c===foundCat.cat?'selected':''}>${c}</option>`).join('');
-  document.getElementById('editorCat').disabled = !editingIsCustom; // can't change cat for default items
-  document.getElementById('editorIsAddOnRow').style.display = editingIsCustom ? 'flex' : 'none';
+  document.getElementById('editorCat').disabled = false; // ✅ allow editing for all items
+  document.getElementById('editorIsAddOnRow').style.display = 'flex'; // ✅ allow toggling for all
   document.getElementById('editorDeleteBtn').style.display = editingIsCustom ? 'block' : 'none';
   renderEditorImage();
   document.getElementById('itemEditorModal').classList.add('show');
@@ -1688,11 +1688,14 @@ function saveItemEditor() {
   if (editingItemId && !editingIsCustom) {
     // Update override for built-in item
     if (!menuConfig.overrides[editingItemId]) menuConfig.overrides[editingItemId] = {};
-    menuConfig.overrides[editingItemId].name = name;
-    menuConfig.overrides[editingItemId].price = price;
-    menuConfig.overrides[editingItemId].available = available;
-    if (editingItemImage) menuConfig.overrides[editingItemId].image = editingItemImage;
-    else delete menuConfig.overrides[editingItemId].image;
+    const o = menuConfig.overrides[editingItemId];
+    o.name = name;
+    o.price = price;
+    o.available = available;
+    o.moveTo = isAddOn ? '_addon_' : catName;
+    o.isAddOn = !!isAddOn;
+    if (editingItemImage) o.image = editingItemImage;
+    else delete o.image;
   } else if (editingItemId && editingIsCustom) {
     // Update existing custom item
     if (!menuConfig.custom) menuConfig.custom = [];

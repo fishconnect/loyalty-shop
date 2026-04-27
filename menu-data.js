@@ -129,20 +129,45 @@ window.applyMenuConfig = function(config) {
   const ov = config.overrides || {};
   const custom = config.custom || [];
 
+  // Track items that have been moved out of their original category
+  const movedItems = []; // {item, target}
+
   let result = MENU.map(cat => ({
     ...cat,
     items: cat.items.map(it => {
       const o = ov[it.id];
       if (!o) return { ...it, available: true };
-      return {
+      const newItem = {
         ...it,
         ...(o.name ? { name: o.name } : {}),
         ...(o.price != null ? { price: Number(o.price) } : {}),
         ...(o.image ? { image: o.image } : {}),
         available: o.available !== false
       };
-    })
+      // Check if item was moved to a different category
+      const targetCat = o.moveTo;
+      const isAddOnTarget = targetCat === '_addon_' || o.isAddOn;
+      const sameCat = !targetCat || targetCat === cat.cat || (isAddOnTarget && cat.isAddOn);
+      if (!sameCat) {
+        movedItems.push({ item: newItem, target: targetCat, isAddOn: isAddOnTarget });
+        return null; // remove from this category
+      }
+      return newItem;
+    }).filter(Boolean)
   }));
+
+  // Place moved items into their target categories
+  movedItems.forEach(({ item, target, isAddOn }) => {
+    if (isAddOn) {
+      let cat = result.find(c => c.isAddOn);
+      if (!cat) { cat = { cat: 'เพิ่มเติม (อย่างละ +5.-)', emoji: '🍳', isAddOn: true, items: [] }; result.push(cat); }
+      cat.items.push(item);
+    } else {
+      const cat = result.find(c => c.cat === target && !c.isAddOn);
+      if (cat) cat.items.push(item);
+      else result.push({ cat: target, emoji: '🍽️', items: [item] });
+    }
+  });
 
   // Append custom items
   custom.forEach(c => {
