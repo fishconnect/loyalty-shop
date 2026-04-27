@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#ffffff">
+<title>แต้มสะสมของฉัน · ครัวผู้ใหญ่ปอง</title>
+<link rel="icon" href="logo.jpg">
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", "Sarabun", sans-serif;
+    background: #f7f8fb; color: #1f2937;
+    min-height: 100vh;
+  }
+  button, a { font-family: inherit; cursor: pointer; }
+
+  /* Header */
+  header {
+    background: #ffffff;
+    padding: 14px 16px;
+    display: flex; align-items: center; gap: 12px;
+    border-bottom: 2px solid #4F7AFF;
+    position: sticky; top: 0; z-index: 10;
+  }
+  header img.logo { height: 48px; width: 48px; object-fit: contain; border-radius: 10px; }
+  header .info { flex: 1; }
+  header h1 { font-size: 17px; color: #1652F0; font-weight: 800; line-height: 1.2; }
+  header .sub { font-size: 11px; color: #4F7AFF; margin-top: 2px; font-weight: 600; }
+
+  main { padding: 20px 16px 80px; max-width: 500px; margin: 0 auto; }
+
+  /* Lookup card (when no phone) */
+  .lookup-card {
+    background: #fff; border-radius: 16px; padding: 24px;
+    text-align: center; box-shadow: 0 4px 16px rgba(22,82,240,.08);
+  }
+  .lookup-card .icon { font-size: 56px; margin-bottom: 12px; }
+  .lookup-card h2 { font-size: 18px; color: #0a1530; margin-bottom: 4px; }
+  .lookup-card p { font-size: 13px; color: #5c6982; margin-bottom: 16px; }
+  .lookup-card input {
+    width: 100%; padding: 14px; font-size: 16px;
+    border: 2px solid #d1ddff; border-radius: 12px; background: #f7f8fb;
+    margin-bottom: 12px; font-family: inherit; text-align: center;
+    letter-spacing: .04em;
+  }
+  .lookup-card input:focus { outline: none; border-color: #1652F0; background: #fff; }
+  .lookup-card button {
+    width: 100%; padding: 14px; border-radius: 12px;
+    background: linear-gradient(135deg, #4F7AFF, #1652F0); color: #fff;
+    border: none; font-size: 16px; font-weight: 800;
+    box-shadow: 0 4px 14px rgba(22,82,240,.3);
+  }
+
+  /* Hero card with points */
+  .hero-card {
+    background: linear-gradient(135deg, #1652F0, #0738C9);
+    color: #fff;
+    border-radius: 20px;
+    padding: 24px;
+    box-shadow: 0 8px 24px rgba(22,82,240,.25);
+    margin-bottom: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero-card::before {
+    content: ""; position: absolute; top: -30px; right: -30px;
+    width: 140px; height: 140px; border-radius: 50%;
+    background: rgba(255,255,255,.08);
+  }
+  .hero-card::after {
+    content: ""; position: absolute; bottom: -50px; left: -30px;
+    width: 100px; height: 100px; border-radius: 50%;
+    background: rgba(255,255,255,.05);
+  }
+  .hero-card .greeting {
+    font-size: 13px; opacity: .85; margin-bottom: 4px; position: relative;
+  }
+  .hero-card .name {
+    font-size: 24px; font-weight: 800; line-height: 1.2; margin-bottom: 16px; position: relative;
+  }
+  .hero-card .points-row {
+    display: flex; align-items: baseline; gap: 8px; margin-bottom: 12px; position: relative;
+  }
+  .hero-card .num { font-size: 56px; font-weight: 900; line-height: 1; }
+  .hero-card .of { font-size: 22px; opacity: .7; font-weight: 700; }
+  .hero-card .lbl { font-size: 14px; opacity: .85; margin-bottom: 14px; position: relative; }
+
+  .progress {
+    background: rgba(255,255,255,.18); border-radius: 999px; overflow: hidden;
+    height: 12px; position: relative;
+  }
+  .progress-bar {
+    background: #fff; height: 100%; border-radius: 999px;
+    transition: width .6s ease;
+  }
+  .hero-card .next {
+    margin-top: 10px; font-size: 13px; opacity: .85; position: relative;
+  }
+
+  /* Reward banner */
+  .reward-banner {
+    background: linear-gradient(135deg, #16a34a, #15803d); color: #fff;
+    padding: 18px 20px; border-radius: 16px; margin-bottom: 16px;
+    display: flex; align-items: center; gap: 14px;
+    box-shadow: 0 6px 20px rgba(22,163,74,.3);
+    animation: pop 0.5s ease;
+  }
+  .reward-banner .icon { font-size: 36px; flex-shrink: 0; }
+  .reward-banner .text { flex: 1; }
+  .reward-banner .text .big { font-size: 18px; font-weight: 800; line-height: 1.2; }
+  .reward-banner .text .sub { font-size: 13px; opacity: .9; margin-top: 2px; }
+  @keyframes pop {
+    0% { transform: scale(.9); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  /* Stats grid */
+  .stats {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+    margin-bottom: 16px;
+  }
+  .stat-box {
+    background: #fff; padding: 14px; border-radius: 14px;
+    text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,.04);
+  }
+  .stat-box .num { font-size: 24px; font-weight: 900; color: #1652F0; }
+  .stat-box .lbl { font-size: 12px; color: #5c6982; margin-top: 4px; }
+
+  /* History card */
+  .card {
+    background: #fff; border-radius: 16px; padding: 18px;
+    margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,.04);
+  }
+  .card h3 {
+    font-size: 14px; font-weight: 800; color: #0a1530;
+    margin-bottom: 12px;
+    text-transform: uppercase; letter-spacing: .04em;
+  }
+  .order-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 0; border-bottom: 1px dashed #e2e7ef;
+    font-size: 14px;
+  }
+  .order-row:last-child { border-bottom: none; }
+  .order-row .left { flex: 1; min-width: 0; }
+  .order-row .name { font-weight: 600; color: #1f2a44; }
+  .order-row .meta { font-size: 11.5px; color: #5c6982; margin-top: 2px; }
+  .order-row .price { font-weight: 700; color: #1652F0; }
+  .order-row .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 999px;
+    font-size: 10px; font-weight: 700;
+  }
+  .badge-pending { background: #ebf0ff; color: #1652F0; }
+  .badge-done { background: #dcfce7; color: #166534; }
+
+  /* Action buttons */
+  .actions { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+  .btn {
+    width: 100%; padding: 14px; border-radius: 12px;
+    font-size: 15px; font-weight: 700; border: none;
+    text-decoration: none; display: block; text-align: center;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, #4F7AFF, #1652F0); color: #fff;
+    box-shadow: 0 4px 14px rgba(22,82,240,.25);
+  }
+  .btn-ghost {
+    background: #fff; color: #1652F0; border: 1.5px solid #1652F0;
+  }
+
+  .empty {
+    text-align: center; color: #9ca3af; padding: 24px;
+    font-size: 13px;
+  }
+  .err-bar {
+    background: #fee2e2; color: #991b1b; padding: 12px 14px;
+    border-radius: 10px; margin-bottom: 16px; font-size: 13px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <img class="logo" src="logo.jpg" alt="logo">
+  <div class="info">
+    <h1>แต้มสะสมของฉัน</h1>
+    <div class="sub">ครัวผู้ใหญ่ปอง</div>
+  </div>
+</header>
+
+<main id="main"></main>
+
+<script type="module" src="firebase.js"></script>
+<script src="menu-data.js"></script>
+<script>
+function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
+const STORAGE_KEY = 'loyaltyShopV2';
+const params = new URLSearchParams(location.search);
+let phone = (params.get('phone') || '').replace(/\D/g, '');
+const GOAL = 20;
+
+function loadDB() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return { customers: {}, orders: [], pendingOrders: [], settings: { goal: 20 } };
+}
+function saveDB(db) { localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); }
+
+function fmtTime(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('th-TH', { day:'numeric', month:'short' }) + ' ' +
+         d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+}
+
+function renderLookup(errMsg) {
+  document.getElementById('main').innerHTML = `
+    <div class="lookup-card">
+      <div class="icon">⭐</div>
+      <h2>ดูแต้มสะสมของคุณ</h2>
+      <p>กรอกเบอร์โทรที่ใช้สั่งอาหาร</p>
+      ${errMsg ? `<div class="err-bar">${errMsg}</div>` : ''}
+      <input type="tel" id="phoneInput" placeholder="0812345678" inputmode="numeric" autofocus>
+      <button onclick="doLookup()">ดูแต้ม</button>
+      <a href="menu.html" style="display:inline-block;margin-top:14px;color:#5c6982;font-size:13px;text-decoration:none">← กลับหน้าเมนู</a>
+    </div>
+  `;
+  setTimeout(() => {
+    const inp = document.getElementById('phoneInput');
+    if (inp) {
+      inp.addEventListener('keydown', e => { if (e.key === 'Enter') doLookup(); });
+    }
+  }, 0);
+}
+
+function doLookup() {
+  const v = document.getElementById('phoneInput').value.replace(/\D/g, '');
+  if (v.length < 9) return alert('กรุณากรอกเบอร์ให้ครบ');
+  // Save phone for next visit
+  localStorage.setItem('lastCustomerPhone', v);
+  // Reload with phone param
+  location.href = 'points.html?phone=' + v;
+}
+
+function renderCustomer(customer, allOrders) {
+  const goal = GOAL;
+  const totalRewards = Math.floor(customer.total_boxes / goal);
+  const rewardsAvailable = totalRewards - customer.redeemed_count;
+  const progress = customer.total_boxes - totalRewards * goal;
+  const progressDisplay = (rewardsAvailable > 0 && progress === 0) ? goal : progress;
+  const pct = (progressDisplay / goal) * 100;
+
+  // Filter customer's orders
+  const myOrders = allOrders
+    .filter(o => o.customer_phone === phone || o.customer_id === phone)
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .slice(0, 8);
+
+  const totalSpent = allOrders
+    .filter(o => (o.customer_phone === phone || o.customer_id === phone) && o.status === 'done')
+    .reduce((s, o) => s + (o.total || 0), 0);
+
+  const rewardBanner = rewardsAvailable > 0 ? `
+    <div class="reward-banner">
+      <div class="icon">🎁</div>
+      <div class="text">
+        <div class="big">คุณมีสิทธิ์ฟรี ${rewardsAvailable} กล่อง!</div>
+        <div class="sub">แจ้งทางร้านเพื่อขอแลกของฟรี</div>
+      </div>
+    </div>
+  ` : '';
+
+  const greetingTime = new Date().getHours();
+  const greeting = greetingTime < 12 ? 'อรุณสวัสดิ์' : greetingTime < 18 ? 'สวัสดี' : 'สวัสดีตอนเย็น';
+
+  document.getElementById('main').innerHTML = `
+    <div class="hero-card">
+      <div class="greeting">${greeting} 👋</div>
+      <div class="name">${customer.name}</div>
+      <div class="points-row">
+        <span class="num">${progressDisplay}</span>
+        <span class="of">/ ${goal}</span>
+      </div>
+      <div class="lbl">กล่องสะสมไปสู่รางวัลถัดไป</div>
+      <div class="progress"><div class="progress-bar" style="width:${pct}%"></div></div>
+      <div class="next">${rewardsAvailable > 0 ? '🎉 ครบแล้ว!' : `อีก ${goal - progressDisplay} กล่อง = ฟรี 1 กล่อง`}</div>
+    </div>
+
+    ${rewardBanner}
+
+    <div class="stats">
+      <div class="stat-box">
+        <div class="num">${customer.total_boxes}</div>
+        <div class="lbl">สะสมรวมทั้งหมด</div>
+      </div>
+      <div class="stat-box">
+        <div class="num">${customer.redeemed_count}</div>
+        <div class="lbl">แลกฟรีไปแล้ว</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>📦 ออเดอร์ล่าสุด</h3>
+      ${myOrders.length === 0 ? '<div class="empty">ยังไม่มีออเดอร์</div>' :
+        myOrders.map(o => `
+          <div class="order-row">
+            <div class="left">
+              <div class="name">${o.items.map(i => `${i.qty}× ${i.mainName || i.name}`).join(', ').slice(0, 60)}${o.items.map(i=>i.name).join(',').length > 60 ? '...' : ''}</div>
+              <div class="meta">${fmtTime(o.date)} · <span class="badge ${o.status === 'pending' ? 'badge-pending' : 'badge-done'}">${o.status === 'pending' ? '⏳ กำลังทำ' : '✓ เสร็จแล้ว'}</span></div>
+            </div>
+            <div class="price">฿${o.total}</div>
+          </div>
+        `).join('')
+      }
+    </div>
+
+    <div class="actions">
+      <a href="menu.html" class="btn btn-primary">🍽️ สั่งอาหารเพิ่ม</a>
+      <a href="javascript:logout()" class="btn btn-ghost">เปลี่ยนเบอร์</a>
+    </div>
+  `;
+}
+
+function logout() {
+  localStorage.removeItem('lastCustomerPhone');
+  location.href = 'points.html';
+}
+
+function tryRender() {
+  if (!phone) {
+    // Try last phone from localStorage
+    const last = localStorage.getItem('lastCustomerPhone');
+    if (last) phone = last;
+    else { renderLookup(); return; }
+  }
+
+  const db = loadDB();
+  const customer = db.customers[phone];
+  const allOrders = db.pendingOrders || [];
+
+  if (customer) {
+    renderCustomer(customer, allOrders);
+  } else {
+    // Try cloud
+    whenCloudReady(async () => {
+      const cloudCust = await window.cloud.getCustomer(phone);
+      if (cloudCust) {
+        db.customers[phone] = cloudCust;
+        saveDB(db);
+        renderCustomer(cloudCust, allOrders);
+      } else {
+        renderLookup('ไม่พบเบอร์นี้ในระบบ — เริ่มสะสมโดยสั่งอาหาร');
+      }
+    });
+    // Fallback: if cloud not ready in 3 sec, show lookup with err
+    setTimeout(() => {
+      if (!document.querySelector('.hero-card')) {
+        if (!db.customers[phone]) renderLookup('ไม่พบเบอร์นี้ — กรอกใหม่ หรือสั่งอาหารเพื่อเริ่มสะสม');
+      }
+    }, 3000);
+  }
+}
+
+tryRender();
+
+// Subscribe to real-time updates
+whenCloudReady(() => {
+  if (!phone) return;
+  window.cloud.onCustomers(customers => {
+    const db = loadDB();
+    if (customers[phone]) {
+      db.customers[phone] = customers[phone];
+      saveDB(db);
+      const allOrders = db.pendingOrders || [];
+      renderCustomer(customers[phone], allOrders);
+    }
+  });
+  window.cloud.onOrders(orders => {
+    const db = loadDB();
+    db.pendingOrders = orders;
+    saveDB(db);
+    if (db.customers[phone]) renderCustomer(db.customers[phone], orders);
+  });
+});
+</script>
+</body>
+</html>

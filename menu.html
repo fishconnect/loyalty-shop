@@ -1011,7 +1011,7 @@ function renderUserWidget(customer, pendingOrder, recentDoneOrder) {
         <div class="name">order ที่แล้วเสร็จแล้ว 🎉</div>
         <div class="meta">${recentDoneOrder.items.length} รายการ · ฿${recentDoneOrder.total}</div>
       </div>
-      <a class="action" href="status.html?order=${recentDoneOrder.id}&phone=${recentDoneOrder.customer_phone || recentDoneOrder.customer_id}">ดูแต้ม →</a>
+      <a class="action" href="points.html?phone=${recentDoneOrder.customer_phone || recentDoneOrder.customer_id}">ดูแต้ม →</a>
     `;
   } else if (customer) {
     const goal = 20;
