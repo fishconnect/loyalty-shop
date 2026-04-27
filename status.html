@@ -109,6 +109,45 @@
   .footer-note {
     text-align: center; font-size: 12px; color: #9ca3af; padding: 16px;
   }
+  .order-id-box {
+    background: linear-gradient(135deg, #fff7ed, #fed7aa);
+    border-radius: 14px; padding: 14px;
+    text-align: center; margin-bottom: 16px;
+  }
+  .order-id-box .label {
+    font-size: 11px; color: #92400e; letter-spacing: .04em; text-transform: uppercase;
+  }
+  .order-id-box .id {
+    font-size: 32px; font-weight: 900; color: #ea580c; letter-spacing: .04em;
+    font-family: -apple-system, monospace;
+  }
+  .share-row {
+    display: flex; gap: 8px; margin-bottom: 12px;
+  }
+  .share-row button {
+    flex: 1; padding: 10px; border-radius: 10px;
+    background: #fff; color: #92400e; border: 2px solid #fed7aa;
+    font-size: 13px; font-weight: 700; cursor: pointer;
+  }
+  .share-row button:hover { background: #fff7ed; border-color: #ea580c; }
+  .keep-open-hint {
+    background: #fef3c7; color: #92400e;
+    padding: 12px 16px; border-radius: 10px; margin-bottom: 16px;
+    font-size: 13px; line-height: 1.5; text-align: center;
+  }
+  .keep-open-hint b { font-weight: 700; }
+  .ready-banner {
+    background: linear-gradient(135deg, #16a34a, #15803d); color: #fff;
+    padding: 18px; border-radius: 14px; margin-bottom: 16px;
+    text-align: center; animation: pop 0.5s ease;
+    box-shadow: 0 8px 24px rgba(22,163,74,.4);
+  }
+  .ready-banner .big { font-size: 22px; font-weight: 900; margin-bottom: 4px; }
+  .ready-banner .sub { font-size: 14px; opacity: .9; }
+  @keyframes pop {
+    0% { transform: scale(.8); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+  }
 </style>
 </head>
 <body>
@@ -199,26 +238,51 @@ function renderItemsHTML(order) {
 }
 
 function renderPending(order) {
+  document.title = `⏳ กำลังทำ #${order.id.slice(-6)}`;
   document.getElementById('content').innerHTML = `
     <div class="status-card">
       <div class="status-icon cooking">👨‍🍳</div>
       <div class="status-title">กำลังทำอาหาร...</div>
-      <div class="status-sub">ทางร้านได้รับ order แล้ว<br>กรุณารอที่ร้านสักครู่</div>
+      <div class="status-sub">ทางร้านได้รับ order แล้ว<br>หน้านี้จะ <b>เด้งเตือนอัตโนมัติ</b> เมื่ออาหารเสร็จ</div>
 
-      <div class="order-info">
-        <div class="pill">
-          <div class="label">หมายเลข Order</div>
-          <div class="val">#${order.id.slice(-6)}</div>
-        </div>
-        <div class="pill">
-          <div class="label">เวลาสั่ง</div>
-          <div class="val">${fmtTime(order.date)}</div>
-        </div>
+      <div class="order-id-box">
+        <div class="label">หมายเลข Order</div>
+        <div class="id">#${order.id.slice(-6)}</div>
+        <div style="font-size:12px;color:#92400e;margin-top:4px">เวลาสั่ง ${fmtTime(order.date)}</div>
+      </div>
+
+      <div class="keep-open-hint">
+        💡 <b>เก็บหน้านี้ค้างไว้</b><br>
+        จะมีเสียงเตือน + แจ้งสถานะเมื่ออาหารเสร็จ
+      </div>
+
+      <div class="share-row">
+        <button onclick="copyLink()">🔗 Copy Link</button>
+        <button onclick="shareLink()">📤 แชร์</button>
       </div>
 
       ${renderItemsHTML(order)}
+
+      <a href="menu.html" class="btn btn-ghost" style="margin-top:16px">← กลับหน้าเมนู</a>
     </div>
   `;
+}
+
+function copyLink() {
+  navigator.clipboard.writeText(location.href).then(() => {
+    alert('คัดลอกลิงก์แล้ว — ส่งให้คนอื่นเช็กสถานะได้');
+  });
+}
+function shareLink() {
+  if (navigator.share) {
+    navigator.share({
+      title: 'สถานะ order ครัวผู้ใหญ่ปอง',
+      text: 'เช็กสถานะอาหารที่สั่ง',
+      url: location.href
+    }).catch(()=>{});
+  } else {
+    copyLink();
+  }
 }
 
 function renderDone(order, db) {

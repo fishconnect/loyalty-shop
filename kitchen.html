@@ -129,7 +129,7 @@
 </head>
 <body>
 
-<header>
+<header id="pageHeader">
   <img class="logo" src="logo.jpg" alt="logo">
   <div class="info">
     <h1>👨‍🍳 ครัว — ออเดอร์เข้า</h1>
@@ -137,6 +137,15 @@
   </div>
   <a href="index.html">สะสมแต้ม →</a>
 </header>
+
+<script>
+  if (new URLSearchParams(location.search).get('embed') === '1') {
+    document.addEventListener('DOMContentLoaded', () => {
+      const h = document.getElementById('pageHeader');
+      if (h) h.style.display = 'none';
+    });
+  }
+</script>
 
 <div class="summary-bar">
   <div class="stat-pill">รอทำ: <span class="num" id="statPending">0</span></div>

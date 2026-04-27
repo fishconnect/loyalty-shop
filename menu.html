@@ -388,7 +388,7 @@
 </head>
 <body>
 
-<header>
+<header id="pageHeader">
   <img class="logo" src="logo.jpg" alt="logo">
   <div class="info">
     <h1>ครัวผู้ใหญ่ปอง</h1>
@@ -397,6 +397,29 @@
 </header>
 
 <nav class="cats" id="cats"></nav>
+
+<script>
+  // Embed/shop mode adjustments
+  (function(){
+    const p = new URLSearchParams(location.search);
+    const isEmbed = p.get('embed') === '1';
+    const isShop = p.get('mode') === 'shop';
+    if (isEmbed) {
+      const h = document.getElementById('pageHeader');
+      if (h) h.style.display = 'none';
+      const cats = document.querySelector('.cats');
+      if (cats) cats.style.top = '0';
+      document.body.style.paddingBottom = '110px';
+    }
+    if (isShop) {
+      // Add shop banner
+      const banner = document.createElement('div');
+      banner.style.cssText = 'background:#fef3c7;color:#92400e;padding:8px 16px;text-align:center;font-size:12px;font-weight:700;border-bottom:1px solid #fde68a';
+      banner.innerHTML = '🏪 โหมดสั่งให้ลูกค้าหน้าร้าน — เบอร์โทรไม่บังคับ';
+      document.body.insertBefore(banner, document.body.firstChild);
+    }
+  })();
+</script>
 
 <main id="menuMain"></main>
 
@@ -799,21 +822,26 @@ function checkCustomer() {
 
 // ============ Submit Order ============
 function submitOrder() {
+  const isShopMode = new URLSearchParams(location.search).get('mode') === 'shop';
   const phone = normPhone(document.getElementById('custPhone').value);
   const name = document.getElementById('custFullName').value.trim();
-  if (!phone || phone.length < 9) return toast('⚠️ กรุณากรอกเบอร์โทร', true);
   if (!cart.length) return toast('⚠️ ตะกร้าว่าง', true);
 
+  // Shop mode: phone OR name required. Customer mode: phone required.
+  if (!isShopMode && (!phone || phone.length < 9)) return toast('⚠️ กรุณากรอกเบอร์โทร', true);
+  if (isShopMode && !phone && !name) return toast('⚠️ กรอกเบอร์ หรือชื่อ อย่างน้อยอย่างใดอย่างหนึ่ง', true);
+
   const db = loadDB();
-  let customer = db.customers[phone];
+  const customerId = phone || ('walkin-' + Date.now());
+  let customer = phone ? db.customers[phone] : null;
   if (!customer) {
-    if (!name) return toast('⚠️ ลูกค้าใหม่ต้องกรอกชื่อ', true);
+    const customerName = name || (phone ? 'ลูกค้า ' + phone.slice(-4) : 'ไม่ระบุชื่อ');
     customer = {
-      id: phone, name, phone,
+      id: customerId, name: customerName, phone: phone || '',
       total_boxes: 0, redeemed_count: 0,
       joined: new Date().toISOString()
     };
-    db.customers[phone] = customer;
+    db.customers[customerId] = customer;
   } else if (name && customer.name === 'ไม่ระบุชื่อ') {
     customer.name = name;
   }
@@ -843,12 +871,13 @@ function submitOrder() {
   db.pendingOrders.push({
     id: orderId,
     date: new Date().toISOString(),
-    customer_id: phone,
+    customer_id: customerId,
     customer_name: customer.name,
-    customer_phone: phone,
+    customer_phone: phone || '',
     items, total,
     note: '',
     status: 'pending',
+    source: isShopMode ? 'walk-in' : 'online',
   });
 
   saveDB(db);
@@ -865,9 +894,21 @@ function submitOrder() {
 
   cart = [];
   sessionStorage.removeItem('cartV2');
-  setTimeout(() => {
-    window.location.href = `status.html?order=${orderId}&phone=${phone}`;
-  }, 400);
+
+  if (isShopMode) {
+    // Stay on menu, clear form, show toast
+    document.getElementById('custPhone').value = '';
+    document.getElementById('custFullName').value = '';
+    document.getElementById('custFound').innerHTML = '';
+    closeCart();
+    renderMenu();
+    updateCartBar();
+    toast(`✓ ส่งครัวแล้ว! ${customer.name} · ฿${total}`);
+  } else {
+    setTimeout(() => {
+      window.location.href = `status.html?order=${orderId}&phone=${phone || customerId}`;
+    }, 400);
+  }
 }
 
 // ============ Init ============

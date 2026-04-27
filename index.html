@@ -188,11 +188,23 @@
 </header>
 
 <div class="tabs">
-  <div class="tab active" data-page="order">บันทึก</div>
-  <div class="tab" data-page="check">เช็ก/แลก</div>
+  <div class="tab active" data-page="order">📝</div>
+  <div class="tab" data-page="menu">🍽️ เมนู</div>
+  <div class="tab" data-page="kitchen">👨‍🍳 ครัว <span id="tabBadge" style="display:none;background:#dc2626;color:#fff;border-radius:999px;padding:0 5px;font-size:10px;margin-left:2px"></span></div>
+  <div class="tab" data-page="check">เช็ก</div>
   <div class="tab" data-page="customers">ลูกค้า</div>
   <div class="tab" data-page="reports">รายงาน</div>
-  <div class="tab" data-page="settings">ตั้งค่า</div>
+  <div class="tab" data-page="settings">⚙️</div>
+</div>
+
+<!-- ========== เมนู (สั่งให้ลูกค้าหน้าร้าน) ========== -->
+<div class="page" id="page-menu" style="padding:0">
+  <iframe id="menuFrame" src="" style="border:0;width:100%;height:calc(100vh - 130px);display:block" title="Menu"></iframe>
+</div>
+
+<!-- ========== ครัว (รับออเดอร์) ========== -->
+<div class="page" id="page-kitchen" style="padding:0">
+  <iframe id="kitchenFrame" src="" style="border:0;width:100%;height:calc(100vh - 130px);display:block" title="Kitchen"></iframe>
 </div>
 
 <!-- ========== บันทึกออเดอร์ ========== -->
@@ -458,6 +470,15 @@ document.querySelectorAll('.tab').forEach(t => {
     if (t.dataset.page === 'settings') {
       document.getElementById('settingGoal').value = db.settings.goal;
       document.getElementById('settingPrice').value = db.settings.pricePerBox || 50;
+    }
+    // Lazy-load iframes
+    if (t.dataset.page === 'menu') {
+      const f = document.getElementById('menuFrame');
+      if (!f.src) f.src = 'menu.html?embed=1&mode=shop';
+    }
+    if (t.dataset.page === 'kitchen') {
+      const f = document.getElementById('kitchenFrame');
+      if (!f.src) f.src = 'kitchen.html?embed=1';
     }
   });
 });
@@ -1184,16 +1205,19 @@ document.getElementById('goalDisplay').textContent = db.settings.goal || 20;
 // Customer link in settings
 document.getElementById('customerLink').value = location.origin + location.pathname.replace('index.html','') + 'menu.html';
 
-// Pending orders badge in header
+// Pending orders badge in header + tab
 function updatePendingBadge() {
   const fresh = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
   const pending = (fresh.pendingOrders || []).filter(o => o.status === 'pending').length;
   const btn = document.getElementById('pendingBtn');
+  const tabBadge = document.getElementById('tabBadge');
   if (pending > 0) {
     btn.style.display = 'inline-block';
     document.getElementById('pendingCount').textContent = pending;
+    if (tabBadge) { tabBadge.style.display = 'inline-block'; tabBadge.textContent = pending; }
   } else {
     btn.style.display = 'none';
+    if (tabBadge) tabBadge.style.display = 'none';
   }
 }
 updatePendingBadge();
