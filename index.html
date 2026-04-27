@@ -188,8 +188,9 @@
     }
     @page { size: 80mm auto; margin: 0; }
   }
-  .rc-h1 { text-align: center; font-size: 16pt; font-weight: 800; margin: 0 0 2mm; }
-  .rc-sub { text-align: center; font-size: 9pt; margin: 0 0 2mm; }
+  .rc-logo { display: block; width: 30mm; height: 30mm; object-fit: contain; margin: 0 auto 2mm; }
+  .rc-h1 { text-align: center; font-size: 22pt; font-weight: 900; margin: 0 0 1mm; letter-spacing: -0.5px; }
+  .rc-sub { text-align: center; font-size: 11pt; margin: 0 0 2mm; font-weight: 600; }
   .rc-divider { border: 0; border-top: 1px dashed #000; margin: 2mm 0; }
   .rc-row { display: flex; justify-content: space-between; font-size: 11pt; margin: 1mm 0; }
   .rc-item { display: flex; justify-content: space-between; align-items: flex-start; font-size: 12pt; margin: 1.5mm 0; }
@@ -197,6 +198,10 @@
   .rc-item .price { font-weight: 700; white-space: nowrap; }
   .rc-total { text-align: right; font-size: 14pt; font-weight: 900; margin: 2mm 0; }
   .rc-foot { text-align: center; font-size: 9pt; margin: 3mm 0 0; }
+  .rc-qr-wrap { text-align: center; margin: 4mm 0 2mm; }
+  .rc-qr-title { font-size: 12pt; font-weight: 800; margin-bottom: 2mm; }
+  .rc-qr { width: 30mm; height: 30mm; margin: 0 auto; display: block; }
+  .rc-qr-url { font-size: 8pt; margin-top: 1mm; word-break: break-all; }
 
   /* ========== Dashboard ========== */
   .range-btn {
@@ -1713,8 +1718,14 @@ function testPrintReceipt() {
     });
     return;
   }
-  // Fallback: browser print
+  // Fallback: browser print (with logo + QRs to verify everything)
+  const menuURL = 'https://loyalty.fishconnect.co/menu.html';
+  const pointsURL = 'https://loyalty.fishconnect.co/points.html';
+  const qrMenu = 'https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=2&data=' + encodeURIComponent(menuURL);
+  const qrPoints = 'https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=2&data=' + encodeURIComponent(pointsURL);
+
   const html = `
+    <img class="rc-logo" src="logo.jpg" alt="logo">
     <div class="rc-h1">ครัวผู้ใหญ่ปอง</div>
     <div class="rc-sub">📞 061-962-3696</div>
     <hr class="rc-divider">
@@ -1729,10 +1740,30 @@ function testPrintReceipt() {
     <div class="rc-total">รวม ฿135</div>
     <hr class="rc-divider">
     <div class="rc-foot">✅ ทดสอบพิมพ์สำเร็จ</div>
-    <div class="rc-foot" style="margin-top:1mm">ขอบคุณ 🙏</div>
+
+    <div class="rc-qr-wrap">
+      <div class="rc-qr-title">📱 SCAN สั่งอาหารผ่าน QR Code</div>
+      <img class="rc-qr" src="${qrMenu}" alt="QR menu" crossorigin="anonymous">
+      <div class="rc-qr-url">menu.html</div>
+    </div>
+
+    <div class="rc-qr-wrap" style="border-top:1px dashed #000;padding-top:3mm">
+      <div class="rc-qr-title">⭐ SCAN เช็คแต้มสะสม</div>
+      <div style="font-size:9pt;margin-bottom:2mm">(กรอกเบอร์โทรเพื่อดูแต้ม)</div>
+      <img class="rc-qr" src="${qrPoints}" alt="QR points" crossorigin="anonymous">
+      <div class="rc-qr-url">points.html</div>
+    </div>
   `;
   document.getElementById('printArea').innerHTML = html;
-  setTimeout(() => window.print(), 100);
+  // Wait for images to load before print
+  const imgs = document.querySelectorAll('#printArea img');
+  let loaded = 0;
+  const tryPrint = () => { if (++loaded >= imgs.length) setTimeout(() => window.print(), 200); };
+  imgs.forEach(img => {
+    if (img.complete) tryPrint();
+    else { img.onload = tryPrint; img.onerror = tryPrint; }
+  });
+  if (imgs.length === 0) setTimeout(() => window.print(), 100);
 }
 
 // Init toggle from localStorage on settings tab open
