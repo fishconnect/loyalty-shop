@@ -1262,7 +1262,25 @@ function renderReports() {
   const price = db.settings.pricePerBox || 50;
   const customers = Object.values(db.customers);
   const { start, label } = rangeBounds(currentRange);
-  const inRange = db.orders.filter(o => new Date(o.date) >= start);
+
+  // Source of truth: completed orders from pendingOrders (cloud-synced) + legacy db.orders
+  const allCompleted = [
+    ...(db.pendingOrders || []).filter(o => o.status === 'done').map(o => ({
+      ...o,
+      // Normalize: dashboard uses completed_at as primary date, fallback to date
+      _useDate: o.completed_at || o.date,
+      boxes: o.boxes || (window.countMainDishes ? window.countMainDishes(o.items || []) : 0)
+    })),
+    // Include legacy db.orders that aren't already in pendingOrders
+    ...((db.orders || []).filter(o => {
+      // Skip if already counted in pendingOrders (matched by date or content)
+      const id = o.id;
+      // Old db.orders had IDs like 'O...' — check if there's a matching done order with same date+customer
+      return !(db.pendingOrders || []).some(po => po.status === 'done' && po.customer_id === o.customer_id && po.completed_at === o.completed_at);
+    }).map(o => ({ ...o, _useDate: o.completed_at || o.date })))
+  ];
+
+  const inRange = allCompleted.filter(o => new Date(o._useDate) >= start);
   const previousRange = (() => {
     if (currentRange === 'today') {
       const y = startOfDay(new Date()); y.setDate(y.getDate() - 1);
@@ -1272,8 +1290,8 @@ function renderReports() {
     const len = (Date.now() - start.getTime());
     return { start: new Date(start.getTime() - len), end: start };
   })();
-  const inPrev = db.orders.filter(o => {
-    const d = new Date(o.date);
+  const inPrev = allCompleted.filter(o => {
+    const d = new Date(o._useDate);
     return d >= previousRange.start && d < previousRange.end;
   });
 
@@ -1308,8 +1326,8 @@ function renderReports() {
     const d = new Date(today); d.setDate(d.getDate() - i);
     dayData.push({ key: dayKey(d), label: d.toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric' }), boxes: 0, revenue: 0 });
   }
-  db.orders.forEach(o => {
-    const day = dayData.find(x => x.key === dayKey(o.date));
+  allCompleted.forEach(o => {
+    const day = dayData.find(x => x.key === dayKey(o._useDate));
     if (day) {
       day.boxes += o.boxes || 0;
       day.revenue += (o.total != null) ? o.total : (o.boxes || 0) * (o.price_per_box || price);
@@ -1404,16 +1422,19 @@ function renderReports() {
       }).join('')
     : '<div class="empty">— ยังไม่มี —</div>';
 
-  const recent = db.orders.slice(-15).reverse();
+  const recent = [...allCompleted].sort((a,b) => new Date(b._useDate) - new Date(a._useDate)).slice(0, 15);
   document.getElementById('recentOrders').innerHTML = recent.length
     ? recent.map(o => {
         const c = getCustomer(o.customer_id);
         const name = c?.name || o.customer_name || '?';
         const total = (o.total != null) ? o.total : (o.boxes || 0) * (o.price_per_box || price);
+        const itemSummary = o.items && o.items.length
+          ? o.items.map(i => `${i.qty}× ${i.mainName || i.name}`).join(', ').slice(0, 60)
+          : (o.note || '');
         return `<div class="order-item" onclick="editOrder('${o.id}')">
           <div style="flex:1">
-            <div><b>${name}</b> · ${o.boxes} กล่อง · <span style="color:#1652F0;font-weight:600">${fmtBaht(total)}</span></div>
-            <div style="font-size:12px;color:#6b7280">${fmtDate(o.date)}${o.note?` · ${o.note}`:''}</div>
+            <div><b>${name}</b> · ${o.boxes} กล่อง · <span style="color:#1652F0;font-weight:600">${fmtBaht(total)}</span>${o.free_boxes_used?` <span style="background:#dcfce7;color:#166534;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:700">🎁 ฟรี ${o.free_boxes_used}</span>`:''}</div>
+            <div style="font-size:12px;color:#6b7280">${fmtDate(o._useDate)}${itemSummary?` · ${itemSummary}`:''}</div>
           </div>
           <div style="color:#9ca3af;font-size:18px;padding:0 4px">✏️</div>
         </div>`;
