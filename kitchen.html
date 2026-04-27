@@ -215,6 +215,17 @@
   <button onclick="setView('done')" id="tabDone">✓ เสร็จ</button>
 </div>
 
+<!-- Done view filter bar -->
+<div id="doneFilterBar" style="display:none;flex-direction:column;gap:8px;padding:12px 16px 0;max-width:700px;margin:0 auto">
+  <input type="search" id="doneSearch" oninput="render()" placeholder="🔍 ค้นหา ชื่อ / เบอร์ / เลข order / เมนู" style="width:100%;padding:10px 14px;border:1.5px solid #e2e7ef;border-radius:10px;font-size:14px;font-family:inherit;background:#fff">
+  <select id="doneRange" onchange="render()" style="width:100%;padding:10px 14px;border:1.5px solid #e2e7ef;border-radius:10px;font-size:14px;font-family:inherit;background:#fff">
+    <option value="all">📅 ทั้งหมด</option>
+    <option value="today">📅 วันนี้</option>
+    <option value="7d">📅 7 วันล่าสุด</option>
+    <option value="30d">📅 30 วันล่าสุด</option>
+  </select>
+</div>
+
 <main>
   <div class="order-list" id="orderList"></div>
 </main>
@@ -333,15 +344,49 @@ function render() {
   }
   lastPendingCount = inKitchen.length;
 
-  const list = view === 'kitchen' ? inKitchen : view === 'delivery' ? inDelivery : completed;
+  let list = view === 'kitchen' ? inKitchen : view === 'delivery' ? inDelivery : completed;
   const wrap = document.getElementById('orderList');
+
+  // Apply done-view filters (search + date range)
+  if (view === 'done') {
+    const q = (document.getElementById('doneSearch')?.value || '').toLowerCase().trim();
+    const range = document.getElementById('doneRange')?.value || 'all';
+    if (q) {
+      list = list.filter(o =>
+        (o.customer_name || '').toLowerCase().includes(q) ||
+        (o.customer_phone || '').includes(q) ||
+        (o.id || '').toLowerCase().includes(q) ||
+        (o.items || []).some(it => (it.name || '').toLowerCase().includes(q))
+      );
+    }
+    if (range !== 'all') {
+      const now = new Date();
+      const cutoff = new Date(now);
+      if (range === 'today') cutoff.setHours(0,0,0,0);
+      else if (range === '7d') cutoff.setDate(now.getDate() - 7);
+      else if (range === '30d') cutoff.setDate(now.getDate() - 30);
+      list = list.filter(o => new Date(o.completed_at || o.delivered_at || o.date) >= cutoff);
+    }
+  }
+
+  // Render done filter bar
+  if (view === 'done') {
+    const filterBar = document.getElementById('doneFilterBar');
+    if (filterBar && !filterBar.dataset.init) {
+      filterBar.dataset.init = '1';
+      filterBar.style.display = 'flex';
+    }
+  } else {
+    const filterBar = document.getElementById('doneFilterBar');
+    if (filterBar) filterBar.style.display = 'none';
+  }
 
   if (!list.length) {
     const emojiMap = { kitchen: '☕', delivery: '🚚', done: '✓' };
     const textMap = {
       kitchen: 'ยังไม่มี order ใหม่ในครัว',
       delivery: 'ยังไม่มี order รอจัดส่ง',
-      done: 'ยังไม่มี order ที่เสร็จวันนี้'
+      done: 'ไม่พบ order ที่ตรงกับการค้นหา'
     };
     wrap.innerHTML = `
       <div class="empty">
@@ -419,8 +464,14 @@ function render() {
         ` : status === 'cancelled' ? `
           <div class="order-actions">
             <span style="color:#dc2626;font-weight:700;padding:14px;text-align:center;flex:1">❌ ยกเลิก${o.cancelled_at?` เมื่อ ${fmtTime(o.cancelled_at)}`:''}</span>
+            <button onclick="printOrderReceipt('${o.id}')" style="background:#fef3c7;color:#92400e;border:1.5px solid #f59e0b;flex:0;max-width:60px" title="พิมพ์ใบเสร็จ">🖨️</button>
           </div>
-        ` : ''}
+        ` : `
+          <div class="order-actions">
+            <span style="color:#16a34a;font-weight:700;padding:14px;text-align:center;flex:1">✅ เสร็จแล้ว${o.completed_at?` เมื่อ ${fmtTime(o.completed_at)}`:''}</span>
+            <button onclick="printOrderReceipt('${o.id}')" style="background:#fef3c7;color:#92400e;border:1.5px solid #f59e0b;flex:0;max-width:80px" title="พิมพ์ใบเสร็จ">🖨️ พิมพ์</button>
+          </div>
+        `}
       </div>
     `;
   }).join('');
