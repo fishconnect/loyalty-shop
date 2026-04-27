@@ -399,14 +399,32 @@ function openFreePrompt(orderId) {
 }
 
 function showFreePromptModal(order, customer, available, mainBoxes) {
-  const price = (loadDB().settings.pricePerBox) || 50;
+  const dbS = loadDB().settings;
+  const defaultPrice = dbS.pricePerBox || 50;
   const maxUse = Math.min(available, mainBoxes);
   const phone = (customer.phone || order.customer_phone || '').replace(/\D/g, '');
   const baseTotal = order.original_total || order.total;
 
+  // Compute discount preview by simulating: take main-dish prices in desc order
+  const mainItems = (order.original_items || order.items)
+    .filter(it => {
+      const cat = MENU.find(c => c.items.some(i => i.id === it.id));
+      return cat && !cat.isAddOn;
+    })
+    .flatMap(it => {
+      const cat = MENU.find(c => c.items.some(i => i.id === it.id));
+      const mainPrice = cat?.items.find(i => i.id === it.id)?.price || defaultPrice;
+      return Array(it.qty).fill(mainPrice);
+    })
+    .sort((a, b) => b - a); // sort desc
+
+  function calcDiscount(n) {
+    return mainItems.slice(0, n).reduce((s, p) => s + p, 0);
+  }
+
   const optionButtons = [];
   for (let i = maxUse; i >= 1; i--) {
-    const discount = i * price;
+    const discount = calcDiscount(i);
     optionButtons.push(`
       <button onclick="applyFree('${order.id}', ${i})" style="width:100%;padding:14px;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:800;margin-bottom:8px;cursor:pointer;box-shadow:0 4px 12px rgba(22,163,74,.25)">
         🎁 ได้ข้าวฟรี ${i} กล่อง ราคา ฿${discount} <span style="opacity:.85;font-weight:600">(เก็บ ฿${baseTotal - discount})</span>
@@ -467,14 +485,24 @@ async function applyFree(orderId, freeQty) {
   let items = JSON.parse(JSON.stringify(originalItems));
   let remaining = freeQty;
   let discount = 0;
-  const sorted = [...items].sort((a, b) => b.price - a.price);
+  // Sort by main-dish price desc — give free to most valuable first
+  const sorted = [...items].sort((a, b) => {
+    const aCat = MENU.find(c => c.items.some(i => i.id === a.id));
+    const bCat = MENU.find(c => c.items.some(i => i.id === b.id));
+    const aMain = aCat?.items.find(i => i.id === a.id)?.price || db.settings.pricePerBox || 50;
+    const bMain = bCat?.items.find(i => i.id === b.id)?.price || db.settings.pricePerBox || 50;
+    return bMain - aMain;
+  });
   for (const it of sorted) {
     if (remaining <= 0) break;
     const cat = MENU.find(c => c.items.some(i => i.id === it.id));
     if (cat?.isAddOn) continue;
+    // ราคาข้าวเฉพาะตัวข้าว (ไม่รวมไข่/add-ons)
+    const mainItem = cat?.items.find(i => i.id === it.id);
+    const mainPrice = mainItem?.price || db.settings.pricePerBox || 50;
     const useFree = Math.min(remaining, it.qty);
     it.freeQty = useFree;
-    it.discount = it.price * useFree;
+    it.discount = mainPrice * useFree; // ← ลดแค่ราคาข้าว
     discount += it.discount;
     remaining -= useFree;
   }
