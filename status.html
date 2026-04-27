@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<meta name="theme-color" content="#fdfaf2">
+<meta name="theme-color" content="#ffffff">
 <title>สถานะ order · ครัวผู้ใหญ่ปอง</title>
 <link rel="icon" href="logo.jpg">
 <style>
@@ -17,14 +17,14 @@
   button { font-family: inherit; cursor: pointer; }
 
   header {
-    background: #fdfaf2; padding: 14px 16px;
+    background: #ffffff; padding: 14px 16px;
     display: flex; align-items: center; gap: 12px;
-    border-bottom: 2px solid #5a8059;
+    border-bottom: 2px solid #4F7AFF;
   }
   header img.logo { height: 48px; width: 48px; object-fit: contain; border-radius: 8px; }
   header .info { flex: 1; }
-  header h1 { font-size: 17px; color: #3d5e3d; line-height: 1.2; }
-  header .sub { font-size: 11px; color: #5a8059; margin-top: 2px; }
+  header h1 { font-size: 17px; color: #1652F0; line-height: 1.2; }
+  header .sub { font-size: 11px; color: #4F7AFF; margin-top: 2px; }
 
   main { flex: 1; padding: 20px 16px; max-width: 500px; width: 100%; margin: 0 auto; }
 
@@ -43,7 +43,7 @@
     50% { transform: scale(1.1); }
   }
   .status-title {
-    font-size: 22px; font-weight: 800; color: #3d5e3d; margin-bottom: 8px;
+    font-size: 22px; font-weight: 800; color: #1652F0; margin-bottom: 8px;
   }
   .status-sub {
     font-size: 14px; color: #6b7280; margin-bottom: 24px;
@@ -65,16 +65,16 @@
   .order-summary .item-row:last-child { border-bottom: none; }
   .order-summary .total-row {
     margin-top: 12px; padding-top: 12px; border-top: 2px solid #e5e7eb;
-    font-weight: 800; color: #3d5e3d;
+    font-weight: 800; color: #1652F0;
   }
   .order-info {
     display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;
   }
   .order-info .pill {
-    background: #f0f7ed; padding: 10px; border-radius: 10px; text-align: center;
+    background: #ebf0ff; padding: 10px; border-radius: 10px; text-align: center;
   }
-  .order-info .pill .label { font-size: 11px; color: #5a8059; margin-bottom: 4px; }
-  .order-info .pill .val { font-size: 14px; font-weight: 700; color: #3d5e3d; }
+  .order-info .pill .label { font-size: 11px; color: #4F7AFF; margin-bottom: 4px; }
+  .order-info .pill .val { font-size: 14px; font-weight: 700; color: #1652F0; }
 
   .btn {
     width: 100%; padding: 14px; border-radius: 10px;
@@ -82,13 +82,13 @@
     margin-top: 8px;
     text-decoration: none; display: block; text-align: center;
   }
-  .btn-primary { background: #3d5e3d; color: #fff; }
+  .btn-primary { background: #1652F0; color: #fff; }
   .btn-success { background: #16a34a; color: #fff; }
-  .btn-ghost { background: transparent; color: #3d5e3d; border: 1px solid #3d5e3d; }
+  .btn-ghost { background: transparent; color: #1652F0; border: 1px solid #1652F0; }
 
   .reward-banner {
-    background: linear-gradient(135deg, #fef3c7, #fde68a);
-    color: #92400e; padding: 16px; border-radius: 12px; margin-top: 16px;
+    background: linear-gradient(135deg, #ebf0ff, #d1ddff);
+    color: #0a1530; padding: 16px; border-radius: 12px; margin-top: 16px;
     text-align: center; font-weight: 700;
   }
   .reward-banner .big { font-size: 22px; margin-bottom: 4px; }
@@ -98,7 +98,7 @@
     height: 24px; position: relative; margin: 12px 0;
   }
   .progress-bar {
-    background: linear-gradient(90deg, #7ab87a, #3d5e3d);
+    background: linear-gradient(90deg, #88a4ff, #1652F0);
     height: 100%; transition: width .4s;
   }
   .progress-text {
@@ -110,15 +110,15 @@
     text-align: center; font-size: 12px; color: #9ca3af; padding: 16px;
   }
   .order-id-box {
-    background: linear-gradient(135deg, #fff7ed, #fed7aa);
+    background: linear-gradient(135deg, #f7f8fb, #c5d3ff);
     border-radius: 14px; padding: 14px;
     text-align: center; margin-bottom: 16px;
   }
   .order-id-box .label {
-    font-size: 11px; color: #92400e; letter-spacing: .04em; text-transform: uppercase;
+    font-size: 11px; color: #0a1530; letter-spacing: .04em; text-transform: uppercase;
   }
   .order-id-box .id {
-    font-size: 32px; font-weight: 900; color: #ea580c; letter-spacing: .04em;
+    font-size: 32px; font-weight: 900; color: #1652F0; letter-spacing: .04em;
     font-family: -apple-system, monospace;
   }
   .share-row {
@@ -126,12 +126,12 @@
   }
   .share-row button {
     flex: 1; padding: 10px; border-radius: 10px;
-    background: #fff; color: #92400e; border: 2px solid #fed7aa;
+    background: #fff; color: #0a1530; border: 2px solid #c5d3ff;
     font-size: 13px; font-weight: 700; cursor: pointer;
   }
-  .share-row button:hover { background: #fff7ed; border-color: #ea580c; }
+  .share-row button:hover { background: #f7f8fb; border-color: #1652F0; }
   .keep-open-hint {
-    background: #fef3c7; color: #92400e;
+    background: #ebf0ff; color: #0a1530;
     padding: 12px 16px; border-radius: 10px; margin-bottom: 16px;
     font-size: 13px; line-height: 1.5; text-align: center;
   }
@@ -228,7 +228,7 @@ function renderItemsHTML(order) {
           <span>฿${it.price * it.qty}</span>
         </div>
       `).join('')}
-      ${order.note ? `<div class="item-row" style="color:#92400e;font-size:13px"><span>📝 ${order.note}</span><span></span></div>` : ''}
+      ${order.note ? `<div class="item-row" style="color:#0a1530;font-size:13px"><span>📝 ${order.note}</span><span></span></div>` : ''}
       <div class="item-row total-row">
         <span>รวม</span>
         <span>฿${order.total}</span>
@@ -248,7 +248,7 @@ function renderPending(order) {
       <div class="order-id-box">
         <div class="label">หมายเลข Order</div>
         <div class="id">#${order.id.slice(-6)}</div>
-        <div style="font-size:12px;color:#92400e;margin-top:4px">เวลาสั่ง ${fmtTime(order.date)}</div>
+        <div style="font-size:12px;color:#0a1530;margin-top:4px">เวลาสั่ง ${fmtTime(order.date)}</div>
       </div>
 
       <div class="keep-open-hint">

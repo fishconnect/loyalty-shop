@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<meta name="theme-color" content="#fdfaf2">
+<meta name="theme-color" content="#ffffff">
 <title>ครัว · ครัวผู้ใหญ่ปอง</title>
 <link rel="icon" href="logo.jpg">
 <style>
@@ -16,17 +16,17 @@
   button { font-family: inherit; cursor: pointer; }
 
   header {
-    background: #fdfaf2; padding: 14px 16px;
+    background: #ffffff; padding: 14px 16px;
     display: flex; align-items: center; gap: 12px;
-    border-bottom: 2px solid #5a8059;
+    border-bottom: 2px solid #4F7AFF;
     position: sticky; top: 0; z-index: 10;
   }
   header img.logo { height: 48px; width: 48px; object-fit: contain; border-radius: 8px; }
   header .info { flex: 1; }
-  header h1 { font-size: 17px; color: #3d5e3d; line-height: 1.2; }
-  header .sub { font-size: 11px; color: #5a8059; margin-top: 2px; }
+  header h1 { font-size: 17px; color: #1652F0; line-height: 1.2; }
+  header .sub { font-size: 11px; color: #4F7AFF; margin-top: 2px; }
   header a {
-    background: #3d5e3d; color: #fff; text-decoration: none;
+    background: #1652F0; color: #fff; text-decoration: none;
     padding: 8px 14px; border-radius: 999px; font-size: 13px; font-weight: 600;
   }
 
@@ -36,8 +36,8 @@
     border-bottom: 1px solid #e5e7eb;
   }
   .stat-pill {
-    background: #f0f7ed; padding: 6px 14px; border-radius: 999px;
-    font-size: 13px; color: #3d5e3d; font-weight: 600;
+    background: #ebf0ff; padding: 6px 14px; border-radius: 999px;
+    font-size: 13px; color: #1652F0; font-weight: 600;
   }
   .stat-pill .num { font-size: 16px; font-weight: 800; }
 
@@ -50,11 +50,11 @@
     box-shadow: 0 1px 3px rgba(0,0,0,.05);
     overflow: hidden;
   }
-  .order.pending { border: 2px solid #fb923c; }
+  .order.pending { border: 2px solid #88a4ff; }
   .order.done { opacity: .6; }
   .order-head {
     padding: 14px 16px; display: flex; justify-content: space-between; align-items: center;
-    background: #fff7ed;
+    background: #f7f8fb;
   }
   .order.done .order-head { background: #f3f4f6; }
   .order-head .name { font-size: 16px; font-weight: 700; }
@@ -64,7 +64,7 @@
     display: inline-block; padding: 3px 10px; border-radius: 999px;
     font-size: 11px; font-weight: 700; margin-top: 4px;
   }
-  .order.pending .status { background: #fb923c; color: #fff; }
+  .order.pending .status { background: #88a4ff; color: #fff; }
   .order.done .status { background: #16a34a; color: #fff; }
 
   .order-items {
@@ -77,12 +77,12 @@
   }
   .order-item-row:last-child { border-bottom: none; }
   .order-item-row .name { flex: 1; }
-  .order-item-row .qty { font-weight: 700; min-width: 50px; text-align: center; color: #3d5e3d; font-size: 16px; }
+  .order-item-row .qty { font-weight: 700; min-width: 50px; text-align: center; color: #1652F0; font-size: 16px; }
   .order-item-row .price { min-width: 60px; text-align: right; color: #6b7280; font-size: 13px; }
 
   .order-note {
-    margin-top: 8px; padding: 8px 10px; background: #fef9c3; border-radius: 6px;
-    font-size: 13px; color: #713f12;
+    margin-top: 8px; padding: 8px 10px; background: #ebf0ff; border-radius: 6px;
+    font-size: 13px; color: #1f2a44;
   }
   .order-note b { font-weight: 700; }
 
@@ -90,7 +90,7 @@
     padding: 12px 16px; display: flex; justify-content: space-between; align-items: center;
     background: #fafafa; border-top: 1px solid #f3f4f6;
   }
-  .order-foot .total { font-weight: 800; color: #3d5e3d; font-size: 16px; }
+  .order-foot .total { font-weight: 800; color: #1652F0; font-size: 16px; }
   .order-foot .total .small { font-weight: 500; color: #6b7280; font-size: 13px; }
 
   .order-actions {
@@ -116,7 +116,7 @@
     flex: 1; padding: 8px; border-radius: 8px; border: none;
     font-size: 13px; font-weight: 600; background: #e5e7eb; color: #6b7280;
   }
-  .toggle-bar button.active { background: #3d5e3d; color: #fff; }
+  .toggle-bar button.active { background: #1652F0; color: #fff; }
 
   .toast {
     position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
