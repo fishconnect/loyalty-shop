@@ -366,6 +366,25 @@ async function cancelOrder(orderId) {
   toast('🗑️ ยกเลิกแล้ว');
 }
 
+// Listen to localStorage changes from parent window (when in iframe)
+window.addEventListener('storage', e => {
+  if (e.key === STORAGE_KEY) {
+    try {
+      const fresh = JSON.parse(e.newValue || '{}');
+      if (fresh.pendingOrders) {
+        // Use local data if cloud hasn't synced yet
+        if (cloudOrders === null) cloudOrders = fresh.pendingOrders;
+        render();
+      }
+    } catch (err) {}
+  }
+});
+
+// Poll local storage every 2 sec as final fallback
+setInterval(() => {
+  if (cloudOrders === null) render();
+}, 2000);
+
 // Init: render immediately from local cache, then subscribe to cloud
 render();
 whenCloudReady(() => {
