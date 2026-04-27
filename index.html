@@ -232,10 +232,11 @@
     <label>จำนวนกล่อง <span class="req">*</span></label>
     <input type="number" id="orderBoxes" min="1" value="1" inputmode="numeric">
 
-    <label>หมายเหตุ</label>
-    <input type="text" id="orderNote" placeholder="เมนู, ที่อยู่ส่ง ฯลฯ">
+    <label>เมนู / หมายเหตุ</label>
+    <input type="text" id="orderNote" placeholder="เช่น ข้าวผัดหมูสับ + ไข่ดาว">
+    <div class="hint" style="margin-top:-6px;color:#1652F0">📤 จะส่งไปครัวเป็นออเดอร์ — กดทำเสร็จเพื่อเพิ่มแต้ม</div>
 
-    <button class="btn-primary" onclick="saveOrder()">✅ บันทึกออเดอร์</button>
+    <button class="btn-primary" onclick="saveOrder()">👨‍🍳 ส่งครัว + บันทึก</button>
   </div>
 </div>
 
@@ -592,37 +593,47 @@ function saveOrder() {
   const note = document.getElementById('orderNote').value.trim();
   const price = db.settings.pricePerBox || 50;
 
-  const before = customer.total_boxes;
-  customer.total_boxes += boxes;
-
-  db.orders.push({
-    id: 'O' + Date.now(),
+  // Send to KITCHEN QUEUE (not directly to loyalty). Kitchen marks done → points added.
+  if (!db.pendingOrders) db.pendingOrders = [];
+  const orderId = 'PO' + Date.now();
+  const itemName = note || 'อาหาร';
+  const pendingOrder = {
+    id: orderId,
     date: new Date().toISOString(),
     customer_id: customer.id,
     customer_name: customer.name,
-    boxes,
-    price_per_box: price,
+    customer_phone: customer.phone || '',
+    items: [{
+      id: 'manual',
+      name: itemName,
+      mainName: itemName,
+      price: price,
+      qty: boxes,
+      addOns: [],
+      note: ''
+    }],
     total: boxes * price,
-    note
-  });
+    note: '',
+    status: 'pending',
+    source: 'in-store-quick'
+  };
+  db.pendingOrders.push(pendingOrder);
 
   saveDB();
 
-  const goal = db.settings.goal;
-  const beforeR = Math.floor(before / goal);
-  const afterR = Math.floor(customer.total_boxes / goal);
-  const newRewards = afterR - beforeR;
+  // Sync to cloud
+  if (window.cloud?.ready) {
+    window.cloud.saveCustomer(customer).catch(()=>{});
+    window.cloud.saveOrder(pendingOrder).catch(()=>{});
+  }
 
-  // Reset form first
+  // Reset form
   clearSelectedCustomer();
   document.getElementById('orderBoxes').value = '1';
   document.getElementById('orderNote').value = '';
 
-  if (newRewards > 0) {
-    showRedeemPrompt(customer.id, newRewards, price);
-  } else {
-    toast(`✅ บันทึกแล้ว · ${customer.name} สะสม ${customer.total_boxes}/${goal}`);
-  }
+  toast(`👨‍🍳 ส่งครัวแล้ว · ${customer.name} · ${boxes} กล่อง · ฿${boxes * price}`);
+  updatePendingBadge();
 }
 
 function showRedeemPrompt(customerId, newRewards, price) {
