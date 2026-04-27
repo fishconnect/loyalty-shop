@@ -139,8 +139,9 @@
     }
     @page { size: 80mm auto; margin: 0; }
   }
-  .rc-h1 { text-align: center; font-size: 16pt; font-weight: 800; margin: 0 0 2mm; }
-  .rc-sub { text-align: center; font-size: 9pt; margin: 0 0 2mm; }
+  .rc-logo { display: block; width: 30mm; height: 30mm; object-fit: contain; margin: 0 auto 2mm; }
+  .rc-h1 { text-align: center; font-size: 22pt; font-weight: 900; margin: 0 0 1mm; letter-spacing: -0.5px; }
+  .rc-sub { text-align: center; font-size: 11pt; margin: 0 0 2mm; font-weight: 600; }
   .rc-divider { border: 0; border-top: 1px dashed #000; margin: 2mm 0; }
   .rc-row { display: flex; justify-content: space-between; font-size: 11pt; margin: 1mm 0; }
   .rc-item { display: flex; justify-content: space-between; align-items: flex-start; font-size: 12pt; margin: 1.5mm 0; }
@@ -149,6 +150,10 @@
   .rc-total { text-align: right; font-size: 14pt; font-weight: 900; margin: 2mm 0; }
   .rc-foot { text-align: center; font-size: 9pt; margin: 3mm 0 0; }
   .rc-free { color: #000; font-weight: 700; }
+  .rc-qr-wrap { text-align: center; margin: 4mm 0 2mm; }
+  .rc-qr-title { font-size: 12pt; font-weight: 800; margin-bottom: 2mm; }
+  .rc-qr { width: 30mm; height: 30mm; margin: 0 auto; display: block; }
+  .rc-qr-url { font-size: 8pt; margin-top: 1mm; word-break: break-all; }
 </style>
 </head>
 <body>
@@ -802,7 +807,11 @@ function browserPrint(order) {
     `;
   }).join('');
 
+  const menuURL = 'https://loyalty.fishconnect.co/menu.html';
+  const qrSrc = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=2&data=' + encodeURIComponent(menuURL);
+
   const html = `
+    <img class="rc-logo" src="logo.jpg" alt="logo">
     <div class="rc-h1">ครัวผู้ใหญ่ปอง</div>
     <div class="rc-sub">📞 061-962-3696</div>
     <hr class="rc-divider">
@@ -821,10 +830,23 @@ function browserPrint(order) {
     <div class="rc-total">รวม ฿${order.total}</div>
     <hr class="rc-divider">
     <div class="rc-foot">ขอบคุณที่อุดหนุน 🙏</div>
-    <div class="rc-foot" style="margin-top:1mm">สะสมแต้ม → loyalty.fishconnect.co/points.html</div>
+    <div class="rc-qr-wrap">
+      <div class="rc-qr-title">📱 SCAN สั่งอาหารผ่าน QR Code</div>
+      <img class="rc-qr" src="${qrSrc}" alt="QR" crossorigin="anonymous">
+      <div class="rc-qr-url">loyalty.fishconnect.co/menu.html</div>
+    </div>
+    <div class="rc-foot" style="margin-top:2mm">⭐ ดูแต้มสะสม: loyalty.fishconnect.co/points.html</div>
   `;
   document.getElementById('printArea').innerHTML = html;
-  setTimeout(() => window.print(), 100);
+  // Wait for QR + logo to load before printing
+  const imgs = document.querySelectorAll('#printArea img');
+  let loaded = 0;
+  const tryPrint = () => { if (++loaded >= imgs.length) setTimeout(() => window.print(), 200); };
+  imgs.forEach(img => {
+    if (img.complete) tryPrint();
+    else { img.onload = tryPrint; img.onerror = tryPrint; }
+  });
+  if (imgs.length === 0) setTimeout(() => window.print(), 100);
 }
 
 // ========== Web Bluetooth Thermal Printer ==========
@@ -981,7 +1003,29 @@ function buildESCPOS(order) {
 
   ln('--------------------------------');
   ln('ขอบคุณที่อุดหนุน 🙏');
-  ln('loyalty.fishconnect.co/points.html');
+  ln('');
+
+  // ===== QR Code (ESC/POS native) =====
+  out.push(ESC, 0x61, 0x01); // center
+  ln('SCAN สั่งอาหาร');
+  ln('');
+  const qrData = 'https://loyalty.fishconnect.co/menu.html';
+  const qrBytes = enc.encode(qrData);
+  // Model 2
+  out.push(GS, 0x28, 0x6B, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00);
+  // Size 8 (1-16)
+  out.push(GS, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x43, 0x08);
+  // Error correction L
+  out.push(GS, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x45, 0x30);
+  // Store data
+  const qrLen = qrBytes.length + 3;
+  out.push(GS, 0x28, 0x6B, qrLen & 0xff, (qrLen >> 8) & 0xff, 0x31, 0x50, 0x30);
+  for (const b of qrBytes) out.push(b);
+  // Print QR
+  out.push(GS, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x51, 0x30);
+
+  ln('');
+  ln('loyalty.fishconnect.co/menu.html');
   ln('');
   ln('');
   ln('');
