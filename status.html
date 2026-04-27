@@ -127,12 +127,16 @@
 
 <div class="footer-note">หน้านี้จะอัปเดตอัตโนมัติทุก 3 วินาที</div>
 
+<script type="module" src="firebase.js"></script>
 <script src="menu-data.js"></script>
 <script>
+function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 const STORAGE_KEY = 'loyaltyShopV2';
 const params = new URLSearchParams(location.search);
 const orderId = params.get('order');
 const phone = params.get('phone');
+let cloudOrder = null;
+let cloudCustomer = null;
 
 function loadDB() {
   try {
@@ -149,7 +153,11 @@ function fmtTime(iso) {
 
 function render() {
   const db = loadDB();
-  const order = (db.pendingOrders || []).find(o => o.id === orderId);
+  // Prefer cloud order, fallback to local
+  const order = cloudOrder || (db.pendingOrders || []).find(o => o.id === orderId);
+  if (cloudCustomer && order) {
+    db.customers[order.customer_id] = cloudCustomer;
+  }
   const wrap = document.getElementById('content');
 
   if (!order) {
@@ -261,6 +269,33 @@ function renderDone(order, db) {
 }
 
 render();
+// Subscribe to real-time updates from cloud
+whenCloudReady(() => {
+  if (orderId) {
+    window.cloud.onOrder(orderId, async order => {
+      if (order) {
+        cloudOrder = order;
+        // Mirror to local
+        const db = loadDB();
+        const idx = (db.pendingOrders || []).findIndex(o => o.id === orderId);
+        if (idx >= 0) db.pendingOrders[idx] = order;
+        else { db.pendingOrders = db.pendingOrders || []; db.pendingOrders.push(order); }
+        saveDB(db);
+      }
+      // also fetch customer for points display
+      if (phone) {
+        cloudCustomer = await window.cloud.getCustomer(phone);
+        if (cloudCustomer) {
+          const db = loadDB();
+          db.customers[phone] = cloudCustomer;
+          saveDB(db);
+        }
+      }
+      render();
+    });
+  }
+});
+// Also poll local every 3s as fallback
 setInterval(render, 3000);
 </script>
 </body>

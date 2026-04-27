@@ -348,7 +348,9 @@
 
 <div class="toast" id="toast"></div>
 
+<script type="module" src="firebase.js"></script>
 <script>
+function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 const STORAGE_KEY = 'loyaltyShopV2';
 let db = loadDB();
 let selectedCustomerId = null;
@@ -391,7 +393,13 @@ function migrateFromV1(v1) {
   return out;
 }
 
-function saveDB() { localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); }
+function saveDB() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+  // Sync customers to cloud (fire-and-forget)
+  if (window.cloud?.ready) {
+    Object.values(db.customers).forEach(c => window.cloud.saveCustomer(c).catch(()=>{}));
+  }
+}
 
 function toast(msg) {
   const t = document.getElementById('toast');
@@ -1176,7 +1184,7 @@ document.getElementById('goalDisplay').textContent = db.settings.goal || 20;
 // Customer link in settings
 document.getElementById('customerLink').value = location.origin + location.pathname.replace('index.html','') + 'menu.html';
 
-// Pending orders badge in header (refreshes every 5 sec)
+// Pending orders badge in header
 function updatePendingBadge() {
   const fresh = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
   const pending = (fresh.pendingOrders || []).filter(o => o.status === 'pending').length;
@@ -1190,6 +1198,27 @@ function updatePendingBadge() {
 }
 updatePendingBadge();
 setInterval(updatePendingBadge, 5000);
+
+// Cloud sync: subscribe to customers + orders → mirror into local
+whenCloudReady(() => {
+  window.cloud.onCustomers(customers => {
+    Object.entries(customers).forEach(([id, c]) => {
+      // Cloud is authoritative for fields it has; merge missing fields
+      const local = db.customers[id];
+      if (!local || (c.total_boxes ?? 0) !== (local.total_boxes ?? 0) || (c.redeemed_count ?? 0) !== (local.redeemed_count ?? 0)) {
+        db.customers[id] = { ...local, ...c };
+      }
+    });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); // direct save (no cloud loop)
+    if (typeof renderCustomers === 'function') try { renderCustomers(); } catch(e){}
+    if (typeof renderReports === 'function') try { renderReports(); } catch(e){}
+  });
+  window.cloud.onOrders(orders => {
+    db.pendingOrders = orders;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+    updatePendingBadge();
+  });
+});
 
 // URL param: ?phone=xxx → auto-goto check page with that customer
 const urlParams = new URLSearchParams(location.search);
