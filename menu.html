@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#fdfaf2">
+<title>เมนู · ครัวผู้ใหญ่ปอง</title>
+<link rel="icon" href="logo.jpg">
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", "Sarabun", sans-serif;
+    background: #f3f4f6; color: #111827;
+    padding-bottom: 100px;
+  }
+  img { display: block; max-width: 100%; }
+  button { font-family: inherit; cursor: pointer; }
+
+  /* Header */
+  header {
+    background: #fdfaf2; padding: 14px 16px;
+    display: flex; align-items: center; gap: 12px;
+    border-bottom: 2px solid #5a8059;
+    position: sticky; top: 0; z-index: 10;
+  }
+  header img.logo { height: 48px; width: 48px; object-fit: contain; border-radius: 8px; }
+  header .info { flex: 1; }
+  header h1 { font-size: 17px; color: #3d5e3d; line-height: 1.2; }
+  header .sub { font-size: 11px; color: #5a8059; margin-top: 2px; }
+
+  /* Categories tabs (sticky) */
+  .cats {
+    background: #fff; border-bottom: 1px solid #e5e7eb;
+    position: sticky; top: 76px; z-index: 9;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .cats::-webkit-scrollbar { display: none; }
+  .cats-inner { display: flex; gap: 4px; padding: 8px 12px; min-width: max-content; }
+  .cat-btn {
+    background: transparent; border: none;
+    padding: 8px 14px; border-radius: 999px;
+    font-size: 13px; font-weight: 600; color: #6b7280;
+    white-space: nowrap; transition: background .15s, color .15s;
+  }
+  .cat-btn.active { background: #3d5e3d; color: #fff; }
+
+  /* Sections */
+  .section {
+    padding: 16px;
+  }
+  .section-title {
+    font-size: 18px; font-weight: 700; color: #3d5e3d;
+    margin-bottom: 12px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .section-title .emoji { font-size: 24px; }
+
+  /* Item cards */
+  .items {
+    display: grid; grid-template-columns: 1fr; gap: 10px;
+  }
+  @media (min-width: 600px) {
+    .items { grid-template-columns: 1fr 1fr; }
+  }
+  .item {
+    background: #fff; border-radius: 14px;
+    display: flex; gap: 12px; padding: 10px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.05);
+    align-items: center;
+  }
+  .item .img {
+    width: 80px; height: 80px; flex-shrink: 0;
+    border-radius: 10px; overflow: hidden; background: #f3f4f6;
+    position: relative;
+  }
+  .item .img img { width: 100%; height: 100%; object-fit: cover; }
+  .item .img .overlay-emoji {
+    position: absolute; inset: 0;
+    display: grid; place-items: center;
+    font-size: 32px;
+    background: linear-gradient(135deg, rgba(61,94,61,.6), rgba(122,184,122,.4));
+  }
+  .item .body { flex: 1; min-width: 0; }
+  .item .name { font-size: 14.5px; font-weight: 600; line-height: 1.3; }
+  .item .note { font-size: 11.5px; color: #9ca3af; margin-top: 2px; }
+  .item .price { font-size: 14px; font-weight: 700; color: #3d5e3d; margin-top: 4px; }
+  .item .qty-control {
+    display: flex; align-items: center; gap: 8px;
+    flex-shrink: 0;
+  }
+  .item .qty-control button {
+    width: 32px; height: 32px; border-radius: 50%;
+    border: none; background: #3d5e3d; color: #fff;
+    font-size: 18px; font-weight: 700;
+    display: grid; place-items: center;
+  }
+  .item .qty-control button:disabled { background: #d1d5db; color: #9ca3af; }
+  .item .qty-control button.minus { background: #fff; color: #3d5e3d; border: 1.5px solid #3d5e3d; }
+  .item .qty-control .qty { font-weight: 700; font-size: 16px; min-width: 22px; text-align: center; }
+  .item .add-btn {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: #3d5e3d; color: #fff; border: none;
+    font-size: 22px; font-weight: 700;
+    display: grid; place-items: center;
+    flex-shrink: 0;
+  }
+
+  /* Floating cart bar */
+  .cart-bar {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 30;
+    background: #3d5e3d; color: #fff;
+    padding: 12px 16px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    box-shadow: 0 -4px 16px rgba(0,0,0,.12);
+    cursor: pointer;
+    transform: translateY(100%);
+    transition: transform .25s ease;
+  }
+  .cart-bar.show { transform: translateY(0); }
+  .cart-bar .left {
+    display: flex; align-items: center; gap: 12px;
+    font-weight: 600;
+  }
+  .cart-bar .badge {
+    background: #fff; color: #3d5e3d;
+    width: 28px; height: 28px; border-radius: 50%;
+    display: grid; place-items: center; font-weight: 800; font-size: 14px;
+  }
+  .cart-bar .total { font-size: 16px; font-weight: 700; }
+  .cart-bar .arrow { font-size: 18px; opacity: .8; }
+
+  /* Modal */
+  .modal-bg {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5);
+    z-index: 100; align-items: flex-end; justify-content: center;
+  }
+  .modal-bg.show { display: flex; }
+  .modal {
+    background: #fff; width: 100%; max-width: 500px;
+    border-radius: 20px 20px 0 0;
+    max-height: 92vh; overflow-y: auto;
+    padding: 20px;
+  }
+  .modal h2 {
+    font-size: 18px; margin-bottom: 16px; color: #3d5e3d;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .modal .close {
+    background: transparent; border: none; font-size: 28px;
+    color: #6b7280; padding: 0; line-height: 1;
+  }
+
+  /* Cart items */
+  .cart-list { display: flex; flex-direction: column; gap: 10px; }
+  .cart-item {
+    display: flex; gap: 10px; align-items: center;
+    padding: 8px 0; border-bottom: 1px solid #f3f4f6;
+  }
+  .cart-item .name { flex: 1; font-size: 14px; }
+  .cart-item .qty { font-weight: 700; min-width: 50px; text-align: center; font-size: 14px; }
+  .cart-item .price { font-weight: 700; color: #3d5e3d; min-width: 60px; text-align: right; font-size: 14px; }
+  .cart-item .rm {
+    background: transparent; border: none; color: #dc2626; font-size: 18px; padding: 4px 8px;
+  }
+
+  .cart-summary {
+    margin-top: 16px; padding: 14px; background: #f0f7ed; border-radius: 12px;
+    display: flex; justify-content: space-between; font-weight: 700;
+  }
+  .cart-summary .label { color: #3d5e3d; }
+  .cart-summary .amt { color: #3d5e3d; font-size: 18px; }
+
+  label { display: block; font-size: 13px; font-weight: 600; margin: 14px 0 4px; color: #374151; }
+  input {
+    width: 100%; padding: 12px; font-size: 16px;
+    border: 1px solid #d1d5db; border-radius: 8px; background: #fff;
+    font-family: inherit;
+  }
+  input:focus { outline: none; border-color: #3d5e3d; }
+  .hint { font-size: 12px; color: #6b7280; margin-top: -4px; margin-bottom: 8px; }
+
+  .btn {
+    width: 100%; padding: 14px; border-radius: 10px;
+    font-size: 16px; font-weight: 700; border: none; cursor: pointer;
+    margin-top: 12px;
+  }
+  .btn-primary { background: #3d5e3d; color: #fff; }
+  .btn-primary:disabled { background: #9ca3af; }
+  .btn-ghost { background: transparent; color: #3d5e3d; border: 1px solid #3d5e3d; }
+
+  .empty { text-align: center; color: #9ca3af; padding: 30px; font-size: 14px; }
+
+  .toast {
+    position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
+    background: #111827; color: #fff; padding: 12px 20px; border-radius: 999px;
+    font-size: 14px; z-index: 200; opacity: 0;
+    transition: opacity .3s; pointer-events: none; white-space: nowrap;
+  }
+  .toast.show { opacity: 1; }
+  .customer-found {
+    background: #f0f7ed; padding: 10px 12px; border-radius: 8px;
+    font-size: 13px; color: #3d5e3d; margin-top: 4px;
+  }
+  .customer-found b { font-weight: 700; }
+</style>
+</head>
+<body>
+
+<header>
+  <img class="logo" src="logo.jpg" alt="logo">
+  <div class="info">
+    <h1>ครัวผู้ใหญ่ปอง</h1>
+    <div class="sub">อาหารตามสั่ง · ก๋วยเตี๋ยว · สั่งออนไลน์</div>
+  </div>
+</header>
+
+<nav class="cats" id="cats"></nav>
+
+<main id="menuMain"></main>
+
+<div class="cart-bar" id="cartBar" onclick="openCart()">
+  <div class="left">
+    <div class="badge" id="cartBadge">0</div>
+    <span>ดูตะกร้า</span>
+  </div>
+  <div class="total"><span id="cartTotal">฿0</span> <span class="arrow">›</span></div>
+</div>
+
+<!-- Cart Modal -->
+<div class="modal-bg" id="modalCart">
+  <div class="modal">
+    <h2>🛒 ตะกร้าของฉัน <button class="close" onclick="closeCart()">×</button></h2>
+    <div id="cartItems"></div>
+    <div class="cart-summary" id="cartSummary" style="display:none">
+      <span class="label">รวม</span>
+      <span class="amt" id="modalTotal">฿0</span>
+    </div>
+
+    <div id="customerForm" style="display:none">
+      <label>เบอร์โทร <span style="color:#dc2626">*</span></label>
+      <input type="tel" id="custPhone" placeholder="0812345678" inputmode="numeric" oninput="checkCustomer()">
+      <div id="custFound"></div>
+
+      <label>ชื่อ (กรอกถ้าเป็นลูกค้าใหม่)</label>
+      <input type="text" id="custName" placeholder="คุณ...">
+
+      <label>หมายเหตุ (เช่น ไม่ใส่ผัก, เผ็ดน้อย)</label>
+      <input type="text" id="custNote" placeholder="—">
+
+      <button class="btn btn-primary" onclick="submitOrder()">✅ ยืนยันสั่งอาหาร</button>
+    </div>
+
+    <button class="btn btn-ghost" id="continueBtn" onclick="closeCart()" style="margin-top:8px">เลือกเพิ่ม</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="menu-data.js"></script>
+<script>
+const STORAGE_KEY = 'loyaltyShopV2';
+let cart = JSON.parse(sessionStorage.getItem('cart') || '{}');
+
+function loadDB() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return { customers: {}, orders: [], redemptions: [], settings: { goal: 20, pricePerBox: 50 }, pendingOrders: [] };
+}
+function saveDB(db) { localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); }
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+function normPhone(p) { return (p || '').replace(/\D/g, ''); }
+
+// ============ Render Menu ============
+function renderMenu() {
+  const main = document.getElementById('menuMain');
+  const cats = document.getElementById('cats');
+  cats.innerHTML = '<div class="cats-inner">' +
+    MENU.map((c, i) => `<button class="cat-btn ${i===0?'active':''}" onclick="scrollToCat('cat-${i}')">${c.emoji} ${c.cat}</button>`).join('') +
+    '</div>';
+
+  main.innerHTML = MENU.map((c, i) => `
+    <section class="section" id="cat-${i}">
+      <h2 class="section-title"><span class="emoji">${c.emoji}</span> ${c.cat}</h2>
+      <div class="items">
+        ${c.items.map(it => `
+          <div class="item">
+            <div class="img">
+              <img src="${SHOP_INFO.defaultImage}" alt="">
+              <div class="overlay-emoji">${c.emoji}</div>
+            </div>
+            <div class="body">
+              <div class="name">${it.name}</div>
+              ${it.note ? `<div class="note">${it.note}</div>` : ''}
+              <div class="price">฿${it.price}</div>
+            </div>
+            <div id="qc-${it.id}">
+              ${renderQtyControl(it.id)}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </section>
+  `).join('');
+}
+
+function renderQtyControl(itemId) {
+  const qty = cart[itemId] || 0;
+  if (qty === 0) {
+    return `<button class="add-btn" onclick="addItem('${itemId}')">+</button>`;
+  }
+  return `
+    <div class="qty-control">
+      <button class="minus" onclick="removeItem('${itemId}')">−</button>
+      <div class="qty">${qty}</div>
+      <button onclick="addItem('${itemId}')">+</button>
+    </div>
+  `;
+}
+
+function scrollToCat(id) {
+  const el = document.getElementById(id);
+  if (el) {
+    const offset = 130; // header + cats height
+    window.scrollTo({ top: el.offsetTop - offset, behavior: 'smooth' });
+  }
+  document.querySelectorAll('.cat-btn').forEach((b, i) => b.classList.toggle('active', `cat-${i}` === id));
+}
+
+function findItem(id) {
+  for (const c of MENU) {
+    const it = c.items.find(i => i.id === id);
+    if (it) return it;
+  }
+  return null;
+}
+
+function addItem(id) {
+  cart[id] = (cart[id] || 0) + 1;
+  saveCart();
+  document.getElementById('qc-' + id).innerHTML = renderQtyControl(id);
+  updateCartBar();
+}
+
+function removeItem(id) {
+  if (!cart[id]) return;
+  cart[id] -= 1;
+  if (cart[id] <= 0) delete cart[id];
+  saveCart();
+  document.getElementById('qc-' + id).innerHTML = renderQtyControl(id);
+  updateCartBar();
+}
+
+function saveCart() { sessionStorage.setItem('cart', JSON.stringify(cart)); }
+
+function getCartTotal() {
+  let total = 0, count = 0;
+  Object.entries(cart).forEach(([id, qty]) => {
+    const it = findItem(id);
+    if (it) { total += it.price * qty; count += qty; }
+  });
+  return { total, count };
+}
+
+function updateCartBar() {
+  const { total, count } = getCartTotal();
+  const bar = document.getElementById('cartBar');
+  document.getElementById('cartBadge').textContent = count;
+  document.getElementById('cartTotal').textContent = '฿' + total;
+  bar.classList.toggle('show', count > 0);
+}
+
+// ============ Cart Modal ============
+function openCart() {
+  renderCartItems();
+  document.getElementById('modalCart').classList.add('show');
+}
+function closeCart() {
+  document.getElementById('modalCart').classList.remove('show');
+}
+
+function renderCartItems() {
+  const wrap = document.getElementById('cartItems');
+  const summary = document.getElementById('cartSummary');
+  const form = document.getElementById('customerForm');
+
+  const entries = Object.entries(cart);
+  if (!entries.length) {
+    wrap.innerHTML = '<div class="empty">ยังไม่มีของในตะกร้า</div>';
+    summary.style.display = 'none';
+    form.style.display = 'none';
+    return;
+  }
+
+  wrap.innerHTML = '<div class="cart-list">' + entries.map(([id, qty]) => {
+    const it = findItem(id);
+    if (!it) return '';
+    return `
+      <div class="cart-item">
+        <div class="name">${it.name}</div>
+        <div class="qty">×${qty}</div>
+        <div class="price">฿${it.price * qty}</div>
+        <button class="rm" onclick="removeAllOf('${id}')">×</button>
+      </div>
+    `;
+  }).join('') + '</div>';
+
+  const { total } = getCartTotal();
+  document.getElementById('modalTotal').textContent = '฿' + total;
+  summary.style.display = 'flex';
+  form.style.display = 'block';
+}
+
+function removeAllOf(id) {
+  delete cart[id];
+  saveCart();
+  document.getElementById('qc-' + id).innerHTML = renderQtyControl(id);
+  updateCartBar();
+  renderCartItems();
+}
+
+// ============ Customer Lookup ============
+function checkCustomer() {
+  const phone = normPhone(document.getElementById('custPhone').value);
+  const found = document.getElementById('custFound');
+  const nameInput = document.getElementById('custName');
+  if (phone.length < 9) { found.innerHTML = ''; return; }
+  const db = loadDB();
+  const c = db.customers[phone];
+  if (c) {
+    const goal = db.settings.goal || 20;
+    const rewards = Math.floor(c.total_boxes / goal) - c.redeemed_count;
+    found.innerHTML = `<div class="customer-found">✅ ลูกค้าเดิม: <b>${c.name}</b> · สะสม ${c.total_boxes}/${goal} กล่อง${rewards>0?` · 🎁 ฟรี ${rewards} กล่อง`:''}</div>`;
+    nameInput.value = c.name === 'ไม่ระบุชื่อ' ? '' : c.name;
+  } else {
+    found.innerHTML = `<div class="customer-found" style="background:#fef9c3;color:#92400e">🆕 ลูกค้าใหม่ — กรุณากรอกชื่อ</div>`;
+  }
+}
+
+// ============ Submit Order ============
+function submitOrder() {
+  const phone = normPhone(document.getElementById('custPhone').value);
+  const name = document.getElementById('custName').value.trim();
+  const note = document.getElementById('custNote').value.trim();
+  if (!phone || phone.length < 9) return toast('⚠️ กรุณากรอกเบอร์โทรให้ถูกต้อง');
+
+  const items = Object.entries(cart).map(([id, qty]) => {
+    const it = findItem(id);
+    return { id, name: it.name, price: it.price, qty };
+  });
+  if (!items.length) return toast('⚠️ ยังไม่มีของในตะกร้า');
+
+  const db = loadDB();
+
+  // Check or create customer
+  let customer = db.customers[phone];
+  if (!customer) {
+    if (!name) return toast('⚠️ ลูกค้าใหม่ต้องกรอกชื่อ');
+    customer = {
+      id: phone, name, phone,
+      total_boxes: 0, redeemed_count: 0,
+      joined: new Date().toISOString()
+    };
+    db.customers[phone] = customer;
+  } else if (name && customer.name === 'ไม่ระบุชื่อ') {
+    customer.name = name;
+  }
+
+  if (!db.pendingOrders) db.pendingOrders = [];
+  const total = items.reduce((s, it) => s + it.price * it.qty, 0);
+  const orderId = 'PO' + Date.now();
+  db.pendingOrders.push({
+    id: orderId,
+    date: new Date().toISOString(),
+    customer_id: phone,
+    customer_name: customer.name,
+    customer_phone: phone,
+    items, total, note,
+    status: 'pending', // pending | done
+  });
+
+  saveDB(db);
+  // Clear cart
+  cart = {};
+  sessionStorage.removeItem('cart');
+  // Redirect to status page
+  window.location.href = `status.html?order=${orderId}&phone=${phone}`;
+}
+
+// ============ Init ============
+renderMenu();
+updateCartBar();
+
+// Track scroll to update active cat
+window.addEventListener('scroll', () => {
+  const sections = MENU.map((_, i) => document.getElementById('cat-' + i));
+  const offset = 200;
+  let activeIdx = 0;
+  sections.forEach((s, i) => {
+    if (s && s.offsetTop - offset <= window.scrollY) activeIdx = i;
+  });
+  document.querySelectorAll('.cat-btn').forEach((b, i) => b.classList.toggle('active', i === activeIdx));
+});
+</script>
+</body>
+</html>

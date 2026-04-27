@@ -184,6 +184,7 @@
     <h1>ครัวผู้ใหญ่ปอง</h1>
     <div class="sub">สะสมครบ <span id="goalDisplay">20</span> กล่อง ฟรี 1 กล่อง 🍱</div>
   </div>
+  <a href="kitchen.html" id="pendingBtn" style="background:#fb923c;color:#fff;padding:8px 12px;border-radius:999px;font-size:12px;font-weight:700;text-decoration:none;display:none">🔥 <span id="pendingCount">0</span></a>
 </header>
 
 <div class="tabs">
@@ -284,6 +285,18 @@
 
 <!-- ========== ตั้งค่า ========== -->
 <div class="page" id="page-settings">
+  <div class="card">
+    <h2>🔗 ลิงก์สำหรับลูกค้า</h2>
+    <p class="hint">ส่งลิงก์นี้ให้ลูกค้า (หรือพิมพ์ QR ติดที่โต๊ะ) ลูกค้าจะเลือกเมนูเอง</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <a href="menu.html" target="_blank" class="btn-primary" style="flex:1;text-align:center;text-decoration:none;padding:12px;border-radius:8px">📱 เปิดหน้าเมนู (ลูกค้า)</a>
+      <a href="kitchen.html" target="_blank" class="btn-secondary" style="flex:1;text-align:center;text-decoration:none;padding:12px;border-radius:8px">👨‍🍳 ครัว (ดู order ใหม่)</a>
+    </div>
+    <div style="height:8px"></div>
+    <input type="text" readonly id="customerLink" value="" onclick="this.select()" style="font-size:13px;color:#6b7280">
+    <div class="hint">⬆️ คลิกเพื่อ copy link ส่งให้ลูกค้า</div>
+  </div>
+
   <div class="card">
     <h2>⚙️ ตั้งค่า</h2>
     <label>เป้าหมายสะสม (กล่อง/รางวัล)</label>
@@ -1159,6 +1172,39 @@ document.getElementById('modal').addEventListener('click', e => {
 
 // ========== Init ==========
 document.getElementById('goalDisplay').textContent = db.settings.goal || 20;
+
+// Customer link in settings
+document.getElementById('customerLink').value = location.origin + location.pathname.replace('index.html','') + 'menu.html';
+
+// Pending orders badge in header (refreshes every 5 sec)
+function updatePendingBadge() {
+  const fresh = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+  const pending = (fresh.pendingOrders || []).filter(o => o.status === 'pending').length;
+  const btn = document.getElementById('pendingBtn');
+  if (pending > 0) {
+    btn.style.display = 'inline-block';
+    document.getElementById('pendingCount').textContent = pending;
+  } else {
+    btn.style.display = 'none';
+  }
+}
+updatePendingBadge();
+setInterval(updatePendingBadge, 5000);
+
+// URL param: ?phone=xxx → auto-goto check page with that customer
+const urlParams = new URLSearchParams(location.search);
+const phoneParam = urlParams.get('phone');
+if (phoneParam) {
+  const c = db.customers[phoneParam];
+  if (c) {
+    checkSelectedId = c.id;
+    document.querySelector('[data-page=check]').click();
+    setTimeout(() => {
+      document.getElementById('checkLookup').value = c.name + (c.phone ? ` (${c.phone})` : '');
+      renderCheck();
+    }, 100);
+  }
+}
 </script>
 </body>
 </html>

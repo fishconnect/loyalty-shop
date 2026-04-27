@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#fdfaf2">
+<title>ครัว · ครัวผู้ใหญ่ปอง</title>
+<link rel="icon" href="logo.jpg">
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", "Sarabun", sans-serif;
+    background: #f3f4f6; color: #111827;
+    padding-bottom: 40px;
+  }
+  button { font-family: inherit; cursor: pointer; }
+
+  header {
+    background: #fdfaf2; padding: 14px 16px;
+    display: flex; align-items: center; gap: 12px;
+    border-bottom: 2px solid #5a8059;
+    position: sticky; top: 0; z-index: 10;
+  }
+  header img.logo { height: 48px; width: 48px; object-fit: contain; border-radius: 8px; }
+  header .info { flex: 1; }
+  header h1 { font-size: 17px; color: #3d5e3d; line-height: 1.2; }
+  header .sub { font-size: 11px; color: #5a8059; margin-top: 2px; }
+  header a {
+    background: #3d5e3d; color: #fff; text-decoration: none;
+    padding: 8px 14px; border-radius: 999px; font-size: 13px; font-weight: 600;
+  }
+
+  .summary-bar {
+    background: #fff; padding: 12px 16px;
+    display: flex; gap: 12px; justify-content: center;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  .stat-pill {
+    background: #f0f7ed; padding: 6px 14px; border-radius: 999px;
+    font-size: 13px; color: #3d5e3d; font-weight: 600;
+  }
+  .stat-pill .num { font-size: 16px; font-weight: 800; }
+
+  main { padding: 12px; }
+
+  .order-list { display: flex; flex-direction: column; gap: 12px; max-width: 700px; margin: 0 auto; }
+
+  .order {
+    background: #fff; border-radius: 14px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.05);
+    overflow: hidden;
+  }
+  .order.pending { border: 2px solid #fb923c; }
+  .order.done { opacity: .6; }
+  .order-head {
+    padding: 14px 16px; display: flex; justify-content: space-between; align-items: center;
+    background: #fff7ed;
+  }
+  .order.done .order-head { background: #f3f4f6; }
+  .order-head .name { font-size: 16px; font-weight: 700; }
+  .order-head .phone { font-size: 12px; color: #6b7280; margin-top: 2px; }
+  .order-head .time { font-size: 12px; color: #6b7280; text-align: right; }
+  .order-head .status {
+    display: inline-block; padding: 3px 10px; border-radius: 999px;
+    font-size: 11px; font-weight: 700; margin-top: 4px;
+  }
+  .order.pending .status { background: #fb923c; color: #fff; }
+  .order.done .status { background: #16a34a; color: #fff; }
+
+  .order-items {
+    padding: 12px 16px;
+  }
+  .order-item-row {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    padding: 6px 0; font-size: 14.5px;
+    border-bottom: 1px dashed #f3f4f6;
+  }
+  .order-item-row:last-child { border-bottom: none; }
+  .order-item-row .name { flex: 1; }
+  .order-item-row .qty { font-weight: 700; min-width: 50px; text-align: center; color: #3d5e3d; font-size: 16px; }
+  .order-item-row .price { min-width: 60px; text-align: right; color: #6b7280; font-size: 13px; }
+
+  .order-note {
+    margin-top: 8px; padding: 8px 10px; background: #fef9c3; border-radius: 6px;
+    font-size: 13px; color: #713f12;
+  }
+  .order-note b { font-weight: 700; }
+
+  .order-foot {
+    padding: 12px 16px; display: flex; justify-content: space-between; align-items: center;
+    background: #fafafa; border-top: 1px solid #f3f4f6;
+  }
+  .order-foot .total { font-weight: 800; color: #3d5e3d; font-size: 16px; }
+  .order-foot .total .small { font-weight: 500; color: #6b7280; font-size: 13px; }
+
+  .order-actions {
+    padding: 12px 16px; display: flex; gap: 8px;
+  }
+  .order-actions button {
+    flex: 1; padding: 14px; border-radius: 10px;
+    font-size: 15px; font-weight: 700; border: none;
+  }
+  .btn-done { background: #16a34a; color: #fff; }
+  .btn-cancel { background: transparent; color: #dc2626; border: 1px solid #dc2626; max-width: 120px; flex: 0; }
+
+  .empty {
+    text-align: center; color: #9ca3af; padding: 60px 20px;
+  }
+  .empty .big { font-size: 48px; margin-bottom: 16px; }
+  .empty .text { font-size: 15px; }
+
+  .toggle-bar {
+    display: flex; gap: 4px; padding: 12px 16px 0; max-width: 700px; margin: 0 auto;
+  }
+  .toggle-bar button {
+    flex: 1; padding: 8px; border-radius: 8px; border: none;
+    font-size: 13px; font-weight: 600; background: #e5e7eb; color: #6b7280;
+  }
+  .toggle-bar button.active { background: #3d5e3d; color: #fff; }
+
+  .toast {
+    position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+    background: #111827; color: #fff; padding: 12px 20px; border-radius: 999px;
+    font-size: 14px; z-index: 200; opacity: 0;
+    transition: opacity .3s; pointer-events: none; white-space: nowrap;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <img class="logo" src="logo.jpg" alt="logo">
+  <div class="info">
+    <h1>👨‍🍳 ครัว — ออเดอร์เข้า</h1>
+    <div class="sub">ครัวผู้ใหญ่ปอง · กดทำเสร็จเมื่อทำอาหารเสร็จ</div>
+  </div>
+  <a href="index.html">สะสมแต้ม →</a>
+</header>
+
+<div class="summary-bar">
+  <div class="stat-pill">รอทำ: <span class="num" id="statPending">0</span></div>
+  <div class="stat-pill">เสร็จวันนี้: <span class="num" id="statDone">0</span></div>
+</div>
+
+<div class="toggle-bar">
+  <button class="active" onclick="setView('pending')" id="tabPending">🔥 รอทำ</button>
+  <button onclick="setView('done')" id="tabDone">✓ เสร็จแล้ว</button>
+</div>
+
+<main>
+  <div class="order-list" id="orderList"></div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<audio id="ding" preload="auto">
+  <source src="data:audio/wav;base64,UklGRkIBAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YR4BAAAAAACA/n/8f/p/+H/2f/N/8H/sf+h/5H/gf9p/1n/Rf8t/xX/Af7p/tH+vf6l/o3+ef5h/k3+Of4N/fn94f3J/bX9o/2N/Xn9Yf1N/Tn9Jf0R/QH86fzZ/Mn8tfyl/JX8gfxx/GH8VfxJ/Dn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8I" type="audio/wav">
+</audio>
+
+<script src="menu-data.js"></script>
+<script>
+const STORAGE_KEY = 'loyaltyShopV2';
+let view = 'pending';
+let lastPendingCount = 0;
+
+function loadDB() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const d = JSON.parse(raw);
+      if (!d.pendingOrders) d.pendingOrders = [];
+      if (!d.settings) d.settings = { goal: 20, pricePerBox: 50 };
+      return d;
+    }
+  } catch (e) {}
+  return { customers: {}, orders: [], redemptions: [], settings: { goal: 20, pricePerBox: 50 }, pendingOrders: [] };
+}
+function saveDB(db) { localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); }
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+function fmtTime(iso) {
+  const d = new Date(iso);
+  return d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+}
+function fmtDate(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' }) + ' ' +
+         d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+}
+
+function setView(v) {
+  view = v;
+  document.getElementById('tabPending').classList.toggle('active', v === 'pending');
+  document.getElementById('tabDone').classList.toggle('active', v === 'done');
+  render();
+}
+
+function render() {
+  const db = loadDB();
+  const orders = db.pendingOrders || [];
+  const pending = orders.filter(o => o.status === 'pending').sort((a, b) => new Date(b.date) - new Date(a.date));
+  const done = orders.filter(o => o.status === 'done').sort((a, b) => new Date(b.completed_at || b.date) - new Date(a.completed_at || a.date));
+
+  // Stats
+  document.getElementById('statPending').textContent = pending.length;
+  const today = new Date().toLocaleDateString('en-CA');
+  const doneToday = done.filter(o => (o.completed_at || o.date).slice(0,10) === today);
+  document.getElementById('statDone').textContent = doneToday.length;
+
+  // Sound on new pending
+  if (pending.length > lastPendingCount && lastPendingCount > 0) {
+    try { document.getElementById('ding').play(); } catch(e) {}
+  }
+  lastPendingCount = pending.length;
+
+  const list = view === 'pending' ? pending : done;
+  const wrap = document.getElementById('orderList');
+
+  if (!list.length) {
+    wrap.innerHTML = `
+      <div class="empty">
+        <div class="big">${view === 'pending' ? '☕' : '✓'}</div>
+        <div class="text">${view === 'pending' ? 'ยังไม่มี order ใหม่' : 'ยังไม่มี order ที่เสร็จวันนี้'}</div>
+      </div>
+    `;
+    return;
+  }
+
+  wrap.innerHTML = list.map(o => {
+    const mainCount = countMainDishes(o.items);
+    return `
+      <div class="order ${o.status}">
+        <div class="order-head">
+          <div>
+            <div class="name">${o.customer_name}</div>
+            <div class="phone">📞 ${o.customer_phone}</div>
+            <div class="status">${o.status === 'pending' ? '🔥 รอทำ' : '✓ เสร็จแล้ว'}</div>
+          </div>
+          <div class="time">
+            ${fmtTime(o.date)}<br>
+            <span style="font-size:11px;color:#9ca3af">${o.id.slice(-6)}</span>
+          </div>
+        </div>
+        <div class="order-items">
+          ${o.items.map(it => `
+            <div class="order-item-row">
+              <div class="name">${it.name}</div>
+              <div class="qty">×${it.qty}</div>
+              <div class="price">฿${it.price * it.qty}</div>
+            </div>
+          `).join('')}
+          ${o.note ? `<div class="order-note"><b>หมายเหตุ:</b> ${o.note}</div>` : ''}
+        </div>
+        <div class="order-foot">
+          <span style="color:#6b7280;font-size:13px">${mainCount} กล่องหลัก (=${mainCount} แต้ม)</span>
+          <span class="total">฿${o.total} <span class="small">รวม</span></span>
+        </div>
+        ${o.status === 'pending' ? `
+          <div class="order-actions">
+            <button class="btn-cancel" onclick="cancelOrder('${o.id}')">ยกเลิก</button>
+            <button class="btn-done" onclick="markDone('${o.id}')">✓ ทำเสร็จแล้ว</button>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+function markDone(orderId) {
+  const db = loadDB();
+  const order = db.pendingOrders.find(o => o.id === orderId);
+  if (!order) return;
+  if (!confirm(`ยืนยันว่าทำเสร็จแล้ว?\n\n${order.customer_name} · ${order.items.length} เมนู · ฿${order.total}\n\nระบบจะเพิ่ม ${countMainDishes(order.items)} กล่องเข้าแต้มของลูกค้า`)) return;
+
+  // Add to customer's loyalty
+  const customer = db.customers[order.customer_id];
+  if (!customer) { toast('⚠️ ไม่พบลูกค้า'); return; }
+
+  const mainBoxes = countMainDishes(order.items);
+  const before = customer.total_boxes;
+  customer.total_boxes += mainBoxes;
+
+  // Convert pending order to permanent order in main system
+  if (!db.orders) db.orders = [];
+  db.orders.push({
+    id: 'O' + Date.now(),
+    date: order.date,
+    completed_at: new Date().toISOString(),
+    customer_id: customer.id,
+    customer_name: customer.name,
+    boxes: mainBoxes,
+    price_per_box: db.settings.pricePerBox || 50,
+    total: order.total,
+    note: 'จาก online order: ' + order.items.map(i => `${i.name}×${i.qty}`).join(', ') + (order.note ? ` (${order.note})` : ''),
+    source: 'online'
+  });
+
+  // Mark order done
+  order.status = 'done';
+  order.completed_at = new Date().toISOString();
+
+  saveDB(db);
+  render();
+
+  // Check reward
+  const goal = db.settings.goal || 20;
+  const beforeR = Math.floor(before / goal);
+  const afterR = Math.floor(customer.total_boxes / goal);
+  if (afterR > beforeR) {
+    toast(`🎉 ${customer.name} ครบ ${goal} กล่อง — ได้สิทธิ์ฟรี!`);
+  } else {
+    toast(`✓ เสร็จ! ${customer.name} สะสม ${customer.total_boxes}/${goal}`);
+  }
+}
+
+function cancelOrder(orderId) {
+  if (!confirm('ยกเลิก order นี้?')) return;
+  const db = loadDB();
+  db.pendingOrders = db.pendingOrders.filter(o => o.id !== orderId);
+  saveDB(db);
+  render();
+  toast('🗑️ ยกเลิกแล้ว');
+}
+
+// Init + auto-refresh
+render();
+setInterval(render, 3000); // poll every 3s
+</script>
+</body>
+</html>
