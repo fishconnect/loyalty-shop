@@ -879,7 +879,7 @@ function checkCustomer() {
 }
 
 // ============ Submit Order ============
-function submitOrder() {
+async function submitOrder() {
   const isShopMode = new URLSearchParams(location.search).get('mode') === 'shop';
   const phone = normPhone(document.getElementById('custPhone').value);
   const name = document.getElementById('custFullName').value.trim();
@@ -942,14 +942,6 @@ function submitOrder() {
 
   const orderObj = db.pendingOrders[db.pendingOrders.length - 1];
 
-  // Sync to cloud
-  whenCloudReady(async () => {
-    try {
-      await window.cloud.saveCustomer(customer);
-      await window.cloud.saveOrder(orderObj);
-    } catch (e) { console.warn('cloud sync failed, order saved locally', e); }
-  });
-
   // Remember customer for next visit (only customer mode)
   if (!isShopMode && phone) {
     localStorage.setItem('lastCustomerPhone', phone);
@@ -957,6 +949,20 @@ function submitOrder() {
       localStorage.setItem('lastCustomerName', customer.name);
     }
   }
+
+  // Sync to cloud — AWAIT to guarantee write before redirect
+  toast('⏳ กำลังส่งครัว...');
+  await new Promise(resolve => {
+    whenCloudReady(async () => {
+      try {
+        await window.cloud.saveCustomer(customer);
+        await window.cloud.saveOrder(orderObj);
+      } catch (e) { console.warn('cloud sync failed', e); }
+      resolve();
+    });
+    // Failsafe timeout — don't wait forever
+    setTimeout(resolve, 4000);
+  });
 
   cart = [];
   sessionStorage.removeItem('cartV2');
@@ -1029,7 +1035,22 @@ function initReturningCustomer() {
   if (!lastPhone || isShopMode) return;
   const db = loadDB();
   const customer = db.customers[lastPhone];
-  if (customer) renderUserWidget(customer, null, null);
+
+  // Render from LOCAL cache first (instant, before cloud loads)
+  const localOrders = (db.pendingOrders || []).filter(o =>
+    o.customer_phone === lastPhone || o.customer_id === lastPhone
+  );
+  const localPending = localOrders.find(o => o.status === 'pending');
+  let localRecentDone = null;
+  if (!localPending) {
+    const cutoff = Date.now() - 30 * 60 * 1000;
+    localRecentDone = localOrders
+      .filter(o => o.status === 'done' && new Date(o.completed_at || o.date).getTime() > cutoff)
+      .sort((a, b) => new Date(b.completed_at || b.date) - new Date(a.completed_at || a.date))[0];
+  }
+  if (customer || localPending || localRecentDone) {
+    renderUserWidget(customer, localPending, localRecentDone);
+  }
 
   whenCloudReady(async () => {
     // Get fresh customer data
