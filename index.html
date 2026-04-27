@@ -199,12 +199,12 @@
 
 <!-- ========== เมนู (สั่งให้ลูกค้าหน้าร้าน) ========== -->
 <div class="page" id="page-menu" style="padding:0">
-  <iframe id="menuFrame" src="" style="border:0;width:100%;height:calc(100vh - 130px);display:block" title="Menu"></iframe>
+  <iframe id="menuFrame" src="about:blank" style="border:0;width:100%;height:calc(100vh - 130px);display:block" title="Menu"></iframe>
 </div>
 
 <!-- ========== ครัว (รับออเดอร์) ========== -->
 <div class="page" id="page-kitchen" style="padding:0">
-  <iframe id="kitchenFrame" src="" style="border:0;width:100%;height:calc(100vh - 130px);display:block" title="Kitchen"></iframe>
+  <iframe id="kitchenFrame" src="about:blank" style="border:0;width:100%;height:calc(100vh - 130px);display:block" title="Kitchen"></iframe>
 </div>
 
 <!-- ========== บันทึกออเดอร์ ========== -->
@@ -471,14 +471,14 @@ document.querySelectorAll('.tab').forEach(t => {
       document.getElementById('settingGoal').value = db.settings.goal;
       document.getElementById('settingPrice').value = db.settings.pricePerBox || 50;
     }
-    // Lazy-load iframes
+    // Lazy-load iframes (use dataset flag because empty src resolves to current URL)
     if (t.dataset.page === 'menu') {
       const f = document.getElementById('menuFrame');
-      if (!f.src) f.src = 'menu.html?embed=1&mode=shop';
+      if (!f.dataset.loaded) { f.src = 'menu.html?embed=1&mode=shop'; f.dataset.loaded = '1'; }
     }
     if (t.dataset.page === 'kitchen') {
       const f = document.getElementById('kitchenFrame');
-      if (!f.src) f.src = 'kitchen.html?embed=1';
+      if (!f.dataset.loaded) { f.src = 'kitchen.html?embed=1'; f.dataset.loaded = '1'; }
     }
   });
 });
