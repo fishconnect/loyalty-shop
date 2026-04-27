@@ -328,7 +328,7 @@ function render() {
             </div>
           `;}).join('')}
           ${o.note ? `<div class="order-note"><b>หมายเหตุ:</b> ${o.note}</div>` : ''}
-          ${o.discount ? `<div style="margin-top:8px;padding:8px 10px;background:#dcfce7;border-radius:6px;font-size:13px;color:#166534;font-weight:700">🎁 ใช้สิทธิ์ฟรี ${o.free_boxes_used} กล่อง · ลด ฿${o.discount}</div>` : ''}
+          ${o.discount ? `<div style="margin-top:8px;padding:8px 10px;background:#dcfce7;border-radius:6px;font-size:13px;color:#166534;font-weight:700">🎁 ได้ข้าวฟรี ${o.free_boxes_used} กล่อง ราคา ฿${o.discount}</div>` : ''}
         </div>
         <div class="order-foot">
           <span style="color:#6b7280;font-size:13px">${mainCount} กล่องหลัก (=${mainCount} แต้ม)</span>
@@ -338,14 +338,14 @@ function render() {
           ${hasUnusedRewards ? `
             <div style="padding:8px 16px 0">
               <button onclick="openFreePrompt('${o.id}')" style="width:100%;padding:12px;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;box-shadow:0 3px 10px rgba(22,163,74,.25);display:flex;align-items:center;justify-content:center;gap:6px">
-                🎁 ใช้สิทธิ์ฟรี <span style="background:rgba(255,255,255,.2);padding:2px 8px;border-radius:999px;font-size:12px">มี ${rewardInfo.available}</span>
+                🎁 ได้ข้าวฟรี <span style="background:rgba(255,255,255,.2);padding:2px 8px;border-radius:999px;font-size:12px">${rewardInfo.available} กล่อง</span>
               </button>
             </div>
           ` : ''}
           ${o.free_boxes_used ? `
             <div style="padding:8px 16px 0">
               <button onclick="openFreePrompt('${o.id}')" style="width:100%;padding:10px;background:#dcfce7;color:#166534;border:1.5px solid #16a34a;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer">
-                🎁 ใช้ฟรี ${o.free_boxes_used} กล่อง · ลด ฿${o.discount} (กดเพื่อแก้)
+                🎁 ได้ข้าวฟรี ${o.free_boxes_used} กล่อง ราคา ฿${o.discount} (กดเพื่อแก้)
               </button>
             </div>
           ` : ''}
@@ -368,7 +368,7 @@ async function markDone(orderId) {
   const mainBoxes = countMainDishes(order.items);
   const freeUsed = order.free_boxes_used || 0;
   const summary = freeUsed > 0
-    ? `${order.customer_name} · ฿${order.total} (ใช้ฟรี ${freeUsed} กล่อง)`
+    ? `${order.customer_name} · ฿${order.total} (ได้ข้าวฟรี ${freeUsed} กล่อง)`
     : `${order.customer_name} · ฿${order.total}`;
   if (!confirm(`ทำเสร็จแล้ว?\n\n${summary}\n\nเพิ่ม ${mainBoxes} กล่องเข้าแต้มลูกค้า`)) return;
   await finalizeOrder(orderId);
@@ -409,7 +409,7 @@ function showFreePromptModal(order, customer, available, mainBoxes) {
     const discount = i * price;
     optionButtons.push(`
       <button onclick="applyFree('${order.id}', ${i})" style="width:100%;padding:14px;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:800;margin-bottom:8px;cursor:pointer;box-shadow:0 4px 12px rgba(22,163,74,.25)">
-        🎁 ใช้ฟรี ${i} กล่อง · ลด ฿${discount} <span style="opacity:.85;font-weight:600">(เก็บ ฿${baseTotal - discount})</span>
+        🎁 ได้ข้าวฟรี ${i} กล่อง ราคา ฿${discount} <span style="opacity:.85;font-weight:600">(เก็บ ฿${baseTotal - discount})</span>
       </button>
     `);
   }
@@ -421,7 +421,7 @@ function showFreePromptModal(order, customer, available, mainBoxes) {
       <div onclick="event.stopPropagation()" style="background:#fff;width:100%;max-width:520px;border-radius:24px 24px 0 0;padding:24px 20px;max-height:92vh;overflow-y:auto">
         <div style="text-align:center;margin-bottom:14px">
           <div style="font-size:48px">🎁</div>
-          <div style="font-size:18px;font-weight:800;color:#0a1530;margin-top:4px">ใช้สิทธิ์ฟรี</div>
+          <div style="font-size:18px;font-weight:800;color:#0a1530;margin-top:4px">ได้ข้าวฟรี</div>
           <div style="font-size:14px;color:#5c6982;margin-top:4px"><b>${customer.name}</b> มีสิทธิ์ฟรี <b style="color:#16a34a">${available} กล่อง</b> · ออเดอร์นี้มี ${mainBoxes} จานหลัก</div>
           ${currentlyApplied > 0 ? `<div style="background:#dcfce7;color:#166534;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:700;display:inline-block;margin-top:8px">ตอนนี้ใช้อยู่ ${currentlyApplied} กล่อง</div>` : ''}
         </div>
@@ -435,7 +435,7 @@ function showFreePromptModal(order, customer, available, mainBoxes) {
         ${optionButtons.join('')}
         ${currentlyApplied > 0 ? `
           <button onclick="unapplyFree('${order.id}')" style="width:100%;padding:14px;background:#fee2e2;color:#dc2626;border:1.5px solid #dc2626;border-radius:12px;font-size:15px;font-weight:700;margin-bottom:8px;cursor:pointer">
-            ↩️ ยกเลิกการใช้ฟรี (กลับเป็น ฿${baseTotal})
+            ↩️ ยกเลิกข้าวฟรี (กลับเป็น ฿${baseTotal})
           </button>
         ` : ''}
         ${phone ? `
@@ -492,7 +492,7 @@ async function applyFree(orderId, freeQty) {
 
   if (window.cloud) await window.cloud.updateOrder(orderId, updates);
 
-  toast(`🎁 ใช้สิทธิ์ฟรี ${freeQty} กล่อง · ลด ฿${discount} · ทำอาหารต่อได้`);
+  toast(`🎁 ได้ข้าวฟรี ${freeQty} กล่อง ราคา ฿${discount} · ทำอาหารต่อได้`);
   render();
 }
 
@@ -516,7 +516,7 @@ async function unapplyFree(orderId) {
   }
   saveDB(db);
   if (window.cloud) await window.cloud.updateOrder(orderId, updates);
-  toast('↩️ ยกเลิกการใช้ฟรี');
+  toast('↩️ ยกเลิกข้าวฟรี');
   render();
 }
 
@@ -580,7 +580,7 @@ async function finalizeOrder(orderId) {
   render();
 
   if (freeQty > 0) {
-    toast(`✓ เสร็จ + ใช้ฟรี ${freeQty} · ลูกค้าจ่าย ฿${order.total}`);
+    toast(`✓ เสร็จ + ได้ข้าวฟรี ${freeQty} กล่อง · ลูกค้าจ่าย ฿${order.total}`);
   } else {
     const goal = db.settings.goal || 20;
     toast(`✓ เสร็จ! ${customer.name} สะสม ${customer.total_boxes}/${goal}`);
