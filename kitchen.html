@@ -186,8 +186,9 @@
 </div>
 
 <div class="toggle-bar">
-  <button class="active" onclick="setView('pending')" id="tabPending">🔥 รอทำ</button>
-  <button onclick="setView('done')" id="tabDone">✓ เสร็จแล้ว</button>
+  <button class="active" onclick="setView('kitchen')" id="tabKitchen">🔥 ครัว <span id="cntKitchen" style="background:#dc2626;color:#fff;padding:0 6px;border-radius:999px;font-size:10px;margin-left:2px;display:none"></span></button>
+  <button onclick="setView('delivery')" id="tabDelivery">🚚 จัดส่ง <span id="cntDelivery" style="background:#dc2626;color:#fff;padding:0 6px;border-radius:999px;font-size:10px;margin-left:2px;display:none"></span></button>
+  <button onclick="setView('done')" id="tabDone">✓ เสร็จ</button>
 </div>
 
 <main>
@@ -223,7 +224,7 @@
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 const STORAGE_KEY = 'loyaltyShopV2';
-let view = 'pending';
+let view = 'kitchen';
 let lastPendingCount = 0;
 let cloudOrders = null; // null = not yet loaded; otherwise array
 let cloudCustomers = null;
@@ -261,38 +262,64 @@ function fmtDate(iso) {
 
 function setView(v) {
   view = v;
-  document.getElementById('tabPending').classList.toggle('active', v === 'pending');
-  document.getElementById('tabDone').classList.toggle('active', v === 'done');
+  ['Kitchen','Delivery','Done'].forEach(name => {
+    const el = document.getElementById('tab' + name);
+    if (el) el.classList.toggle('active', v === name.toLowerCase());
+  });
   render();
 }
 
 function render() {
   const db = loadDB();
-  // Prefer cloud data if loaded, fallback to local
   const orders = (cloudOrders !== null) ? cloudOrders : (db.pendingOrders || []);
-  const pending = orders.filter(o => o.status === 'pending').sort((a, b) => new Date(b.date) - new Date(a.date));
-  const done = orders.filter(o => o.status === 'done').sort((a, b) => new Date(b.completed_at || b.date) - new Date(a.completed_at || a.date));
+  // Group by status
+  const kitchenStatuses = ['pending','confirmed','cooking'];
+  const deliveryStatuses = ['ready','delivering'];
+  const doneStatuses = ['delivered','done']; // 'done' is legacy
 
-  // Stats
-  document.getElementById('statPending').textContent = pending.length;
+  const inKitchen = orders.filter(o => kitchenStatuses.includes(o.status || 'pending'))
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+  const inDelivery = orders.filter(o => deliveryStatuses.includes(o.status))
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+  const completed = orders.filter(o => doneStatuses.includes(o.status))
+    .sort((a, b) => new Date(b.completed_at || b.delivered_at || b.date) - new Date(a.completed_at || a.delivered_at || a.date));
+  const cancelled = orders.filter(o => o.status === 'cancelled');
+
+  // Stats + tab badges
+  document.getElementById('statPending').textContent = inKitchen.length;
   const today = new Date().toLocaleDateString('en-CA');
-  const doneToday = done.filter(o => (o.completed_at || o.date).slice(0,10) === today);
+  const doneToday = completed.filter(o => (o.completed_at || o.delivered_at || o.date).slice(0,10) === today);
   document.getElementById('statDone').textContent = doneToday.length;
 
+  const setBadge = (id, n) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (n > 0) { el.style.display = 'inline-block'; el.textContent = n; }
+    else el.style.display = 'none';
+  };
+  setBadge('cntKitchen', inKitchen.length);
+  setBadge('cntDelivery', inDelivery.length);
+
   // Sound on new pending
-  if (pending.length > lastPendingCount && lastPendingCount > 0) {
+  if (inKitchen.length > lastPendingCount && lastPendingCount > 0) {
     try { document.getElementById('ding').play(); } catch(e) {}
   }
-  lastPendingCount = pending.length;
+  lastPendingCount = inKitchen.length;
 
-  const list = view === 'pending' ? pending : done;
+  const list = view === 'kitchen' ? inKitchen : view === 'delivery' ? inDelivery : completed;
   const wrap = document.getElementById('orderList');
 
   if (!list.length) {
+    const emojiMap = { kitchen: '☕', delivery: '🚚', done: '✓' };
+    const textMap = {
+      kitchen: 'ยังไม่มี order ใหม่ในครัว',
+      delivery: 'ยังไม่มี order รอจัดส่ง',
+      done: 'ยังไม่มี order ที่เสร็จวันนี้'
+    };
     wrap.innerHTML = `
       <div class="empty">
-        <div class="big">${view === 'pending' ? '☕' : '✓'}</div>
-        <div class="text">${view === 'pending' ? 'ยังไม่มี order ใหม่' : 'ยังไม่มี order ที่เสร็จวันนี้'}</div>
+        <div class="big">${emojiMap[view]}</div>
+        <div class="text">${textMap[view]}</div>
       </div>
     `;
     return;
@@ -300,15 +327,18 @@ function render() {
 
   wrap.innerHTML = list.map(o => {
     const mainCount = countMainDishes(o.items);
-    const rewardInfo = o.status === 'pending' ? getRewardInfo(o) : { available: 0 };
+    const status = o.status || 'pending';
+    const stat = window.STATUSES[status] || window.STATUSES.pending;
+    const isActive = !['delivered','done','cancelled'].includes(status);
+    const rewardInfo = isActive ? getRewardInfo(o) : { available: 0 };
     const hasUnusedRewards = rewardInfo.available > 0 && !o.free_boxes_used;
     return `
-      <div class="order ${o.status}">
-        <div class="order-head">
+      <div class="order ${status}">
+        <div class="order-head" style="background:${status==='cancelled'?'#fee2e2':status==='delivered'||status==='done'?'#f3f4f6':'#f7f8fb'}">
           <div>
             <div class="name">${o.customer_name}</div>
             <div class="phone">📞 ${o.customer_phone}</div>
-            <div class="status">${o.status === 'pending' ? '🔥 รอทำ' : '✓ เสร็จแล้ว'}</div>
+            <div class="status" style="background:${stat.color};color:#fff">${stat.icon} ${stat.label}</div>
           </div>
           <div class="time">
             ${fmtTime(o.date)}<br>
@@ -334,7 +364,7 @@ function render() {
           <span style="color:#6b7280;font-size:13px">${mainCount} กล่องหลัก (=${mainCount} แต้ม)</span>
           <span class="total">฿${o.total} <span class="small">${o.discount?'ลูกค้าจ่าย':'รวม'}</span></span>
         </div>
-        ${o.status === 'pending' ? `
+        ${isActive ? `
           ${hasUnusedRewards ? `
             <div style="padding:8px 16px 0">
               <button onclick="openFreePrompt('${o.id}')" style="width:100%;padding:12px;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;box-shadow:0 3px 10px rgba(22,163,74,.25);display:flex;align-items:center;justify-content:center;gap:6px">
@@ -351,8 +381,16 @@ function render() {
           ` : ''}
           <div class="order-actions">
             <button class="btn-cancel" onclick="cancelOrder('${o.id}')">ยกเลิก</button>
-            <button onclick="editOrderModal('${o.id}')" style="background:#ebf0ff;color:#1652F0;border:1.5px solid #1652F0;flex:0;max-width:90px">✏️ แก้</button>
-            <button class="btn-done" onclick="markDone('${o.id}')">✓ ทำเสร็จแล้ว</button>
+            ${(status==='pending'||status==='confirmed'||status==='cooking') ? `
+              <button onclick="editOrderModal('${o.id}')" style="background:#ebf0ff;color:#1652F0;border:1.5px solid #1652F0;flex:0;max-width:80px">✏️ แก้</button>
+            ` : ''}
+            ${stat.next ? `
+              <button class="btn-done" style="background:${stat.color}" onclick="advanceStatus('${o.id}','${stat.next}')">${stat.nextLabel}</button>
+            ` : ''}
+          </div>
+        ` : status === 'cancelled' ? `
+          <div class="order-actions">
+            <span style="color:#dc2626;font-weight:700;padding:14px;text-align:center;flex:1">❌ ยกเลิก${o.cancelled_at?` เมื่อ ${fmtTime(o.cancelled_at)}`:''}</span>
           </div>
         ` : ''}
       </div>
@@ -360,19 +398,39 @@ function render() {
   }).join('');
 }
 
-async function markDone(orderId) {
+// ========== Status transition ==========
+async function advanceStatus(orderId, nextStatus) {
   const db = loadDB();
   const orderSrc = cloudOrders !== null ? cloudOrders : db.pendingOrders;
   const order = orderSrc.find(o => o.id === orderId);
   if (!order) return;
-  const mainBoxes = countMainDishes(order.items);
-  const freeUsed = order.free_boxes_used || 0;
-  const summary = freeUsed > 0
-    ? `${order.customer_name} · ฿${order.total} (ได้ข้าวฟรี ${freeUsed} กล่อง)`
-    : `${order.customer_name} · ฿${order.total}`;
-  if (!confirm(`ทำเสร็จแล้ว?\n\n${summary}\n\nเพิ่ม ${mainBoxes} กล่องเข้าแต้มลูกค้า`)) return;
-  await finalizeOrder(orderId);
+
+  // Final stage = delivered → commit boxes & redemption
+  if (nextStatus === 'delivered') {
+    const mainBoxes = countMainDishes(order.items);
+    const freeUsed = order.free_boxes_used || 0;
+    const summary = freeUsed > 0
+      ? `${order.customer_name} · ฿${order.total} (ได้ข้าวฟรี ${freeUsed} กล่อง)`
+      : `${order.customer_name} · ฿${order.total}`;
+    if (!confirm(`ยืนยันจัดส่งสำเร็จ?\n\n${summary}\n\nระบบจะเพิ่ม ${mainBoxes} กล่อง + ตัดสิทธิ์ฟรี (ถ้าใช้)`)) return;
+    await finalizeOrder(orderId);
+    return;
+  }
+
+  // Other transitions — just update status
+  const updates = {
+    status: nextStatus,
+    [`${nextStatus}_at`]: new Date().toISOString()
+  };
+  const local = db.pendingOrders.find(o => o.id === orderId);
+  if (local) Object.assign(local, updates);
+  saveDB(db);
+  if (window.cloud) await window.cloud.updateOrder(orderId, updates);
+  toast(`✓ สถานะ → ${(window.STATUSES[nextStatus]?.label || nextStatus)}`);
+  render();
 }
+
+async function markDone(orderId) { return advanceStatus(orderId, 'delivered'); }
 
 // Compute customer's reward state — used to show "ใช้ฟรี" button
 function getRewardInfo(order) {
@@ -689,13 +747,21 @@ async function saveEdit() {
 }
 
 async function cancelOrder(orderId) {
-  if (!confirm('ยกเลิก order นี้?')) return;
+  const reason = prompt('เหตุผลที่ยกเลิก (ถ้าไม่กรอกจะใช้ "—"):', '') ?? '';
+  if (reason === null) return;
+  if (!confirm('ยืนยันยกเลิก order นี้?')) return;
   const db = loadDB();
-  db.pendingOrders = db.pendingOrders.filter(o => o.id !== orderId);
+  const updates = {
+    status: 'cancelled',
+    cancelled_at: new Date().toISOString(),
+    cancel_reason: reason || '—'
+  };
+  const local = db.pendingOrders.find(o => o.id === orderId);
+  if (local) Object.assign(local, updates);
   saveDB(db);
-  if (window.cloud) await window.cloud.deleteOrder(orderId);
+  if (window.cloud) await window.cloud.updateOrder(orderId, updates);
   render();
-  toast('🗑️ ยกเลิกแล้ว');
+  toast('❌ ยกเลิก order แล้ว');
 }
 
 // Listen to localStorage changes from parent window (when in iframe)
