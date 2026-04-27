@@ -1344,11 +1344,22 @@ function renderReports() {
   // ===== Top items =====
   const itemCounts = {};
   inRange.forEach(o => {
-    const note = (o.note || '').toLowerCase().trim();
-    // Try to extract item name from note (for in-store quick records)
-    if (note) {
-      const key = note.slice(0, 40);
-      if (!itemCounts[key]) itemCounts[key] = { name: note, qty: 0, revenue: 0 };
+    if (o.items && o.items.length) {
+      // Use items array (real menu data)
+      o.items.forEach(it => {
+        const key = (it.mainName || it.name || '').slice(0, 50);
+        if (!key) return;
+        if (!itemCounts[key]) itemCounts[key] = { name: key, qty: 0, revenue: 0 };
+        const qty = it.qty || 1;
+        const free = it.freeQty || 0;
+        const paid = qty - free;
+        itemCounts[key].qty += qty;
+        itemCounts[key].revenue += (it.price || 0) * paid;
+      });
+    } else if (o.note && o.note.trim()) {
+      // Fallback: parse from note for legacy records
+      const key = o.note.trim().slice(0, 50);
+      if (!itemCounts[key]) itemCounts[key] = { name: key, qty: 0, revenue: 0 };
       itemCounts[key].qty += o.boxes || 1;
       itemCounts[key].revenue += (o.total != null) ? o.total : (o.boxes || 0) * (o.price_per_box || price);
     } else {
