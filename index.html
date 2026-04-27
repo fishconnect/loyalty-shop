@@ -473,9 +473,50 @@
 
   <div class="card">
     <h2>📋 จัดการเมนู</h2>
-    <p class="hint">แก้ราคา, ตั้ง "หมด", หรือเพิ่มเมนูใหม่ — ลูกค้าจะเห็นทันที</p>
+    <p class="hint">กดที่เมนูเพื่อแก้ — ตั้งราคา ใส่รูป ตั้ง "หมด" ลูกค้าเห็นทันที</p>
     <div id="menuManager"></div>
-    <button class="btn-secondary" onclick="addCustomItem()" style="width:100%;margin-top:8px">➕ เพิ่มเมนูใหม่</button>
+    <button class="btn-primary" onclick="openNewItemEditor()" style="width:100%;margin-top:12px">➕ เพิ่มเมนูใหม่ (พร้อมรูป)</button>
+  </div>
+
+  <!-- Item Editor Modal -->
+  <div class="modal-bg" id="itemEditorModal">
+    <div class="modal" style="max-width:480px;padding:0">
+      <div style="position:sticky;top:0;background:#fff;border-bottom:1px solid #e2e7ef;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;border-radius:14px 14px 0 0;z-index:10">
+        <h2 id="editorTitle" style="margin:0;color:#0a1530;font-size:18px">✏️ แก้ไขเมนู</h2>
+        <button onclick="closeItemEditor()" style="background:transparent;border:none;font-size:24px;color:#6b7280;cursor:pointer;padding:0">×</button>
+      </div>
+      <div style="padding:16px 20px">
+        <label style="margin-bottom:8px">📷 รูปอาหาร</label>
+        <div id="editorImageWrap" style="position:relative;margin-bottom:8px"></div>
+        <button onclick="pickImageForEditor()" style="width:100%;padding:12px;background:#ebf0ff;color:#1652F0;border:1.5px solid #1652F0;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:14px">
+          📷 ถ่ายรูป / เลือกจากเครื่อง
+        </button>
+
+        <label>ชื่อเมนู</label>
+        <input type="text" id="editorName" placeholder="เช่น ข้าวผัดหมูสับ พิเศษ">
+
+        <label>ราคา (บาท)</label>
+        <input type="number" id="editorPrice" min="0" placeholder="50">
+
+        <label>หมวด</label>
+        <select id="editorCat" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:16px;background:#fff;font-family:inherit;margin-bottom:12px"></select>
+
+        <div class="toggle-row" id="editorIsAddOnRow">
+          <input type="checkbox" id="editorIsAddOn">
+          <label for="editorIsAddOn" style="margin:0">🍳 เป็นของเสริม / Topping (ลูกค้าเลือกเพิ่มได้)</label>
+        </div>
+
+        <div class="toggle-row">
+          <input type="checkbox" id="editorAvailable" checked>
+          <label for="editorAvailable" style="margin:0">✅ มีจำหน่าย (ปิดเมื่อ "หมด")</label>
+        </div>
+      </div>
+      <div style="padding:14px 20px;border-top:1px solid #e2e7ef;background:#f7f8fb;display:flex;flex-direction:column;gap:8px">
+        <button class="btn-primary" onclick="saveItemEditor()" style="width:100%">💾 บันทึก</button>
+        <button id="editorDeleteBtn" class="btn-danger" onclick="deleteItemEditor()" style="width:100%;display:none">🗑️ ลบเมนูนี้</button>
+        <button class="btn-ghost" onclick="closeItemEditor()" style="width:100%">ยกเลิก</button>
+      </div>
+    </div>
   </div>
 
   <div class="card">
@@ -1487,75 +1528,218 @@ function renderMenuManager() {
   if (!wrap) return;
   const allCats = window.applyMenuConfig ? window.applyMenuConfig(menuConfig) : (window.MENU || []);
   wrap.innerHTML = allCats.map(cat => `
-    <div style="margin-bottom:14px">
-      <div style="font-weight:700;color:#1652F0;font-size:13px;padding:6px 0;border-bottom:1px solid #e2e7ef;margin-bottom:6px">${cat.emoji} ${cat.cat}</div>
-      ${cat.items.map(it => `
-        <div style="display:flex;gap:6px;align-items:center;padding:6px 0;font-size:13px">
-          <input type="text" value="${it.name.replace(/"/g,'&quot;')}" data-itemid="${it.id}" data-field="name" style="flex:2;padding:6px 8px;font-size:13px;margin:0;border:1px solid #e2e7ef;border-radius:6px">
-          <input type="number" value="${it.price}" data-itemid="${it.id}" data-field="price" style="width:60px;padding:6px;font-size:13px;margin:0;border:1px solid #e2e7ef;border-radius:6px;text-align:center">
-          <label style="display:flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:${it.available!==false?'#16a34a':'#dc2626'};white-space:nowrap;margin:0">
-            <input type="checkbox" data-itemid="${it.id}" data-field="available" ${it.available!==false?'checked':''} style="width:auto;margin:0">
-            <span>${it.available!==false?'มี':'หมด'}</span>
-          </label>
-          ${menuConfig.custom?.find(c=>c.id===it.id) ? `<button onclick="deleteCustomItem('${it.id}')" style="background:transparent;border:none;color:#dc2626;font-size:18px;padding:0 4px">×</button>` : ''}
-        </div>
-      `).join('')}
+    <div style="margin-bottom:18px">
+      <div style="font-weight:700;color:#1652F0;font-size:14px;padding:8px 0;display:flex;justify-content:space-between;align-items:center">
+        <span>${cat.emoji} ${cat.cat}</span>
+        <span style="font-size:11px;color:#9ca3af;font-weight:500">${cat.items.length} รายการ</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      ${cat.items.map(it => {
+        const isCustom = !!menuConfig.custom?.find(c=>c.id===it.id);
+        const ov = menuConfig.overrides?.[it.id] || {};
+        const img = it.image || ov.image;
+        return `
+        <div onclick="openItemEditor('${it.id}')" style="background:#fff;border:1.5px solid ${it.available!==false?'#e2e7ef':'#fee2e2'};border-radius:12px;padding:10px;cursor:pointer;display:flex;gap:10px;align-items:center;position:relative;transition:border-color .15s">
+          <div style="width:50px;height:50px;flex-shrink:0;border-radius:8px;overflow:hidden;background:linear-gradient(135deg,#ebf0ff,#c5d3ff);display:grid;place-items:center;font-size:24px">
+            ${img ? `<img src="${img}" style="width:100%;height:100%;object-fit:cover">` : (cat.emoji || '🍽️')}
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:700;font-size:13px;color:#0a1530;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${it.name}</div>
+            <div style="display:flex;gap:6px;align-items:center;margin-top:4px">
+              <span style="font-size:13px;font-weight:800;color:#1652F0">฿${it.price}</span>
+              ${it.available===false ? '<span style="background:#fee2e2;color:#dc2626;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:700">หมด</span>' : ''}
+              ${isCustom ? '<span style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:700">ใหม่</span>' : ''}
+            </div>
+          </div>
+        </div>`;
+      }).join('')}
+      </div>
     </div>
-  `).join('') + '<button class="btn-primary" onclick="saveMenuConfig()" style="width:100%;margin-top:12px">💾 บันทึกการเปลี่ยนแปลง</button>';
+  `).join('');
 }
 
-function saveMenuConfig() {
-  // Collect all changes from inputs
-  document.querySelectorAll('#menuManager [data-itemid]').forEach(el => {
-    const id = el.dataset.itemid;
-    const field = el.dataset.field;
-    if (!menuConfig.overrides[id]) menuConfig.overrides[id] = {};
-    if (field === 'available') menuConfig.overrides[id].available = el.checked;
-    else if (field === 'price') menuConfig.overrides[id].price = parseFloat(el.value) || 0;
-    else if (field === 'name') menuConfig.overrides[id].name = el.value.trim();
+// ========== Item Editor (modal) ==========
+let editingItemId = null;
+let editingItemImage = null;
+let editingIsCustom = false;
+
+function openItemEditor(itemId) {
+  const allCats = window.applyMenuConfig ? window.applyMenuConfig(menuConfig) : (window.MENU || []);
+  let foundItem = null, foundCat = null;
+  for (const c of allCats) {
+    const it = c.items.find(i => i.id === itemId);
+    if (it) { foundItem = it; foundCat = c; break; }
+  }
+  if (!foundItem) return;
+
+  editingItemId = itemId;
+  editingItemImage = foundItem.image || (menuConfig.overrides?.[itemId]?.image) || null;
+  editingIsCustom = !!menuConfig.custom?.find(c => c.id === itemId);
+  const isAddOn = foundCat.isAddOn;
+
+  // Build category list
+  const cats = (window.MENU || []).map(c => c.cat);
+
+  document.getElementById('editorTitle').textContent = editingIsCustom ? '✏️ แก้ไขเมนูที่เพิ่ม' : '✏️ แก้ไขเมนู';
+  document.getElementById('editorName').value = foundItem.name;
+  document.getElementById('editorPrice').value = foundItem.price;
+  document.getElementById('editorAvailable').checked = foundItem.available !== false;
+  document.getElementById('editorIsAddOn').checked = !!isAddOn;
+  document.getElementById('editorCat').innerHTML = cats.map(c => `<option value="${c}" ${c===foundCat.cat?'selected':''}>${c}</option>`).join('');
+  document.getElementById('editorCat').disabled = !editingIsCustom; // can't change cat for default items
+  document.getElementById('editorIsAddOnRow').style.display = editingIsCustom ? 'flex' : 'none';
+  document.getElementById('editorDeleteBtn').style.display = editingIsCustom ? 'block' : 'none';
+  renderEditorImage();
+  document.getElementById('itemEditorModal').classList.add('show');
+}
+
+function openNewItemEditor() {
+  editingItemId = null;
+  editingItemImage = null;
+  editingIsCustom = true;
+  const cats = (window.MENU || []).filter(c => !c.isAddOn).map(c => c.cat);
+  document.getElementById('editorTitle').textContent = '➕ เพิ่มเมนูใหม่';
+  document.getElementById('editorName').value = '';
+  document.getElementById('editorPrice').value = '50';
+  document.getElementById('editorAvailable').checked = true;
+  document.getElementById('editorIsAddOn').checked = false;
+  document.getElementById('editorCat').innerHTML = cats.map(c => `<option value="${c}">${c}</option>`).join('');
+  document.getElementById('editorCat').disabled = false;
+  document.getElementById('editorIsAddOnRow').style.display = 'flex';
+  document.getElementById('editorDeleteBtn').style.display = 'none';
+  renderEditorImage();
+  document.getElementById('itemEditorModal').classList.add('show');
+}
+
+function closeItemEditor() {
+  document.getElementById('itemEditorModal').classList.remove('show');
+  editingItemId = null;
+  editingItemImage = null;
+}
+
+function renderEditorImage() {
+  const wrap = document.getElementById('editorImageWrap');
+  if (editingItemImage) {
+    wrap.innerHTML = `
+      <img src="${editingItemImage}" style="width:100%;max-height:180px;object-fit:cover;border-radius:12px">
+      <button onclick="editingItemImage=null;renderEditorImage()" style="position:absolute;top:8px;right:8px;background:rgba(220,38,38,.9);color:#fff;border:none;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:18px">×</button>
+    `;
+  } else {
+    wrap.innerHTML = `
+      <div style="background:linear-gradient(135deg,#ebf0ff,#c5d3ff);border:2px dashed #1652F0;border-radius:12px;padding:30px;text-align:center;color:#1652F0">
+        <div style="font-size:48px;margin-bottom:6px">📷</div>
+        <div style="font-size:14px;font-weight:700">ยังไม่มีรูป</div>
+        <div style="font-size:12px;color:#5c6982;margin-top:4px">กดปุ่มด้านล่างเพื่อถ่าย/อัปโหลด</div>
+      </div>
+    `;
+  }
+}
+
+function pickImageForEditor() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.capture = 'environment';
+  input.onchange = async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    toast('📸 กำลังประมวลผลภาพ...');
+    try {
+      editingItemImage = await compressImageToDataURL(file);
+      renderEditorImage();
+    } catch (err) { toast('⚠️ ภาพไม่ถูกต้อง'); }
+  };
+  input.click();
+}
+
+function compressImageToDataURL(file, maxSize = 500, quality = 0.6) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = e => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        let { width, height } = img;
+        const ratio = Math.min(1, maxSize / Math.max(width, height));
+        width = Math.round(width * ratio);
+        height = Math.round(height * ratio);
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
   });
-  // Update custom items
-  if (menuConfig.custom) {
-    menuConfig.custom = menuConfig.custom.map(c => {
-      const ov = menuConfig.overrides[c.id];
-      if (ov) return { ...c, name: ov.name || c.name, price: ov.price ?? c.price, available: ov.available !== false };
-      return c;
+}
+
+function saveItemEditor() {
+  const name = document.getElementById('editorName').value.trim();
+  const price = parseFloat(document.getElementById('editorPrice').value);
+  const available = document.getElementById('editorAvailable').checked;
+  const isAddOn = document.getElementById('editorIsAddOn').checked;
+  const catName = document.getElementById('editorCat').value;
+  if (!name) return toast('⚠️ กรอกชื่อเมนู');
+  if (isNaN(price) || price < 0) return toast('⚠️ ราคาไม่ถูกต้อง');
+
+  if (editingItemId && !editingIsCustom) {
+    // Update override for built-in item
+    if (!menuConfig.overrides[editingItemId]) menuConfig.overrides[editingItemId] = {};
+    menuConfig.overrides[editingItemId].name = name;
+    menuConfig.overrides[editingItemId].price = price;
+    menuConfig.overrides[editingItemId].available = available;
+    if (editingItemImage) menuConfig.overrides[editingItemId].image = editingItemImage;
+    else delete menuConfig.overrides[editingItemId].image;
+  } else if (editingItemId && editingIsCustom) {
+    // Update existing custom item
+    if (!menuConfig.custom) menuConfig.custom = [];
+    const idx = menuConfig.custom.findIndex(c => c.id === editingItemId);
+    if (idx >= 0) {
+      menuConfig.custom[idx] = {
+        ...menuConfig.custom[idx],
+        name, price, available,
+        category: isAddOn ? '_addon_' : catName,
+        isAddOn: !!isAddOn,
+        image: editingItemImage || undefined
+      };
+    }
+  } else {
+    // New custom item
+    if (!menuConfig.custom) menuConfig.custom = [];
+    menuConfig.custom.push({
+      id: 'cust-' + Date.now(),
+      name, price, available,
+      category: isAddOn ? '_addon_' : catName,
+      isAddOn: !!isAddOn,
+      emoji: isAddOn ? '🍳' : '🍽️',
+      image: editingItemImage || undefined
     });
   }
+
   localStorage.setItem('menuConfig', JSON.stringify(menuConfig));
-  if (window.cloud?.ready) window.cloud.saveMenuConfig(menuConfig).catch(()=>{});
-  toast('✅ บันทึกเมนูแล้ว');
+  if (window.cloud?.ready) window.cloud.saveMenuConfig(menuConfig).catch(e => console.warn(e));
+  toast('✅ บันทึกแล้ว');
+  closeItemEditor();
   renderMenuManager();
 }
 
-function addCustomItem() {
-  const name = prompt('ชื่อเมนูใหม่:');
-  if (!name) return;
-  const price = parseFloat(prompt('ราคา (บาท):', '50'));
-  if (isNaN(price)) return;
-  const cats = (window.MENU || []).filter(c => !c.isAddOn).map(c => c.cat);
-  const cat = prompt('หมวด: ' + cats.join(', '), cats[0] || 'อื่นๆ');
-  if (!cat) return;
-  if (!menuConfig.custom) menuConfig.custom = [];
-  menuConfig.custom.push({
-    id: 'cust-' + Date.now(),
-    name, price, category: cat, emoji: '🍽️', available: true
-  });
-  localStorage.setItem('menuConfig', JSON.stringify(menuConfig));
-  if (window.cloud?.ready) window.cloud.saveMenuConfig(menuConfig).catch(()=>{});
-  toast('✅ เพิ่มเมนูแล้ว');
-  renderMenuManager();
-}
-
-function deleteCustomItem(id) {
-  if (!confirm('ลบเมนูนี้?')) return;
-  menuConfig.custom = (menuConfig.custom || []).filter(c => c.id !== id);
-  delete menuConfig.overrides[id];
+function deleteItemEditor() {
+  if (!editingItemId || !editingIsCustom) return;
+  if (!confirm('ลบเมนูนี้ถาวร?')) return;
+  menuConfig.custom = (menuConfig.custom || []).filter(c => c.id !== editingItemId);
+  delete menuConfig.overrides[editingItemId];
   localStorage.setItem('menuConfig', JSON.stringify(menuConfig));
   if (window.cloud?.ready) window.cloud.saveMenuConfig(menuConfig).catch(()=>{});
   toast('🗑️ ลบแล้ว');
+  closeItemEditor();
   renderMenuManager();
 }
+
+// Legacy alias
+function addCustomItem() { openNewItemEditor(); }
 
 function changePassword() {
   const pwd = document.getElementById('adminPwdNew').value.trim();

@@ -648,8 +648,8 @@ function renderMenu() {
             return `
             <div class="item ${qtyInCart > 0 ? 'has-qty' : ''} ${isOut ? 'unavailable' : ''}" onclick="${isOut?'':`openCustomize('${it.id}')`}">
               <div class="img">
-                <img src="${SHOP_INFO.defaultImage}" alt="">
-                <div class="overlay-emoji">${c.emoji}</div>
+                <img src="${it.image || SHOP_INFO.defaultImage}" alt="">
+                ${!it.image ? `<div class="overlay-emoji">${c.emoji}</div>` : ''}
                 ${qtyInCart > 0 ? `<div class="qty-badge">${qtyInCart}</div>` : ''}
                 ${isOut ? '<div class="out-badge">หมด</div>' : ''}
               </div>
@@ -705,7 +705,12 @@ function openCustomize(itemId, cartId) {
     custCurrent = { mainId: itemId, qty: 1, addOnIds: [], note: '' };
   }
 
-  document.getElementById('custEmoji').textContent = cat.emoji;
+  const custEmojiEl = document.getElementById('custEmoji');
+  if (item.image) {
+    custEmojiEl.innerHTML = `<img src="${item.image}" style="width:120px;height:120px;border-radius:16px;object-fit:cover;box-shadow:0 6px 18px rgba(0,0,0,.15)">`;
+  } else {
+    custEmojiEl.textContent = cat.emoji;
+  }
   document.getElementById('custName').textContent = item.name;
   document.getElementById('custNoteText').textContent = item.note || '';
   document.getElementById('custPrice').textContent = '฿' + item.price;

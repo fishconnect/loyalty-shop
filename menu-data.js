@@ -138,19 +138,34 @@ window.applyMenuConfig = function(config) {
         ...it,
         ...(o.name ? { name: o.name } : {}),
         ...(o.price != null ? { price: Number(o.price) } : {}),
+        ...(o.image ? { image: o.image } : {}),
         available: o.available !== false
       };
     })
   }));
 
-  // Append custom items into their categories (or create new category)
+  // Append custom items
   custom.forEach(c => {
-    const item = { id: c.id, name: c.name, price: Number(c.price), available: c.available !== false };
-    const targetCat = result.find(cat => cat.cat === c.category);
-    if (targetCat) {
-      targetCat.items.push(item);
+    const item = {
+      id: c.id, name: c.name, price: Number(c.price),
+      available: c.available !== false,
+      ...(c.image ? { image: c.image } : {})
+    };
+    if (c.isAddOn || c.category === '_addon_') {
+      // Add to add-on category
+      let addOnCat = result.find(cat => cat.isAddOn);
+      if (!addOnCat) {
+        addOnCat = { cat: 'เพิ่มเติม (อย่างละ +5.-)', emoji: '🍳', isAddOn: true, items: [] };
+        result.push(addOnCat);
+      }
+      addOnCat.items.push(item);
     } else {
-      result.push({ cat: c.category || 'อื่นๆ', emoji: c.emoji || '🍽️', items: [item] });
+      const targetCat = result.find(cat => cat.cat === c.category && !cat.isAddOn);
+      if (targetCat) {
+        targetCat.items.push(item);
+      } else {
+        result.push({ cat: c.category || 'อื่นๆ', emoji: c.emoji || '🍽️', items: [item] });
+      }
     }
   });
 
