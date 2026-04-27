@@ -300,6 +300,8 @@ function render() {
 
   wrap.innerHTML = list.map(o => {
     const mainCount = countMainDishes(o.items);
+    const rewardInfo = o.status === 'pending' ? getRewardInfo(o) : { available: 0 };
+    const hasUnusedRewards = rewardInfo.available > 0 && !o.free_boxes_used;
     return `
       <div class="order ${o.status}">
         <div class="order-head">
@@ -333,6 +335,20 @@ function render() {
           <span class="total">฿${o.total} <span class="small">${o.discount?'ลูกค้าจ่าย':'รวม'}</span></span>
         </div>
         ${o.status === 'pending' ? `
+          ${hasUnusedRewards ? `
+            <div style="padding:8px 16px 0">
+              <button onclick="openFreePrompt('${o.id}')" style="width:100%;padding:12px;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;box-shadow:0 3px 10px rgba(22,163,74,.25);display:flex;align-items:center;justify-content:center;gap:6px">
+                🎁 ใช้สิทธิ์ฟรี <span style="background:rgba(255,255,255,.2);padding:2px 8px;border-radius:999px;font-size:12px">มี ${rewardInfo.available}</span>
+              </button>
+            </div>
+          ` : ''}
+          ${o.free_boxes_used ? `
+            <div style="padding:8px 16px 0">
+              <button onclick="openFreePrompt('${o.id}')" style="width:100%;padding:10px;background:#dcfce7;color:#166534;border:1.5px solid #16a34a;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer">
+                🎁 ใช้ฟรี ${o.free_boxes_used} กล่อง · ลด ฿${o.discount} (กดเพื่อแก้)
+              </button>
+            </div>
+          ` : ''}
           <div class="order-actions">
             <button class="btn-cancel" onclick="cancelOrder('${o.id}')">ยกเลิก</button>
             <button onclick="editOrderModal('${o.id}')" style="background:#ebf0ff;color:#1652F0;border:1.5px solid #1652F0;flex:0;max-width:90px">✏️ แก้</button>
@@ -349,69 +365,85 @@ async function markDone(orderId) {
   const orderSrc = cloudOrders !== null ? cloudOrders : db.pendingOrders;
   const order = orderSrc.find(o => o.id === orderId);
   if (!order) return;
-
-  // Compute rewards available AFTER adding this order's boxes
-  let customer = db.customers[order.customer_id];
-  if (!customer && cloudCustomers && cloudCustomers[order.customer_id]) customer = cloudCustomers[order.customer_id];
-  if (!customer) customer = { id: order.customer_id, name: order.customer_name, phone: order.customer_phone, total_boxes: 0, redeemed_count: 0 };
-
-  const goal = db.settings.goal || 20;
   const mainBoxes = countMainDishes(order.items);
-  const newTotalBoxes = (customer.total_boxes || 0) + mainBoxes;
-  const totalRewardsAfter = Math.floor(newTotalBoxes / goal) - (customer.redeemed_count || 0);
-
-  if (totalRewardsAfter > 0) {
-    // Show reward prompt — let shop decide
-    showRewardPrompt(order, customer, totalRewardsAfter, mainBoxes);
-    return;
-  }
-
-  // No rewards — confirm and finalize
-  if (!confirm(`ยืนยันว่าทำเสร็จแล้ว?\n\n${order.customer_name} · ${order.items.length} เมนู · ฿${order.total}\n\nระบบจะเพิ่ม ${mainBoxes} กล่องเข้าแต้มของลูกค้า`)) return;
-  await finalizeOrder(orderId, 0);
+  const freeUsed = order.free_boxes_used || 0;
+  const summary = freeUsed > 0
+    ? `${order.customer_name} · ฿${order.total} (ใช้ฟรี ${freeUsed} กล่อง)`
+    : `${order.customer_name} · ฿${order.total}`;
+  if (!confirm(`ทำเสร็จแล้ว?\n\n${summary}\n\nเพิ่ม ${mainBoxes} กล่องเข้าแต้มลูกค้า`)) return;
+  await finalizeOrder(orderId);
 }
 
-// ========== Reward Prompt ==========
-function showRewardPrompt(order, customer, available, mainBoxes) {
-  const goal = (loadDB().settings.goal) || 20;
+// Compute customer's reward state — used to show "ใช้ฟรี" button
+function getRewardInfo(order) {
+  const db = loadDB();
+  let customer = db.customers[order.customer_id];
+  if (!customer && cloudCustomers && cloudCustomers[order.customer_id]) customer = cloudCustomers[order.customer_id];
+  if (!customer) return { available: 0, customer: null };
+  const goal = db.settings.goal || 20;
+  const mainBoxes = countMainDishes(order.items);
+  const newTotal = (customer.total_boxes || 0) + mainBoxes;
+  const available = Math.floor(newTotal / goal) - (customer.redeemed_count || 0);
+  return { available: Math.max(0, available), customer, mainBoxes };
+}
+
+// ========== Apply Free Reward (during pending — before cooking done) ==========
+function openFreePrompt(orderId) {
+  const db = loadDB();
+  const orderSrc = cloudOrders !== null ? cloudOrders : db.pendingOrders;
+  const order = orderSrc.find(o => o.id === orderId);
+  if (!order) return;
+  const info = getRewardInfo(order);
+  if (info.available === 0) return toast('⚠️ ลูกค้ายังไม่มีสิทธิ์ฟรี');
+  showFreePromptModal(order, info.customer, info.available, info.mainBoxes);
+}
+
+function showFreePromptModal(order, customer, available, mainBoxes) {
   const price = (loadDB().settings.pricePerBox) || 50;
   const maxUse = Math.min(available, mainBoxes);
   const phone = (customer.phone || order.customer_phone || '').replace(/\D/g, '');
-  const tel = phone ? `tel:${phone}` : '#';
+  const baseTotal = order.original_total || order.total;
 
-  // Build option buttons
   const optionButtons = [];
   for (let i = maxUse; i >= 1; i--) {
     const discount = i * price;
     optionButtons.push(`
-      <button onclick="finalizeOrder('${order.id}', ${i})" style="width:100%;padding:14px;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:800;margin-bottom:8px;cursor:pointer;box-shadow:0 4px 12px rgba(22,163,74,.25)">
-        🎁 ใช้ฟรี ${i} กล่อง · ลด ฿${discount} <span style="opacity:.85;font-weight:600">(เก็บ ฿${order.total - discount})</span>
+      <button onclick="applyFree('${order.id}', ${i})" style="width:100%;padding:14px;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:800;margin-bottom:8px;cursor:pointer;box-shadow:0 4px 12px rgba(22,163,74,.25)">
+        🎁 ใช้ฟรี ${i} กล่อง · ลด ฿${discount} <span style="opacity:.85;font-weight:600">(เก็บ ฿${baseTotal - discount})</span>
       </button>
     `);
   }
+
+  const currentlyApplied = order.free_boxes_used || 0;
 
   const html = `
     <div style="position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:300;display:flex;align-items:flex-end;justify-content:center;padding:0" onclick="this.remove()">
       <div onclick="event.stopPropagation()" style="background:#fff;width:100%;max-width:520px;border-radius:24px 24px 0 0;padding:24px 20px;max-height:92vh;overflow-y:auto">
         <div style="text-align:center;margin-bottom:14px">
-          <div style="font-size:48px">🎉</div>
-          <div style="font-size:18px;font-weight:800;color:#0a1530;margin-top:4px">ลูกค้ามีสิทธิ์ฟรี!</div>
+          <div style="font-size:48px">🎁</div>
+          <div style="font-size:18px;font-weight:800;color:#0a1530;margin-top:4px">ใช้สิทธิ์ฟรี</div>
           <div style="font-size:14px;color:#5c6982;margin-top:4px"><b>${customer.name}</b> มีสิทธิ์ฟรี <b style="color:#16a34a">${available} กล่อง</b> · ออเดอร์นี้มี ${mainBoxes} จานหลัก</div>
+          ${currentlyApplied > 0 ? `<div style="background:#dcfce7;color:#166534;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:700;display:inline-block;margin-top:8px">ตอนนี้ใช้อยู่ ${currentlyApplied} กล่อง</div>` : ''}
         </div>
         <div style="background:#f7f8fb;padding:12px;border-radius:10px;font-size:14px;text-align:center;margin-bottom:14px">
-          <div style="color:#5c6982">รวมยอดออเดอร์</div>
-          <div style="font-size:22px;font-weight:900;color:#1652F0">฿${order.total}</div>
+          <div style="color:#5c6982">ยอดเต็ม</div>
+          <div style="font-size:22px;font-weight:900;color:#1652F0">฿${baseTotal}</div>
+        </div>
+        <div style="background:#fef3c7;color:#92400e;padding:10px 12px;border-radius:8px;font-size:12px;margin-bottom:10px;line-height:1.5">
+          ℹ️ <b>ใช้สิทธิ์แล้ว order ยังอยู่ในคิว</b> — ทำอาหารเสร็จค่อยกด "ทำเสร็จ"
         </div>
         ${optionButtons.join('')}
-        <button onclick="finalizeOrder('${order.id}', 0)" style="width:100%;padding:14px;background:#fff;color:#1652F0;border:1.5px solid #1652F0;border-radius:12px;font-size:15px;font-weight:700;margin-bottom:8px;cursor:pointer">
-          💾 ไม่ใช้ — สะสมต่อ (ลูกค้าจ่าย ฿${order.total})
-        </button>
+        ${currentlyApplied > 0 ? `
+          <button onclick="unapplyFree('${order.id}')" style="width:100%;padding:14px;background:#fee2e2;color:#dc2626;border:1.5px solid #dc2626;border-radius:12px;font-size:15px;font-weight:700;margin-bottom:8px;cursor:pointer">
+            ↩️ ยกเลิกการใช้ฟรี (กลับเป็น ฿${baseTotal})
+          </button>
+        ` : ''}
         ${phone ? `
-          <a href="${tel}" style="display:block;text-align:center;padding:14px;background:#fef3c7;color:#92400e;border:1.5px solid #f59e0b;border-radius:12px;font-size:15px;font-weight:700;text-decoration:none;margin-bottom:8px">
+          <a href="tel:${phone}" style="display:block;text-align:center;padding:14px;background:#fef3c7;color:#92400e;border:1.5px solid #f59e0b;border-radius:12px;font-size:15px;font-weight:700;text-decoration:none;margin-bottom:8px">
             📞 โทรถามลูกค้าก่อน (${phone})
           </a>
         ` : ''}
-        <button onclick="this.closest('div[style*=fixed]').remove()" style="width:100%;padding:12px;background:transparent;color:#6b7280;border:none;font-size:14px;cursor:pointer">ยกเลิก</button>
+        <button onclick="this.closest('div[style*=fixed]').remove()" style="width:100%;padding:12px;background:transparent;color:#6b7280;border:none;font-size:14px;cursor:pointer">ปิด</button>
       </div>
     </div>
   `;
@@ -420,10 +452,75 @@ function showRewardPrompt(order, customer, available, mainBoxes) {
   document.body.appendChild(tmp.firstElementChild);
 }
 
-async function finalizeOrder(orderId, freeQty) {
-  // Close any open prompt
+async function applyFree(orderId, freeQty) {
   document.querySelectorAll('div[style*="z-index:300"]').forEach(el => el.remove());
+  const db = loadDB();
+  const orderSrc = cloudOrders !== null ? cloudOrders : db.pendingOrders;
+  const order = orderSrc.find(o => o.id === orderId);
+  if (!order) return;
 
+  // Use ORIGINAL items/total to recompute (allows re-applying with different qty)
+  const originalItems = order.original_items || JSON.parse(JSON.stringify(order.items));
+  const originalTotal = order.original_total || order.total;
+
+  // Reset items
+  let items = JSON.parse(JSON.stringify(originalItems));
+  let remaining = freeQty;
+  let discount = 0;
+  const sorted = [...items].sort((a, b) => b.price - a.price);
+  for (const it of sorted) {
+    if (remaining <= 0) break;
+    const cat = MENU.find(c => c.items.some(i => i.id === it.id));
+    if (cat?.isAddOn) continue;
+    const useFree = Math.min(remaining, it.qty);
+    it.freeQty = useFree;
+    it.discount = it.price * useFree;
+    discount += it.discount;
+    remaining -= useFree;
+  }
+  const adjustedTotal = originalTotal - discount;
+
+  const updates = {
+    items, total: adjustedTotal,
+    discount, free_boxes_used: freeQty,
+    original_items: originalItems, original_total: originalTotal
+  };
+
+  const local = db.pendingOrders.find(o => o.id === orderId);
+  if (local) Object.assign(local, updates);
+  saveDB(db);
+
+  if (window.cloud) await window.cloud.updateOrder(orderId, updates);
+
+  toast(`🎁 ใช้สิทธิ์ฟรี ${freeQty} กล่อง · ลด ฿${discount} · ทำอาหารต่อได้`);
+  render();
+}
+
+async function unapplyFree(orderId) {
+  document.querySelectorAll('div[style*="z-index:300"]').forEach(el => el.remove());
+  const db = loadDB();
+  const orderSrc = cloudOrders !== null ? cloudOrders : db.pendingOrders;
+  const order = orderSrc.find(o => o.id === orderId);
+  if (!order) return;
+  const updates = {
+    items: order.original_items || order.items,
+    total: order.original_total || order.total,
+    discount: 0,
+    free_boxes_used: 0
+  };
+  const local = db.pendingOrders.find(o => o.id === orderId);
+  if (local) {
+    Object.assign(local, updates);
+    delete local.original_items;
+    delete local.original_total;
+  }
+  saveDB(db);
+  if (window.cloud) await window.cloud.updateOrder(orderId, updates);
+  toast('↩️ ยกเลิกการใช้ฟรี');
+  render();
+}
+
+async function finalizeOrder(orderId) {
   const db = loadDB();
   const orderSrc = cloudOrders !== null ? cloudOrders : db.pendingOrders;
   const order = orderSrc.find(o => o.id === orderId);
@@ -442,32 +539,13 @@ async function finalizeOrder(orderId, freeQty) {
 
   const mainBoxes = countMainDishes(order.items);
   const price = db.settings.pricePerBox || 50;
+  const freeQty = order.free_boxes_used || 0;
 
-  // Add boxes to customer + use rewards
+  // Add boxes + redeem rewards
   customer.total_boxes += mainBoxes;
   if (freeQty > 0) customer.redeemed_count = (customer.redeemed_count || 0) + freeQty;
 
-  // Adjust items to mark which are free
-  let adjustedItems = JSON.parse(JSON.stringify(order.items));
-  let discount = 0;
-  if (freeQty > 0) {
-    let remaining = freeQty;
-    // Sort by price desc — give free to most expensive items first (best for customer)
-    const sorted = [...adjustedItems].sort((a, b) => b.price - a.price);
-    for (const it of sorted) {
-      if (remaining <= 0) break;
-      const cat = MENU.find(c => c.items.some(i => i.id === it.id));
-      if (cat?.isAddOn) continue; // skip add-ons
-      const useFree = Math.min(remaining, it.qty);
-      it.freeQty = (it.freeQty || 0) + useFree;
-      it.discount = it.price * useFree;
-      discount += it.discount;
-      remaining -= useFree;
-    }
-  }
-  const adjustedTotal = order.total - discount;
-
-  // Push to db.orders (with full items array for dashboard)
+  // Push to db.orders (items already have freeQty marks if applied earlier)
   if (!db.orders) db.orders = [];
   db.orders.push({
     id: 'O' + Date.now(),
@@ -476,30 +554,24 @@ async function finalizeOrder(orderId, freeQty) {
     customer_id: customer.id,
     customer_name: customer.name,
     boxes: mainBoxes,
-    items: adjustedItems,
+    items: order.items,
     price_per_box: price,
-    total: adjustedTotal,
-    discount,
+    total: order.total,
+    discount: order.discount || 0,
     free_boxes_used: freeQty,
     note: order.note || '',
     source: order.source || 'online'
   });
 
-  // Mark pending done with adjusted items + total
   const updates = {
     status: 'done',
-    completed_at: new Date().toISOString(),
-    items: adjustedItems,
-    total: adjustedTotal,
-    discount,
-    free_boxes_used: freeQty
+    completed_at: new Date().toISOString()
   };
   const localOrder = db.pendingOrders.find(o => o.id === orderId);
   if (localOrder) Object.assign(localOrder, updates);
 
   saveDB(db);
 
-  // Sync cloud
   if (window.cloud) {
     await window.cloud.updateOrder(orderId, updates);
     await window.cloud.saveCustomer(customer);
@@ -508,7 +580,7 @@ async function finalizeOrder(orderId, freeQty) {
   render();
 
   if (freeQty > 0) {
-    toast(`🎁 ใช้ฟรี ${freeQty} กล่อง · ลูกค้าจ่าย ฿${adjustedTotal}`);
+    toast(`✓ เสร็จ + ใช้ฟรี ${freeQty} · ลูกค้าจ่าย ฿${order.total}`);
   } else {
     const goal = db.settings.goal || 20;
     toast(`✓ เสร็จ! ${customer.name} สะสม ${customer.total_boxes}/${goal}`);
