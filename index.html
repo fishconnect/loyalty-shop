@@ -174,6 +174,103 @@
     background: transparent; border: none; color: #6b7280; font-size: 18px;
     cursor: pointer; padding: 4px 8px;
   }
+
+  /* ========== Dashboard ========== */
+  .range-btn {
+    padding: 8px 14px; border-radius: 999px;
+    background: #f7f8fb; color: #5c6982; border: 1.5px solid #e2e7ef;
+    font-size: 13px; font-weight: 700; cursor: pointer;
+  }
+  .range-btn.active {
+    background: linear-gradient(135deg, #4F7AFF, #1652F0); color: #fff;
+    border-color: #1652F0; box-shadow: 0 3px 8px rgba(22,82,240,.25);
+  }
+  .kpi-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;
+  }
+  @media (min-width: 600px) { .kpi-grid { grid-template-columns: repeat(4, 1fr); } }
+  .kpi-card {
+    background: #fff; padding: 16px; border-radius: 14px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.05);
+    position: relative; overflow: hidden;
+  }
+  .kpi-card.primary {
+    background: linear-gradient(135deg, #1652F0, #0738C9); color: #fff;
+  }
+  .kpi-card.primary .kpi-label, .kpi-card.primary .kpi-sub { color: rgba(255,255,255,.85); }
+  .kpi-icon { font-size: 22px; margin-bottom: 6px; opacity: .9; }
+  .kpi-value {
+    font-size: 26px; font-weight: 900; line-height: 1; color: #0a1530;
+    letter-spacing: -.02em;
+  }
+  .kpi-card.primary .kpi-value { color: #fff; }
+  .kpi-label { font-size: 12px; color: #5c6982; margin-top: 6px; font-weight: 600; }
+  .kpi-sub { font-size: 11px; color: #5c6982; margin-top: 3px; }
+
+  /* SVG chart styles */
+  .chart-svg { width: 100%; height: auto; display: block; }
+  .chart-legend {
+    display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 10px;
+    font-size: 12px; color: #5c6982;
+  }
+  .chart-legend .item { display: flex; align-items: center; gap: 6px; }
+  .chart-legend .dot { width: 10px; height: 10px; border-radius: 3px; }
+
+  /* Hourly bar chart */
+  .hour-grid {
+    display: grid; grid-template-columns: repeat(24, 1fr); gap: 2px;
+    align-items: end; height: 100px; margin-top: 8px;
+  }
+  .hour-bar {
+    background: linear-gradient(to top, #1652F0, #88a4ff);
+    border-radius: 3px 3px 0 0;
+    min-height: 2px;
+    position: relative;
+  }
+  .hour-bar.peak { background: linear-gradient(to top, #f59e0b, #fbbf24); }
+  .hour-labels {
+    display: grid; grid-template-columns: repeat(24, 1fr); gap: 2px;
+    margin-top: 4px;
+    font-size: 9px; color: #9ca3af; text-align: center;
+  }
+  .hour-labels span:nth-child(odd) { visibility: hidden; }
+
+  /* Top items */
+  .item-row {
+    display: flex; align-items: center; gap: 10px; padding: 8px 0;
+    border-bottom: 1px solid #f3f4f6;
+  }
+  .item-row:last-child { border-bottom: none; }
+  .item-row .rank {
+    width: 24px; height: 24px; border-radius: 50%;
+    background: #ebf0ff; color: #1652F0;
+    display: grid; place-items: center;
+    font-weight: 800; font-size: 12px; flex-shrink: 0;
+  }
+  .item-row .rank.gold { background: linear-gradient(135deg, #fbbf24, #f59e0b); color: #fff; }
+  .item-row .rank.silver { background: linear-gradient(135deg, #d1d5db, #9ca3af); color: #fff; }
+  .item-row .rank.bronze { background: linear-gradient(135deg, #fb923c, #ea580c); color: #fff; }
+  .item-row .name { flex: 1; font-size: 13.5px; min-width: 0; }
+  .item-row .meta { color: #5c6982; font-size: 11.5px; margin-top: 2px; }
+  .item-row .val { font-weight: 800; color: #1652F0; font-size: 14px; text-align: right; }
+  .item-row .val .small { font-weight: 500; color: #9ca3af; font-size: 11px; }
+
+  .bar-row {
+    margin: 6px 0;
+  }
+  .bar-row .label-row {
+    display: flex; justify-content: space-between; font-size: 12px;
+    margin-bottom: 2px;
+  }
+  .bar-row .label-row .name { color: #1f2a44; font-weight: 600; }
+  .bar-row .label-row .val { color: #1652F0; font-weight: 700; }
+  .bar-row .bar-bg {
+    background: #f3f4f6; border-radius: 4px; height: 8px; overflow: hidden;
+  }
+  .bar-row .bar-fill {
+    background: linear-gradient(90deg, #4F7AFF, #1652F0);
+    height: 100%; transition: width .5s ease;
+  }
 </style>
 </head>
 <body>
@@ -264,25 +361,65 @@
 
 <!-- ========== รายงาน ========== -->
 <div class="page" id="page-reports">
-  <div class="stat">
-    <div class="stat-box"><div class="num" id="statCustomers">0</div><div class="lbl">ลูกค้า</div></div>
-    <div class="stat-box"><div class="num" id="statBoxes">0</div><div class="lbl">กล่องสะสมรวม</div></div>
-    <div class="stat-box"><div class="num" id="statRedeemed">0</div><div class="lbl">แลกฟรีไป</div></div>
+  <!-- Date range filter -->
+  <div class="card" style="padding:12px;margin-bottom:12px">
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button class="range-btn active" data-range="today" onclick="setRange('today')">วันนี้</button>
+      <button class="range-btn" data-range="7d" onclick="setRange('7d')">7 วัน</button>
+      <button class="range-btn" data-range="30d" onclick="setRange('30d')">30 วัน</button>
+      <button class="range-btn" data-range="all" onclick="setRange('all')">ทั้งหมด</button>
+    </div>
+  </div>
+
+  <!-- KPI Cards -->
+  <div class="kpi-grid">
+    <div class="kpi-card primary">
+      <div class="kpi-icon">💰</div>
+      <div class="kpi-value" id="kpiRevenue">฿0</div>
+      <div class="kpi-label">ยอดขาย</div>
+      <div class="kpi-sub" id="kpiRevenueSub">—</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-icon">🍱</div>
+      <div class="kpi-value" id="kpiBoxes">0</div>
+      <div class="kpi-label">กล่องที่ขาย</div>
+      <div class="kpi-sub" id="kpiBoxesSub">—</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-icon">🛒</div>
+      <div class="kpi-value" id="kpiOrders">0</div>
+      <div class="kpi-label">ออเดอร์</div>
+      <div class="kpi-sub" id="kpiAvgOrder">เฉลี่ย ฿0/ออเดอร์</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-icon">👥</div>
+      <div class="kpi-value" id="kpiCustomers">0</div>
+      <div class="kpi-label">ลูกค้าทั้งหมด</div>
+      <div class="kpi-sub" id="kpiNewCustomers">+0 ใหม่</div>
+    </div>
+  </div>
+
+  <!-- Revenue trend chart -->
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+      <div>
+        <h2 style="margin:0">📈 ยอดขายรายวัน</h2>
+        <div style="font-size:12px;color:#5c6982;margin-top:2px" id="trendSubtitle">—</div>
+      </div>
+    </div>
+    <div id="revenueTrend"></div>
+  </div>
+
+  <!-- Two column: hourly + category -->
+  <div class="card">
+    <h2>🕐 ออเดอร์ตามช่วงเวลา</h2>
+    <div style="font-size:12px;color:#5c6982;margin-bottom:10px">เห็นว่า peak hour คือเวลาไหน</div>
+    <div id="hourlyChart"></div>
   </div>
 
   <div class="card">
-    <h2>💰 ยอดขาย</h2>
-    <div id="salesReport"></div>
-  </div>
-
-  <div class="card">
-    <h2>📅 ยอดขาย 7 วันล่าสุด</h2>
-    <div id="dailyChart"></div>
-  </div>
-
-  <div class="card">
-    <h2>🔥 ใกล้ครบ (≥80%)</h2>
-    <div id="nearList"></div>
+    <h2>🥇 เมนูขายดี Top 10</h2>
+    <div id="topItems"></div>
   </div>
 
   <div class="card">
@@ -291,8 +428,19 @@
   </div>
 
   <div class="card">
+    <h2>🔥 ใกล้ครบรางวัล (≥80%)</h2>
+    <div id="nearList"></div>
+  </div>
+
+  <div class="card">
     <h2>📋 ออเดอร์ล่าสุด</h2>
     <div id="recentOrders"></div>
+  </div>
+
+  <!-- Hidden legacy elements for compatibility -->
+  <div style="display:none">
+    <span id="statCustomers"></span><span id="statBoxes"></span><span id="statRedeemed"></span>
+    <div id="salesReport"></div><div id="dailyChart"></div>
   </div>
 </div>
 
@@ -1019,94 +1167,166 @@ function goToCheck(id) {
   renderCheck();
 }
 
-// ========== Reports ==========
+// ========== Reports / Dashboard ==========
 function fmtBaht(n) { return '฿' + Math.round(n).toLocaleString('th-TH'); }
-
 function dayKey(iso) { return new Date(iso).toLocaleDateString('en-CA'); }
 function startOfDay(d) { d.setHours(0,0,0,0); return d; }
 
-function renderReports() {
-  const customers = Object.values(db.customers);
-  document.getElementById('statCustomers').textContent = customers.length;
-  document.getElementById('statBoxes').textContent = customers.reduce((s, c) => s + c.total_boxes, 0);
-  document.getElementById('statRedeemed').textContent = customers.reduce((s, c) => s + c.redeemed_count, 0);
+let currentRange = 'today';
+function setRange(r) {
+  currentRange = r;
+  document.querySelectorAll('.range-btn').forEach(b => b.classList.toggle('active', b.dataset.range === r));
+  renderReports();
+}
 
-  // ===== Sales =====
-  const price = db.settings.pricePerBox || 50;
+function rangeBounds(range) {
   const now = new Date();
-  const todayKey = dayKey(now);
-  const weekAgo = startOfDay(new Date(now)); weekAgo.setDate(weekAgo.getDate() - 6);
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const today = startOfDay(new Date(now));
+  if (range === 'today') return { start: today, label: 'วันนี้' };
+  if (range === '7d') {
+    const s = startOfDay(new Date(now)); s.setDate(s.getDate() - 6);
+    return { start: s, label: '7 วันล่าสุด' };
+  }
+  if (range === '30d') {
+    const s = startOfDay(new Date(now)); s.setDate(s.getDate() - 29);
+    return { start: s, label: '30 วันล่าสุด' };
+  }
+  return { start: new Date(0), label: 'ทั้งหมด' };
+}
 
-  let totalBoxes = 0, totalRevenue = 0;
-  let todayBoxes = 0, todayRevenue = 0;
-  let weekBoxes = 0, weekRevenue = 0;
-  let monthBoxes = 0, monthRevenue = 0;
-
-  db.orders.forEach(o => {
+function renderReports() {
+  const price = db.settings.pricePerBox || 50;
+  const customers = Object.values(db.customers);
+  const { start, label } = rangeBounds(currentRange);
+  const inRange = db.orders.filter(o => new Date(o.date) >= start);
+  const previousRange = (() => {
+    if (currentRange === 'today') {
+      const y = startOfDay(new Date()); y.setDate(y.getDate() - 1);
+      const t = startOfDay(new Date());
+      return { start: y, end: t };
+    }
+    const len = (Date.now() - start.getTime());
+    return { start: new Date(start.getTime() - len), end: start };
+  })();
+  const inPrev = db.orders.filter(o => {
     const d = new Date(o.date);
-    const b = o.boxes || 0;
-    const total = (o.total != null) ? o.total : b * (o.price_per_box || price);
-    totalBoxes += b; totalRevenue += total;
-    if (dayKey(o.date) === todayKey) { todayBoxes += b; todayRevenue += total; }
-    if (d >= weekAgo) { weekBoxes += b; weekRevenue += total; }
-    if (d >= monthStart) { monthBoxes += b; monthRevenue += total; }
+    return d >= previousRange.start && d < previousRange.end;
   });
 
-  const freeBoxes = customers.reduce((s,c)=>s+c.redeemed_count,0);
-  const freeCost = freeBoxes * price;
-  const netRevenue = totalRevenue - freeCost;
+  const sumBoxes = arr => arr.reduce((s, o) => s + (o.boxes || 0), 0);
+  const sumRev = arr => arr.reduce((s, o) => s + ((o.total != null) ? o.total : (o.boxes || 0) * (o.price_per_box || price)), 0);
 
-  document.getElementById('salesReport').innerHTML = `
-    <table style="width:100%;border-collapse:collapse;font-size:14px">
-      <tr style="border-bottom:1px solid #f3f4f6"><td style="padding:8px 0">วันนี้</td><td style="text-align:right;font-weight:600">${todayBoxes} กล่อง</td><td style="text-align:right;font-weight:700;color:#1652F0;padding-left:8px">${fmtBaht(todayRevenue)}</td></tr>
-      <tr style="border-bottom:1px solid #f3f4f6"><td style="padding:8px 0">7 วันล่าสุด</td><td style="text-align:right;font-weight:600">${weekBoxes} กล่อง</td><td style="text-align:right;font-weight:700;color:#1652F0;padding-left:8px">${fmtBaht(weekRevenue)}</td></tr>
-      <tr style="border-bottom:1px solid #f3f4f6"><td style="padding:8px 0">เดือนนี้</td><td style="text-align:right;font-weight:600">${monthBoxes} กล่อง</td><td style="text-align:right;font-weight:700;color:#1652F0;padding-left:8px">${fmtBaht(monthRevenue)}</td></tr>
-      <tr style="border-bottom:1px solid #f3f4f6"><td style="padding:8px 0">รวมทั้งหมด</td><td style="text-align:right;font-weight:600">${totalBoxes} กล่อง</td><td style="text-align:right;font-weight:700;color:#1652F0;padding-left:8px">${fmtBaht(totalRevenue)}</td></tr>
-      <tr><td colspan="2" style="padding:8px 0;color:#6b7280;font-size:12px">ต้นทุนของแถม (${freeBoxes} กล่องฟรี)</td><td style="text-align:right;color:#dc2626;font-weight:600">-${fmtBaht(freeCost)}</td></tr>
-      <tr style="border-top:2px solid #1652F0"><td style="padding:10px 0;font-weight:700">ยอดสุทธิ</td><td></td><td style="text-align:right;font-weight:800;color:#1652F0;font-size:16px">${fmtBaht(netRevenue)}</td></tr>
-    </table>
-    <div class="hint" style="margin-top:8px">ราคาต่อกล่อง: ${fmtBaht(price)} (เปลี่ยนได้ในตั้งค่า)</div>
-  `;
+  const revenue = sumRev(inRange);
+  const boxes = sumBoxes(inRange);
+  const orderCount = inRange.length;
+  const avgOrder = orderCount ? Math.round(revenue / orderCount) : 0;
+  const prevRevenue = sumRev(inPrev);
+  const newCustomers = customers.filter(c => c.joined && new Date(c.joined) >= start).length;
 
-  // ===== Daily chart 7 days =====
-  const days = [];
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(now); d.setDate(d.getDate() - i);
-    days.push({ key: dayKey(d), label: d.toLocaleDateString('th-TH', { weekday:'short', day:'numeric' }), boxes: 0, revenue: 0 });
+  // KPI
+  document.getElementById('kpiRevenue').textContent = fmtBaht(revenue);
+  const diff = prevRevenue > 0 ? Math.round(((revenue - prevRevenue) / prevRevenue) * 100) : null;
+  const diffStr = diff === null ? label : (diff >= 0 ? `↑ ${diff}% vs ก่อนหน้า` : `↓ ${Math.abs(diff)}% vs ก่อนหน้า`);
+  document.getElementById('kpiRevenueSub').textContent = diffStr;
+  document.getElementById('kpiBoxes').textContent = boxes.toLocaleString('th-TH');
+  document.getElementById('kpiBoxesSub').textContent = `เฉลี่ย ${orderCount ? (boxes/orderCount).toFixed(1) : 0} กล่อง/ออเดอร์`;
+  document.getElementById('kpiOrders').textContent = orderCount;
+  document.getElementById('kpiAvgOrder').textContent = `เฉลี่ย ${fmtBaht(avgOrder)}/ออเดอร์`;
+  document.getElementById('kpiCustomers').textContent = customers.length;
+  document.getElementById('kpiNewCustomers').textContent = `+${newCustomers} ใหม่ใน${label}`;
+
+  // ===== Revenue trend =====
+  const days = currentRange === 'today' ? 1 : currentRange === '7d' ? 7 : currentRange === '30d' ? 30 : 30;
+  document.getElementById('trendSubtitle').textContent = `${label} · รวม ${fmtBaht(revenue)}`;
+  const dayData = [];
+  const today = new Date();
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(today); d.setDate(d.getDate() - i);
+    dayData.push({ key: dayKey(d), label: d.toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric' }), boxes: 0, revenue: 0 });
   }
   db.orders.forEach(o => {
-    const k = dayKey(o.date);
-    const day = days.find(x => x.key === k);
+    const day = dayData.find(x => x.key === dayKey(o.date));
     if (day) {
       day.boxes += o.boxes || 0;
       day.revenue += (o.total != null) ? o.total : (o.boxes || 0) * (o.price_per_box || price);
     }
   });
-  const maxRev = Math.max(...days.map(d=>d.revenue), 1);
-  document.getElementById('dailyChart').innerHTML = days.map(d => `
-    <div style="margin-bottom:8px">
-      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
-        <span>${d.label}${d.key===todayKey?' (วันนี้)':''}</span>
-        <span><b>${d.boxes}</b> กล่อง · <b style="color:#1652F0">${fmtBaht(d.revenue)}</b></span>
-      </div>
-      <div style="background:#f3f4f6;border-radius:4px;height:8px;overflow:hidden">
-        <div style="background:linear-gradient(90deg,#88a4ff,#1652F0);height:100%;width:${(d.revenue/maxRev)*100}%"></div>
-      </div>
-    </div>
-  `).join('');
+  document.getElementById('revenueTrend').innerHTML = renderTrendChart(dayData);
 
+  // ===== Hourly chart =====
+  const hourCounts = new Array(24).fill(0);
+  inRange.forEach(o => {
+    const h = new Date(o.date).getHours();
+    hourCounts[h]++;
+  });
+  const maxHour = Math.max(...hourCounts, 1);
+  const peakHour = hourCounts.indexOf(maxHour);
+  document.getElementById('hourlyChart').innerHTML = `
+    <div class="hour-grid">
+      ${hourCounts.map((c, h) => {
+        const pct = (c / maxHour) * 100;
+        const isPeak = c === maxHour && c > 0;
+        return `<div class="hour-bar ${isPeak?'peak':''}" style="height:${Math.max(pct, 2)}%" title="${h}:00 — ${c} ออเดอร์"></div>`;
+      }).join('')}
+    </div>
+    <div class="hour-labels">
+      ${hourCounts.map((_, h) => `<span>${h}</span>`).join('')}
+    </div>
+    <div style="text-align:center;margin-top:8px;font-size:12px;color:#5c6982">
+      ${hourCounts.reduce((s,n)=>s+n,0) > 0 ? `🔥 Peak hour: <b style="color:#f59e0b">${peakHour}:00 น.</b> (${maxHour} ออเดอร์)` : 'ยังไม่มีข้อมูล'}
+    </div>
+  `;
+
+  // ===== Top items =====
+  const itemCounts = {};
+  inRange.forEach(o => {
+    const note = (o.note || '').toLowerCase().trim();
+    // Try to extract item name from note (for in-store quick records)
+    if (note) {
+      const key = note.slice(0, 40);
+      if (!itemCounts[key]) itemCounts[key] = { name: note, qty: 0, revenue: 0 };
+      itemCounts[key].qty += o.boxes || 1;
+      itemCounts[key].revenue += (o.total != null) ? o.total : (o.boxes || 0) * (o.price_per_box || price);
+    } else {
+      const k = '__general';
+      if (!itemCounts[k]) itemCounts[k] = { name: 'ออเดอร์ทั่วไป', qty: 0, revenue: 0 };
+      itemCounts[k].qty += o.boxes || 1;
+      itemCounts[k].revenue += (o.total != null) ? o.total : (o.boxes || 0) * (o.price_per_box || price);
+    }
+  });
+  const topItems = Object.values(itemCounts).sort((a, b) => b.qty - a.qty).slice(0, 10);
+  const maxItem = topItems[0]?.qty || 1;
+  document.getElementById('topItems').innerHTML = topItems.length
+    ? topItems.map((it, i) => {
+        const rankClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
+        const pct = (it.qty / maxItem) * 100;
+        return `
+          <div class="bar-row">
+            <div class="label-row">
+              <span class="name"><span class="rank ${rankClass}" style="display:inline-grid;width:20px;height:20px;font-size:11px;vertical-align:middle;margin-right:6px">${i+1}</span>${it.name}</span>
+              <span class="val">${it.qty} · ${fmtBaht(it.revenue)}</span>
+            </div>
+            <div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div>
+          </div>
+        `;
+      }).join('')
+    : '<div class="empty">— ยังไม่มี —</div>';
+
+  // Top customers + Near + Recent (existing)
   const near = customers
     .map(c => ({ c, prog: progressToNext(c), r: rewardsAvailable(c) }))
     .filter(x => x.prog.pct >= 80 && x.r === 0)
     .sort((a, b) => b.prog.pct - a.prog.pct);
   document.getElementById('nearList').innerHTML = near.length
-    ? near.map(x => `<div class="customer-item" onclick="goToCheck('${x.c.id}')"><div class="info"><div class="name">${x.c.name}</div>${x.c.phone?`<div class="phone">${x.c.phone}</div>`:''}<div class="meta">สะสม ${x.prog.current}/${x.prog.goal}</div></div></div>`).join('')
+    ? near.map(x => `<div class="item-row"><div class="rank gold">🔥</div><div class="name" style="flex:1"><b>${x.c.name}</b><div class="meta">${x.c.phone || '—'}</div></div><div class="val">${x.prog.current}/${x.prog.goal}</div></div>`).join('')
     : '<div class="empty">— ยังไม่มี —</div>';
 
   const top = [...customers].sort((a, b) => b.total_boxes - a.total_boxes).slice(0, 10);
   document.getElementById('topList').innerHTML = top.length
-    ? top.map((c, i) => `<div class="customer-item" onclick="goToCheck('${c.id}')"><div class="info"><div class="name">#${i+1} ${c.name}</div>${c.phone?`<div class="phone">${c.phone}</div>`:''}<div class="meta">รวม ${c.total_boxes} กล่อง · แลก ${c.redeemed_count}</div></div></div>`).join('')
+    ? top.map((c, i) => {
+        const rankClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
+        return `<div class="item-row" onclick="goToCheck('${c.id}')" style="cursor:pointer"><div class="rank ${rankClass}">${i+1}</div><div class="name" style="flex:1"><b>${c.name}</b><div class="meta">${c.phone ? c.phone + ' · ' : ''}แลกไป ${c.redeemed_count}</div></div><div class="val">${c.total_boxes} <span class="small">กล่อง</span></div></div>`;
+      }).join('')
     : '<div class="empty">— ยังไม่มี —</div>';
 
   const recent = db.orders.slice(-15).reverse();
@@ -1124,6 +1344,43 @@ function renderReports() {
         </div>`;
       }).join('')
     : '<div class="empty">— ยังไม่มี —</div>';
+}
+
+// SVG line chart for revenue trend
+function renderTrendChart(data) {
+  if (!data.length) return '<div class="empty">— ยังไม่มี —</div>';
+  const w = 600, h = 180, pad = 30;
+  const maxRev = Math.max(...data.map(d => d.revenue), 1);
+  const stepX = (w - pad * 2) / Math.max(data.length - 1, 1);
+  const points = data.map((d, i) => {
+    const x = pad + i * stepX;
+    const y = h - pad - (d.revenue / maxRev) * (h - pad * 2);
+    return { x, y, ...d };
+  });
+  const path = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const area = `${path} L${points[points.length-1].x.toFixed(1)},${h - pad} L${points[0].x.toFixed(1)},${h - pad} Z`;
+  // Y-axis labels (4 levels)
+  const yLabels = [0, 0.25, 0.5, 0.75, 1].map(p => Math.round(maxRev * p));
+  return `
+    <svg class="chart-svg" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="grad" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stop-color="#1652F0" stop-opacity=".3"/>
+          <stop offset="100%" stop-color="#1652F0" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      ${yLabels.map((v, i) => {
+        const y = h - pad - (i / (yLabels.length - 1)) * (h - pad * 2);
+        return `<line x1="${pad}" x2="${w-pad}" y1="${y}" y2="${y}" stroke="#f3f4f6" stroke-width="1"/>
+                <text x="${pad-4}" y="${y+3}" text-anchor="end" font-size="9" fill="#9ca3af">${fmtBaht(v).replace('฿','')}</text>`;
+      }).join('')}
+      <path d="${area}" fill="url(#grad)"/>
+      <path d="${path}" fill="none" stroke="#1652F0" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+      ${points.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="#fff" stroke="#1652F0" stroke-width="2"><title>${p.label}: ${fmtBaht(p.revenue)} (${p.boxes} กล่อง)</title></circle>`).join('')}
+      ${data.length <= 14 ? points.map((p, i) => `<text x="${p.x.toFixed(1)}" y="${h-8}" text-anchor="middle" font-size="9" fill="#5c6982">${p.label}</text>`).join('') :
+        points.filter((_, i) => i % Math.ceil(data.length / 7) === 0).map(p => `<text x="${p.x.toFixed(1)}" y="${h-8}" text-anchor="middle" font-size="9" fill="#5c6982">${p.label}</text>`).join('')}
+    </svg>
+  `;
 }
 
 // ========== Settings ==========
