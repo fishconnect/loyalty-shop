@@ -1,47 +1,56 @@
 // Menu data — แก้ไขได้ที่นี่ที่เดียว
 window.SHOP_INFO = {
   name: "ครัวผู้ใหญ่ปอง",
-  tagline: "อาหารตามสั่ง · ก๋วยเตี๋ยว",
+  tagline: "อาหารตามสั่ง · ก๋วยเตี๋ยว · เครื่องดื่ม",
   phone: "061-962-3696",
   logo: "logo.jpg",
   defaultImage: "assets/menu-placeholder.jpg",
 };
 
 // ============================================
-// Option presets — 7 แบบ
+// Option presets
 // ============================================
 const _EGGS_5 = ['ไข่ดาวสุก', 'ไข่ดาวไม่สุก', 'ไข่เจียว', 'ไข่ต้ม'];
-const _NOODLES = ['เส้นเล็ก', 'เส้นใหญ่', 'หมี่ขาว', 'บะหมี่', 'วุ้นเส้น', 'มาม่า'];
+const _NOODLES_KT = ['เส้นเล็ก', 'เส้นใหญ่', 'หมี่ขาว', 'บะหมี่', 'วุ้นเส้น', 'มาม่า'];   // ก๋วยเตี๋ยว 6 แบบ
+const _NOODLES_PS = ['เส้นใหญ่', 'เส้นหมี่', 'เส้นมาม่า', 'เส้นเล็ก'];                    // ผัดซีอิ๊ว/ราดหน้า 4 แบบ
 
-// 1) ราดข้าวกะเพรา group: เนื้อ max 3 + พิเศษ +10 (7 ตัวเลือก) + ไข่ +5
+// 1) ราดข้าวกะเพรา group: เนื้อ max 3 + พิเศษ +10 + ไข่ +5
 const OPT_KAPRAO = () => ([
   { kind: 'required', label: 'เลือกเนื้อ (สูงสุด 3 อย่าง)', min: 1, max: 3, priceEach: 0,
     choices: ['หมูสับ', 'หมูชิ้น', 'ไก่', 'เครื่องในไก่', 'หน่อไม้ดอง'] },
   { kind: 'addOn', label: 'เพิ่มของพิเศษ (+10)', min: 0, max: 99, priceEach: 10,
     choices: ['หมูกรอบ', 'กุ้ง', 'ปลาหมึก', 'ไข่เยี้ยวม้า', 'ไข่เจียวฟูกรอบ', 'รวมมิตร(หมู+หมึก+กุ้ง)', 'ไข่ข้น'] },
-  { kind: 'addOn', label: 'เพิ่มไข่ (+5)', min: 0, max: 99, priceEach: 5,
-    choices: [..._EGGS_5] }
+  { kind: 'addOn', label: 'เพิ่มไข่ (+5)', min: 0, max: 99, priceEach: 5, choices: [..._EGGS_5] }
 ]);
 
-// 2) ข้าวผัด/ผัดซีอิ้ว: เนื้อ max 1 (3 ตัวเลือก) + +10 (มีหมูกรอบ) + ไข่
-const OPT_STIRFRY_FULL = () => ([
+// 2) ข้าวผัด: เนื้อ max 1 (3 ตัว) + +10 (มีหมูกรอบ) + ไข่ +5
+const OPT_KAOPAD = () => ([
   { kind: 'required', label: 'เลือกเนื้อ', min: 1, max: 1, priceEach: 0,
     choices: ['หมูชิ้น', 'หมูสับ', 'ไก่'] },
   { kind: 'addOn', label: 'เพิ่มของพิเศษ (+10)', min: 0, max: 99, priceEach: 10,
     choices: ['รวมมิตร(หมู+หมึก+กุ้ง)', 'กุ้ง', 'ปลาหมึก', 'หมูกรอบ'] },
-  { kind: 'addOn', label: 'เพิ่มไข่ (+5)', min: 0, max: 99, priceEach: 5,
-    choices: [..._EGGS_5] }
+  { kind: 'addOn', label: 'เพิ่มไข่ (+5)', min: 0, max: 99, priceEach: 5, choices: [..._EGGS_5] }
 ]);
 
-// 3) ราดหน้า: เนื้อ max 1 + +10 (ไม่มีหมูกรอบ) + ไม่มีไข่
+// 3) ผัดซีอิ๊ว: เนื้อ max 1 + +10 (มีหมูกรอบ) + เลือกเส้น 4 แบบ (ฟรี)
+const OPT_PADSEEW = () => ([
+  { kind: 'required', label: 'เลือกเนื้อ', min: 1, max: 1, priceEach: 0,
+    choices: ['หมูชิ้น', 'หมูสับ', 'ไก่'] },
+  { kind: 'addOn', label: 'เพิ่มของพิเศษ (+10)', min: 0, max: 99, priceEach: 10,
+    choices: ['รวมมิตร(หมู+หมึก+กุ้ง)', 'กุ้ง', 'ปลาหมึก', 'หมูกรอบ'] },
+  { kind: 'required', label: 'เลือกเส้น', min: 1, max: 1, priceEach: 0, choices: [..._NOODLES_PS] }
+]);
+
+// 4) ราดหน้า: เนื้อ max 1 + +10 (ไม่มีหมูกรอบ) + เลือกเส้น 4 แบบ
 const OPT_RADNAA = () => ([
   { kind: 'required', label: 'เลือกเนื้อ', min: 1, max: 1, priceEach: 0,
     choices: ['หมูชิ้น', 'หมูสับ', 'ไก่'] },
   { kind: 'addOn', label: 'เพิ่มของพิเศษ (+10)', min: 0, max: 99, priceEach: 10,
-    choices: ['รวมมิตร(หมู+หมึก+กุ้ง)', 'กุ้ง', 'ปลาหมึก'] }
+    choices: ['รวมมิตร(หมู+หมึก+กุ้ง)', 'กุ้ง', 'ปลาหมึก'] },
+  { kind: 'required', label: 'เลือกเส้น', min: 1, max: 1, priceEach: 0, choices: [..._NOODLES_PS] }
 ]);
 
-// 4) สุกี้: เนื้อ max 1 (หมูชิ้น/ไก่) + +5 (รวมมิตร/กุ้ง/ปลาหมึก) — ไม่มีไข่
+// 5) สุกี้: เนื้อ max 1 (หมูชิ้น/ไก่) + +5 (รวมมิตร/กุ้ง/ปลาหมึก)
 const OPT_SUKI = () => ([
   { kind: 'required', label: 'เลือกเนื้อ', min: 1, max: 1, priceEach: 0,
     choices: ['หมูชิ้น', 'ไก่'] },
@@ -49,25 +58,30 @@ const OPT_SUKI = () => ([
     choices: ['รวมมิตร(หมู+หมึก+กุ้ง)', 'กุ้ง', 'ปลาหมึก'] }
 ]);
 
-// 5) เมนูพิเศษ: ไข่ +5 อย่างเดียว
+// 6) เมนูพิเศษ: ไข่ +5 อย่างเดียว
 const OPT_EGG_ONLY = () => ([
   { kind: 'addOn', label: 'เพิ่มไข่ (+5)', min: 0, max: 99, priceEach: 5, choices: [..._EGGS_5] }
 ]);
 
-// 6) ก๋วยเตี๋ยว/เย็นตาโฟ ปกติ: เลือกเส้น
+// 7) ก๋วยเตี๋ยว/เย็นตาโฟ ปกติ: เลือกเส้น 6 แบบ
 const OPT_NOODLE_ONLY = () => ([
-  { kind: 'required', label: 'เลือกเส้น', min: 1, max: 1, priceEach: 0, choices: [..._NOODLES] }
+  { kind: 'required', label: 'เลือกเส้น', min: 1, max: 1, priceEach: 0, choices: [..._NOODLES_KT] }
 ]);
 
-// 7) ต้มยำ: เลือกเส้น + รวมมิตรทะเล +10
+// 8) ต้มยำ: เลือกเส้น + รวมมิตรทะเล +10
 const OPT_NOODLE_TOMYUM = () => ([
-  { kind: 'required', label: 'เลือกเส้น', min: 1, max: 1, priceEach: 0, choices: [..._NOODLES] },
+  { kind: 'required', label: 'เลือกเส้น', min: 1, max: 1, priceEach: 0, choices: [..._NOODLES_KT] },
   { kind: 'addOn', label: 'เพิ่ม (+10)', min: 0, max: 1, priceEach: 10, choices: ['รวมมิตรทะเล (หมู+หมึก+กุ้ง)'] }
 ]);
 
-// 8) เกี๋ยว: รวมมิตรทะเล +10
+// 9) เกี๋ยว / เกาเหลา: รวมมิตรทะเล +10
 const OPT_KIEW = () => ([
   { kind: 'addOn', label: 'เพิ่ม (+10)', min: 0, max: 1, priceEach: 10, choices: ['รวมมิตรทะเล (หมู+หมึก+กุ้ง)'] }
+]);
+
+// 10) เครื่องดื่มที่ปั่นได้: ปั่น +5 (optional, max 1)
+const OPT_DRINK_BLEND = () => ([
+  { kind: 'addOn', label: 'ตัวเลือก (+5)', min: 0, max: 1, priceEach: 5, choices: ['ปั่น'] }
 ]);
 
 // ============================================
@@ -93,8 +107,8 @@ window.MENU = [
     cat: "ข้าวผัด / ผัดเส้น",
     emoji: "🍚",
     items: [
-      { id: 'sf-001', name: 'ข้าวผัด',  price: 40, optionGroups: OPT_STIRFRY_FULL() },
-      { id: 'sf-002', name: 'ผัดซีอิ้ว', price: 40, optionGroups: OPT_STIRFRY_FULL() },
+      { id: 'sf-001', name: 'ข้าวผัด',  price: 40, optionGroups: OPT_KAOPAD() },
+      { id: 'sf-002', name: 'ผัดซีอิ๊ว', price: 40, optionGroups: OPT_PADSEEW() },
       { id: 'sf-003', name: 'ราดหน้า',  price: 40, optionGroups: OPT_RADNAA() },
     ]
   },
@@ -112,26 +126,28 @@ window.MENU = [
     items: [
       { id: 'sp-001', name: 'ราดข้าว ปลาหมึกผัดไข่เค็ม',          price: 60, optionGroups: OPT_EGG_ONLY() },
       { id: 'sp-002', name: 'ราดข้าว ผัดเผ็ดหมูป่า',                price: 50, optionGroups: OPT_EGG_ONLY() },
-      { id: 'sp-003', name: 'ราดข้าว ผัดพริกปลาดุกสด',              price: 50, optionGroups: OPT_EGG_ONLY() },
-      { id: 'sp-004', name: 'ราดข้าว ผัดพริกปลาดุกทอด',             price: 50, optionGroups: OPT_EGG_ONLY() },
-      { id: 'sp-005', name: 'ราดข้าว สามชั้นทอดน้ำปลา',              price: 50, optionGroups: OPT_EGG_ONLY() },
-      { id: 'sp-006', name: 'ราดข้าว สามชั้นคั่วพริกเกลือ',          price: 50, optionGroups: OPT_EGG_ONLY() },
-      { id: 'sp-007', name: 'ราดข้าว หมูกรอบคั่วพริกเกลือ',          price: 50, optionGroups: OPT_EGG_ONLY() },
-      { id: 'sp-008', name: 'ราดข้าว ห่อหมกทะเลไข่ข้น',              price: 50, optionGroups: OPT_EGG_ONLY() },
-      { id: 'sp-009', name: 'ราดข้าว กระเพราหมูสับใส้กรอกแดง',       price: 40, optionGroups: OPT_EGG_ONLY() },
-      { id: 'sp-010', name: 'ราดข้าว กระเพราหมูสับ + หมูยอ',         price: 40, optionGroups: OPT_EGG_ONLY() },
-      { id: 'sp-011', name: 'ราดข้าว ผัดเต้าหู้หมูสับ',               price: 40, optionGroups: OPT_EGG_ONLY() },
+      { id: 'sp-003', name: 'ราดข้าว ผัดกระเพราหมูป่า',              price: 50, optionGroups: OPT_EGG_ONLY() },
+      { id: 'sp-004', name: 'ราดข้าว ผัดพริกปลาดุกสด',              price: 50, optionGroups: OPT_EGG_ONLY() },
+      { id: 'sp-005', name: 'ราดข้าว ผัดพริกปลาดุกทอด',             price: 50, optionGroups: OPT_EGG_ONLY() },
+      { id: 'sp-006', name: 'ราดข้าว สามชั้นทอดน้ำปลา',              price: 50, optionGroups: OPT_EGG_ONLY() },
+      { id: 'sp-007', name: 'ราดข้าว สามชั้นคั่วพริกเกลือ',          price: 50, optionGroups: OPT_EGG_ONLY() },
+      { id: 'sp-008', name: 'ราดข้าว หมูกรอบคั่วพริกเกลือ',          price: 50, optionGroups: OPT_EGG_ONLY() },
+      { id: 'sp-009', name: 'ราดข้าว ห่อหมกทะเลไข่ข้น',              price: 50, optionGroups: OPT_EGG_ONLY() },
+      { id: 'sp-010', name: 'ราดข้าว กระเพราหมูสับใส้กรอกแดง',       price: 40, optionGroups: OPT_EGG_ONLY() },
+      { id: 'sp-011', name: 'ราดข้าว กระเพราหมูสับ + หมูยอ',         price: 40, optionGroups: OPT_EGG_ONLY() },
+      { id: 'sp-012', name: 'ราดข้าว ผัดเต้าหู้หมูสับ',               price: 40, optionGroups: OPT_EGG_ONLY() },
     ]
   },
   {
     cat: "ยำ",
     emoji: "🥗",
     items: [
-      { id: 'ym-001', name: 'ยำวุ้นเส้น',          price: 50 },
-      { id: 'ym-002', name: 'ยำมาม่า',              price: 50 },
-      { id: 'ym-003', name: 'ยำรวมมิตร',           price: 50 },
-      { id: 'ym-004', name: 'ราดข้าว ยำไข่เจียว',  price: 45 },
-      { id: 'ym-005', name: 'ราดข้าว ยำไข่ดาว',    price: 40 },
+      { id: 'ym-001', name: 'ยำวุ้นเส้นรวมมิตร',     price: 50 },
+      { id: 'ym-002', name: 'ยำมาม่ารวมมิตร',          price: 50 },
+      { id: 'ym-003', name: 'ยำรวมมิตร (ไม่ใส่เส้น)', price: 50 },
+      { id: 'ym-004', name: 'ยำไข่เยี่ยวม้า',          price: 50 },
+      { id: 'ym-005', name: 'ราดข้าว ยำไข่เจียว',     price: 45 },
+      { id: 'ym-006', name: 'ราดข้าว ยำไข่ดาว',       price: 40 },
     ]
   },
   {
@@ -142,6 +158,13 @@ window.MENU = [
       { id: 'tn-002', name: 'เฟร์นฟรายทอด',            price: 39 },
       { id: 'tn-003', name: 'ไก่ป๊อบ',                  price: 49 },
       { id: 'tn-004', name: 'เฟร์นฟรายทอด + ไก่ป๊อบ',  price: 59 },
+    ]
+  },
+  {
+    cat: "ข้าว / ของเสริม",
+    emoji: "🍚",
+    items: [
+      { id: 'rc-001', name: 'ข้าวเปล่า', price: 5 },
     ]
   },
   {
@@ -163,11 +186,51 @@ window.MENU = [
     ]
   },
   {
-    cat: "เครื่องดื่ม",
+    cat: "เกาเหลา",
+    emoji: "🍲",
+    items: [
+      { id: 'kl-001', name: 'เกาเหลาหมู น้ำใส',        price: 40, optionGroups: OPT_KIEW() },
+      { id: 'kl-002', name: 'เกาเหลาเย็นตาโฟ',         price: 40, optionGroups: OPT_KIEW() },
+      { id: 'kl-003', name: 'เกาเหลาหมู ต้มยำ',        price: 40, optionGroups: OPT_KIEW() },
+      { id: 'kl-004', name: 'เกาเหลาเย็นตาโฟ ต้มยำ',  price: 40, optionGroups: OPT_KIEW() },
+    ]
+  },
+  {
+    cat: "เครื่องดื่ม - ชา/กาแฟ/นม",
     emoji: "🥤",
     items: [
-      { id: 'dr-001', name: 'ชานมไข่มุก', price: 20 },
-      { id: 'dr-002', name: 'น้ำอัดลม',    price: 20 },
+      { id: 'dr-001', name: 'ชานมไต้หวั่น', price: 25, optionGroups: OPT_DRINK_BLEND() },
+      { id: 'dr-002', name: 'ชาไทย',          price: 25, optionGroups: OPT_DRINK_BLEND() },
+      { id: 'dr-003', name: 'ชาเขียว',        price: 25, optionGroups: OPT_DRINK_BLEND() },
+      { id: 'dr-004', name: 'กาแฟสด',         price: 35, optionGroups: OPT_DRINK_BLEND() },
+      { id: 'dr-005', name: 'กาแฟเนส',        price: 25, optionGroups: OPT_DRINK_BLEND() },
+      { id: 'dr-006', name: 'โกโก้',           price: 25, optionGroups: OPT_DRINK_BLEND() },
+      { id: 'dr-007', name: 'นมชมพู',          price: 25, optionGroups: OPT_DRINK_BLEND() },
+      { id: 'dr-008', name: 'ชาดำเย็น',        price: 20, optionGroups: OPT_DRINK_BLEND() },
+    ]
+  },
+  {
+    cat: "เครื่องดื่ม - โซดาผลไม้",
+    emoji: "🍹",
+    items: [
+      { id: 'dr-101', name: 'น้ำแดงโซดา',       price: 20, optionGroups: OPT_DRINK_BLEND() },
+      { id: 'dr-102', name: 'น้ำเขียวโซดา',     price: 20, optionGroups: OPT_DRINK_BLEND() },
+      { id: 'dr-103', name: 'สเตอร์เบอรี่โซดา', price: 20, optionGroups: OPT_DRINK_BLEND() },
+      { id: 'dr-104', name: 'บลูฮาวายโซดา',     price: 20, optionGroups: OPT_DRINK_BLEND() },
+      { id: 'dr-105', name: 'ลิ้นจี่โซดา',       price: 20, optionGroups: OPT_DRINK_BLEND() },
+      { id: 'dr-106', name: 'สัปปะรดโซดา',     price: 20, optionGroups: OPT_DRINK_BLEND() },
+    ]
+  },
+  {
+    cat: "เครื่องดื่ม - แก้วโอ่ง",
+    emoji: "🧊",
+    items: [
+      { id: 'dr-201', name: 'โค๊กแก้วโอ่ง',                price: 20 },
+      { id: 'dr-202', name: 'น้ำแดงแฟนต้าแก้วโอ่ง',      price: 20 },
+      { id: 'dr-203', name: 'น้ำเขียวแฟนต้าแก้วโอ่ง',     price: 20 },
+      { id: 'dr-204', name: 'น้ำส้มแฟนต้าแก้วโอ่ง',       price: 20 },
+      { id: 'dr-205', name: 'สไปร์แก้วโอ่ง',               price: 20 },
+      { id: 'dr-206', name: 'น้ำแข็งเปล่าแก้วโอ่ง',        price: 5 },
     ]
   },
 ];
@@ -180,13 +243,21 @@ window.LOYALTY = {
   SIGNUP_BONUS: 5,                   // สมัครครั้งแรก +5
   REWARD_DRINK_POINTS: 10,           // 10 แต้ม = ฟรีเครื่องดื่ม
   REWARD_DISCOUNT_POINTS: 15,        // 15 แต้ม = ลด 50฿
-  REWARD_DISCOUNT_AMOUNT: 50,        // จำนวนเงินที่ลด
-  AWARD_ON_STATUS: 'delivered',      // ได้แต้มเมื่อสถานะนี้
-  // เมนูเครื่องดื่มที่ใช้แลกได้ (10 แต้ม)
-  DRINK_REWARD_IDS: ['dr-001', 'dr-002'],
+  REWARD_DISCOUNT_AMOUNT: 50,
+  AWARD_ON_STATUS: 'delivered',
+  // เครื่องดื่มที่ใช้แลกได้ด้วย 10 แต้ม
+  // ชานมไต้หวั่น 25฿ + แก้วโอ่ง 20฿ ทุกตัว (ยกเว้นน้ำแข็งเปล่า)
+  DRINK_REWARD_IDS: [
+    'dr-001',  // ชานมไต้หวั่น 25
+    'dr-201',  // โค๊กแก้วโอ่ง 20
+    'dr-202',  // น้ำแดงแฟนต้าแก้วโอ่ง 20
+    'dr-203',  // น้ำเขียวแฟนต้าแก้วโอ่ง 20
+    'dr-204',  // น้ำส้มแฟนต้าแก้วโอ่ง 20
+    'dr-205',  // สไปร์แก้วโอ่ง 20
+  ],
 };
 
-// คำนวณแต้มจากยอดเงิน (เศษทศนิยมปัด floor — 99฿ ได้ 1 แต้ม, 100฿ ได้ 2 แต้ม)
+// คำนวณแต้มจากยอดเงิน
 window.calcPointsFromAmount = function(amount) {
   return Math.floor((amount || 0) * LOYALTY.POINTS_PER_BAHT);
 };
