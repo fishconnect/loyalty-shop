@@ -482,6 +482,78 @@
     display: inline-block; background: #ebf0ff; color: #0a1530;
     padding: 2px 8px; border-radius: 999px; font-size: 11px; margin-left: 6px;
   }
+  /* Rewards box (in cart) */
+  .rewards-card {
+    margin-top: 14px; padding: 14px;
+    background: linear-gradient(135deg, #fef3c7, #fde68a);
+    border-radius: 14px; border: 2px solid #f59e0b;
+  }
+  .rewards-card h3 {
+    font-size: 14px; color: #92400e; margin-bottom: 10px; font-weight: 800;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .rewards-card .pts-badge {
+    background: #f59e0b; color: #fff; padding: 3px 10px;
+    border-radius: 999px; font-size: 12px; font-weight: 800;
+  }
+  .reward-toggle {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 14px; background: #fff; border-radius: 12px;
+    margin-bottom: 8px; cursor: pointer; user-select: none;
+    border: 2px solid transparent; transition: all .15s;
+  }
+  .reward-toggle:hover { border-color: #f59e0b; }
+  .reward-toggle.active {
+    background: linear-gradient(135deg, #16a34a, #15803d);
+    color: #fff; border-color: #16a34a;
+  }
+  .reward-toggle .check-circle {
+    width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+    border: 2px solid #d1d5db; display: grid; place-items: center;
+    background: #fff; transition: all .15s;
+  }
+  .reward-toggle.active .check-circle { background: #fff; border-color: #fff; color: #16a34a; }
+  .reward-toggle.active .check-circle::before { content: '✓'; font-weight: 900; font-size: 14px; }
+  .reward-toggle .body { flex: 1; }
+  .reward-toggle .body .title { font-weight: 800; font-size: 14px; }
+  .reward-toggle .body .meta { font-size: 11px; opacity: .85; margin-top: 2px; }
+  .reward-toggle .pts-cost {
+    background: #fef3c7; color: #92400e;
+    padding: 4px 10px; border-radius: 999px;
+    font-size: 11px; font-weight: 800; flex-shrink: 0;
+  }
+  .reward-toggle.active .pts-cost { background: rgba(255,255,255,.25); color: #fff; }
+  .drink-picker {
+    margin-top: 8px; padding: 8px;
+    background: rgba(255,255,255,.4); border-radius: 10px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+  }
+  .drink-pick-btn {
+    padding: 10px 8px; background: #fff; border: 1.5px solid #d1d5db;
+    border-radius: 10px; font-size: 12px; font-weight: 700;
+    cursor: pointer; text-align: center; color: #1f2a44;
+  }
+  .drink-pick-btn:hover { border-color: #1652F0; }
+  .drink-pick-btn.active {
+    background: #1652F0; color: #fff; border-color: #1652F0;
+  }
+  .reward-summary {
+    margin-top: 10px; padding: 10px 12px;
+    background: rgba(255,255,255,.6); border-radius: 10px;
+    font-size: 12px; color: #92400e;
+    display: flex; justify-content: space-between; font-weight: 700;
+  }
+  .reward-summary b { font-weight: 900; }
+
+  /* Order breakdown */
+  .breakdown-row {
+    display: flex; justify-content: space-between;
+    padding: 4px 0; font-size: 13px;
+  }
+  .breakdown-row.subtotal { color: #1f2a44; font-weight: 700; }
+  .breakdown-row.discount { color: #dc2626; font-weight: 700; }
+  .breakdown-row.free { color: #16a34a; font-weight: 700; }
+  .breakdown-row.total { color: #1652F0; font-weight: 900; font-size: 16px; padding-top: 8px; border-top: 1.5px dashed #d1ddff; margin-top: 6px; }
 </style>
 </head>
 <body>
@@ -593,8 +665,14 @@
         <label>👤 ชื่อ (เฉพาะลูกค้าใหม่)</label>
         <input type="text" class="cust-input" id="custFullName" placeholder="คุณ...">
 
-        <button class="btn btn-confirm" onclick="submitOrder()">
-          ✅ ยืนยันสั่งอาหาร
+        <!-- 🎁 Rewards selection — visible only when customer has redemption-eligible points -->
+        <div id="rewardsBox" style="display:none"></div>
+
+        <!-- Order summary breakdown (totals + discount) -->
+        <div id="orderBreakdown" style="margin-top:14px;padding:12px 14px;background:#f7f8fb;border-radius:12px;font-size:14px"></div>
+
+        <button class="btn btn-confirm" onclick="submitOrder()" style="margin-top:14px">
+          ✅ ยืนยันสั่งอาหาร <span id="confirmTotal" style="font-weight:900"></span>
         </button>
       </div>
 
@@ -920,6 +998,10 @@ function updateCartBar() {
 function openCart() {
   renderCartLines();
   document.getElementById('modalCart').classList.add('show');
+  // Re-check customer + render rewards/breakdown when cart opens
+  if (typeof checkCustomer === 'function') checkCustomer();
+  if (typeof renderRewardsBox === 'function') renderRewardsBox();
+  if (typeof renderOrderBreakdown === 'function') renderOrderBreakdown();
 }
 function closeCart() { document.getElementById('modalCart').classList.remove('show'); }
 
@@ -976,6 +1058,9 @@ function renderCartLines() {
   document.getElementById('modalTotal').textContent = '฿' + total;
   document.getElementById('cartSummary').style.display = 'flex';
   document.getElementById('customerForm').style.display = 'block';
+  // Re-render rewards + breakdown when cart changes
+  if (typeof renderRewardsBox === 'function') renderRewardsBox();
+  if (typeof renderOrderBreakdown === 'function') renderOrderBreakdown();
 }
 
 function removeLine(cartId) {
@@ -997,23 +1082,188 @@ function adjustLineQty(cartId, delta) {
 }
 
 // ============ Customer Lookup ============
+// State for selected rewards in cart
+let cartRewards = {
+  useDiscount: false,
+  useDrink: false,
+  selectedDrinkId: null,
+};
+function resetCartRewards() {
+  cartRewards = { useDiscount: false, useDrink: false, selectedDrinkId: null };
+}
+
 function checkCustomer() {
   const phone = normPhone(document.getElementById('custPhone').value);
   const found = document.getElementById('custFound');
   const nameInput = document.getElementById('custFullName');
-  if (phone.length < 9) { found.innerHTML = ''; return; }
+  if (phone.length < 9) {
+    found.innerHTML = '';
+    resetCartRewards();
+    renderRewardsBox();
+    renderOrderBreakdown();
+    return;
+  }
   const db = loadDB();
   const c = db.customers[phone];
   if (c) {
     const pts = c.points || 0;
-    let rewardStr = '';
-    if (pts >= LOYALTY.REWARD_DISCOUNT_POINTS) rewardStr = ` · 🎁 ใช้ 15 แต้ม ลด 50฿ ได้!`;
-    else if (pts >= LOYALTY.REWARD_DRINK_POINTS) rewardStr = ` · 🥤 ใช้ 10 แต้ม ฟรีเครื่องดื่ม!`;
-    found.innerHTML = `<div class="customer-found ok">✅ ลูกค้าเดิม: <b>${c.name}</b> · 🌟 ${pts} แต้ม${rewardStr}</div>`;
+    found.innerHTML = `<div class="customer-found ok">✅ ลูกค้าเดิม: <b>${c.name}</b> · 🌟 ${pts} แต้ม</div>`;
     nameInput.value = c.name === 'ไม่ระบุชื่อ' ? '' : c.name;
   } else {
     found.innerHTML = `<div class="customer-found new">🆕 ลูกค้าใหม่ — สมัครรับ +5 แต้มฟรี!</div>`;
+    resetCartRewards();
   }
+  renderRewardsBox();
+  renderOrderBreakdown();
+}
+
+// Render rewards selection box (only if customer has eligible points)
+function renderRewardsBox() {
+  const box = document.getElementById('rewardsBox');
+  if (!box) return;
+  const phone = normPhone(document.getElementById('custPhone').value);
+  if (phone.length < 9) { box.style.display = 'none'; return; }
+  const c = loadDB().customers[phone];
+  if (!c) { box.style.display = 'none'; return; }
+  const pts = c.points || 0;
+  if (pts < LOYALTY.REWARD_DRINK_POINTS) { box.style.display = 'none'; return; }
+
+  // Calculate cart subtotal (without rewards applied yet)
+  const cartSubtotal = cart.reduce((s, line) => s + calcLineTotal(line), 0);
+
+  const drinkPt = LOYALTY.REWARD_DRINK_POINTS;
+  const discountPt = LOYALTY.REWARD_DISCOUNT_POINTS;
+  const discountAmt = LOYALTY.REWARD_DISCOUNT_AMOUNT;
+
+  // Used/Remaining points
+  const usedPts = (cartRewards.useDiscount ? discountPt : 0) + (cartRewards.useDrink ? drinkPt : 0);
+  const remainingPts = pts - usedPts;
+
+  // Eligibility (after current selections)
+  const canStillDiscount = (pts - (cartRewards.useDrink ? drinkPt : 0)) >= discountPt && cartSubtotal > 0;
+  const canStillDrink    = (pts - (cartRewards.useDiscount ? discountPt : 0)) >= drinkPt;
+
+  // Build drink picker HTML
+  let drinkPickerHTML = '';
+  if (cartRewards.useDrink) {
+    drinkPickerHTML = `
+      <div class="drink-picker">
+        ${LOYALTY.DRINK_REWARD_IDS.map(id => {
+          const drink = findItem(id)?.item;
+          if (!drink) return '';
+          const active = cartRewards.selectedDrinkId === id;
+          return `
+            <div class="drink-pick-btn ${active?'active':''}" onclick="selectRewardDrink('${id}')">
+              ${drink.name}<br><small>฿${drink.price}</small>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }
+
+  box.style.display = 'block';
+  box.className = 'rewards-card';
+  box.innerHTML = `
+    <h3>🎁 ใช้แต้มสะสม <span class="pts-badge">🌟 ${pts} แต้ม</span></h3>
+
+    <div class="reward-toggle ${cartRewards.useDiscount?'active':''}" onclick="toggleRewardDiscount()" ${!cartRewards.useDiscount && !canStillDiscount ? 'style="opacity:.5;pointer-events:none"' : ''}>
+      <div class="check-circle"></div>
+      <div class="body">
+        <div class="title">💰 ลด ฿${Math.min(discountAmt, cartSubtotal || discountAmt)} จากบิล</div>
+        <div class="meta">${cartSubtotal === 0 ? 'ใส่ของในตะกร้าก่อน' : (canStillDiscount || cartRewards.useDiscount ? 'ใช้กับเมนูใดก็ได้' : 'แต้มไม่พอ')}</div>
+      </div>
+      <div class="pts-cost">−${discountPt} แต้ม</div>
+    </div>
+
+    <div class="reward-toggle ${cartRewards.useDrink?'active':''}" onclick="toggleRewardDrink()" ${!cartRewards.useDrink && !canStillDrink ? 'style="opacity:.5;pointer-events:none"' : ''}>
+      <div class="check-circle"></div>
+      <div class="body">
+        <div class="title">🥤 ฟรีเครื่องดื่ม 1 แก้ว</div>
+        <div class="meta">${canStillDrink || cartRewards.useDrink ? (cartRewards.useDrink ? 'เลือกเครื่องดื่มด้านล่าง' : 'ชานมไต้หวั่น / น้ำแก้วโอ่ง') : 'แต้มไม่พอ'}</div>
+      </div>
+      <div class="pts-cost">−${drinkPt} แต้ม</div>
+    </div>
+    ${drinkPickerHTML}
+
+    <div class="reward-summary">
+      <span>ใช้แต้ม: <b>${usedPts}</b></span>
+      <span>คงเหลือ: <b>${remainingPts}</b> แต้ม</span>
+    </div>
+  `;
+}
+
+function toggleRewardDiscount() {
+  if (!cartRewards.useDiscount) {
+    const phone = normPhone(document.getElementById('custPhone').value);
+    const c = loadDB().customers[phone];
+    if (!c) return;
+    const pts = c.points || 0;
+    const remaining = pts - (cartRewards.useDrink ? LOYALTY.REWARD_DRINK_POINTS : 0);
+    if (remaining < LOYALTY.REWARD_DISCOUNT_POINTS) { toast('แต้มไม่พอ', true); return; }
+    const cartSubtotal = cart.reduce((s, line) => s + calcLineTotal(line), 0);
+    if (cartSubtotal <= 0) { toast('ใส่ของในตะกร้าก่อน', true); return; }
+  }
+  cartRewards.useDiscount = !cartRewards.useDiscount;
+  renderRewardsBox();
+  renderOrderBreakdown();
+}
+
+function toggleRewardDrink() {
+  if (!cartRewards.useDrink) {
+    const phone = normPhone(document.getElementById('custPhone').value);
+    const c = loadDB().customers[phone];
+    if (!c) return;
+    const pts = c.points || 0;
+    const remaining = pts - (cartRewards.useDiscount ? LOYALTY.REWARD_DISCOUNT_POINTS : 0);
+    if (remaining < LOYALTY.REWARD_DRINK_POINTS) { toast('แต้มไม่พอ', true); return; }
+    // Auto-pick first drink as default
+    if (!cartRewards.selectedDrinkId) cartRewards.selectedDrinkId = LOYALTY.DRINK_REWARD_IDS[0];
+  } else {
+    cartRewards.selectedDrinkId = null;
+  }
+  cartRewards.useDrink = !cartRewards.useDrink;
+  renderRewardsBox();
+  renderOrderBreakdown();
+}
+
+function selectRewardDrink(drinkId) {
+  cartRewards.selectedDrinkId = drinkId;
+  renderRewardsBox();
+  renderOrderBreakdown();
+}
+
+// Render order breakdown (subtotal, discount, total)
+function renderOrderBreakdown() {
+  const el = document.getElementById('orderBreakdown');
+  if (!el) return;
+  const cartSubtotal = cart.reduce((s, line) => s + calcLineTotal(line), 0);
+  if (cartSubtotal === 0) { el.innerHTML = ''; document.getElementById('confirmTotal').textContent = ''; return; }
+
+  const drinkPt = LOYALTY.REWARD_DRINK_POINTS;
+  const discountPt = LOYALTY.REWARD_DISCOUNT_POINTS;
+  const discountAmt = LOYALTY.REWARD_DISCOUNT_AMOUNT;
+
+  let drinkValue = 0;
+  let drinkName = '';
+  if (cartRewards.useDrink && cartRewards.selectedDrinkId) {
+    const drink = findItem(cartRewards.selectedDrinkId)?.item;
+    if (drink) {
+      drinkValue = drink.price;
+      drinkName = drink.name;
+    }
+  }
+  const discountValue = cartRewards.useDiscount ? Math.min(discountAmt, cartSubtotal) : 0;
+  // Subtotal (cart only) + drink (free) - discount
+  const finalTotal = Math.max(0, cartSubtotal - discountValue);
+
+  el.innerHTML = `
+    <div class="breakdown-row subtotal"><span>ค่าอาหาร</span><span>฿${cartSubtotal}</span></div>
+    ${cartRewards.useDrink && drinkValue > 0 ? `<div class="breakdown-row free"><span>+ ฟรี ${drinkName}</span><span>ฟรี (฿${drinkValue})</span></div>` : ''}
+    ${cartRewards.useDiscount ? `<div class="breakdown-row discount"><span>− ส่วนลด (15 แต้ม)</span><span>−฿${discountValue}</span></div>` : ''}
+    <div class="breakdown-row total"><span>ยอดที่ต้องจ่าย</span><span>฿${finalTotal}</span></div>
+  `;
+  document.getElementById('confirmTotal').textContent = ` · ฿${finalTotal}`;
 }
 
 // ============ Submit Order ============
@@ -1100,19 +1350,74 @@ async function submitOrder() {
   });
 
   if (!db.pendingOrders) db.pendingOrders = [];
-  const total = items.reduce((s, it) => s + it.price * it.qty, 0);
+  // Original total = sum of regular cart items (used for points calculation later)
+  const cartSubtotal = items.reduce((s, it) => s + it.price * it.qty, 0);
+
+  // Apply selected rewards (customer-driven)
+  const redemptions = [];
+  let discountTotal = 0;
+  // Add free drink as item
+  if (cartRewards.useDrink && cartRewards.selectedDrinkId) {
+    const drink = findItem(cartRewards.selectedDrinkId)?.item;
+    if (drink) {
+      items.push({
+        id: drink.id, name: drink.name, mainName: drink.name,
+        price: drink.price, qty: 1, freeQty: 1, isReward: true,
+        options: [], note: ''
+      });
+      redemptions.push({
+        type: 'drink', drinkId: drink.id, label: drink.name,
+        points_used: LOYALTY.REWARD_DRINK_POINTS, value: drink.price,
+        at: new Date().toISOString()
+      });
+      discountTotal += drink.price; // free drink value counts in discount
+    }
+  }
+  // Apply discount
+  if (cartRewards.useDiscount) {
+    const discountValue = Math.min(LOYALTY.REWARD_DISCOUNT_AMOUNT, cartSubtotal);
+    redemptions.push({
+      type: 'discount', label: `ลด ฿${discountValue}`,
+      points_used: LOYALTY.REWARD_DISCOUNT_POINTS, value: discountValue,
+      at: new Date().toISOString()
+    });
+    discountTotal += discountValue;
+  }
+
+  // What customer pays = cart subtotal - dish discount (free drink doesn't add)
+  const finalTotal = Math.max(0, cartSubtotal - (cartRewards.useDiscount ? Math.min(LOYALTY.REWARD_DISCOUNT_AMOUNT, cartSubtotal) : 0));
+
+  // Deduct points immediately
+  if (redemptions.length > 0) {
+    const totalPtsUsed = redemptions.reduce((s, r) => s + r.points_used, 0);
+    customer.points = Math.max(0, (customer.points || 0) - totalPtsUsed);
+    if (cartRewards.useDrink) customer.drink_redeemed_count = (customer.drink_redeemed_count || 0) + 1;
+    if (cartRewards.useDiscount) customer.dish_redeemed_count = (customer.dish_redeemed_count || 0) + 1;
+    db.customers[customerId] = customer;
+  }
+
   const orderId = 'PO' + Date.now();
-  db.pendingOrders.push({
+  const orderRecord = {
     id: orderId,
     date: new Date().toISOString(),
     customer_id: customerId,
     customer_name: customer.name,
     customer_phone: phone || '',
-    items, total,
+    items,
+    total: finalTotal,
     note: '',
     status: 'pending',
     source: isShopMode ? 'walk-in' : 'online',
-  });
+  };
+  // Preserve original for points calculation
+  if (redemptions.length > 0) {
+    orderRecord.redemptions = redemptions;
+    orderRecord.discount = discountTotal;
+    orderRecord.original_total = cartSubtotal;
+    // Note: original_items stored without the free drink (so we don't double-count)
+    orderRecord.original_items = JSON.parse(JSON.stringify(items.filter(it => !it.isReward)));
+  }
+  db.pendingOrders.push(orderRecord);
 
   saveDB(db);
 
@@ -1142,6 +1447,7 @@ async function submitOrder() {
 
   cart = [];
   sessionStorage.removeItem('cartV2');
+  resetCartRewards();
 
   if (isShopMode) {
     // Stay on menu, clear form, show toast

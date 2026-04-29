@@ -425,25 +425,9 @@ function render() {
     const status = o.status || 'pending';
     const stat = window.STATUSES[status] || window.STATUSES.pending;
     const isActive = !['delivered','done','cancelled'].includes(status);
-    const rewardInfo = isActive ? getRewardInfo(o) : { points: 0, canDrink: false, canDiscount: false };
     const hasRedemptionsApplied = (o.redemptions || []).length > 0;
-    const showRewardButton = isActive && (rewardInfo.canDrink || rewardInfo.canDiscount || hasRedemptionsApplied);
-    // Reward banner: customer eligible but hasn't redeemed yet
-    const showRewardBanner = isActive && (rewardInfo.canDrink || rewardInfo.canDiscount) && !hasRedemptionsApplied;
-    const bannerLabel = rewardInfo.points >= 25 ? `🎁🎁 ใช้ทั้ง 2 ได้! (ลด 50฿ + ฟรีเครื่องดื่ม)`
-                      : rewardInfo.canDiscount  ? `💰 ใช้ลด 50฿ ได้!`
-                      : `🥤 ฟรีเครื่องดื่มได้!`;
     return `
       <div class="order ${status}">
-        ${showRewardBanner ? `
-          <div onclick="openFreePrompt('${o.id}')" style="background:linear-gradient(135deg,#fef3c7,#fde68a);padding:10px 14px;border-bottom:3px solid #f59e0b;cursor:pointer;display:flex;justify-content:space-between;align-items:center;animation:rewardPulse 1.8s ease-in-out infinite">
-            <div>
-              <div style="font-weight:800;color:#92400e;font-size:13px">${bannerLabel}</div>
-              <div style="font-size:11px;color:#92400e;opacity:.8;margin-top:2px">ลูกค้ามี ${rewardInfo.points} แต้ม · กดเพื่อเลือก</div>
-            </div>
-            <div style="background:#f59e0b;color:#fff;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:800">ใช้แต้ม →</div>
-          </div>
-        ` : ''}
         <div class="order-head" style="background:${status==='cancelled'?'#fee2e2':status==='delivered'||status==='done'?'#f3f4f6':'#f7f8fb'}">
           <div>
             <div class="name">${o.customer_name}</div>
@@ -498,13 +482,6 @@ function render() {
           <span class="total">฿${o.total} <span class="small">${o.discount?'ลูกค้าจ่าย':'รวม'}</span></span>
         </div>
         ${isActive ? `
-          ${showRewardButton ? `
-            <div style="padding:8px 16px 0">
-              <button onclick="openFreePrompt('${o.id}')" style="width:100%;padding:12px;background:linear-gradient(135deg,${hasRedemptionsApplied?'#16a34a,#15803d':rewardInfo.canDiscount?'#16a34a,#15803d':'#1652F0,#0738C9'});color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.15);display:flex;align-items:center;justify-content:center;gap:6px">
-                🎁 ${hasRedemptionsApplied ? 'แก้ไข/ใช้แต้มเพิ่ม' : 'ใช้แต้ม'} <span style="background:rgba(255,255,255,.2);padding:2px 8px;border-radius:999px;font-size:12px">${rewardInfo.points} แต้ม</span>
-              </button>
-            </div>
-          ` : ''}
           <div class="order-actions">
             <button class="btn-cancel" onclick="cancelOrder('${o.id}')">ยกเลิก</button>
             ${(status==='pending'||status==='confirmed'||status==='cooking') ? `
@@ -542,26 +519,6 @@ async function advanceStatus(orderId, nextStatus) {
   if (nextStatus === 'delivered') {
     const baseAmount = order.original_total || order.total;
     const points = window.calcPointsFromAmount(baseAmount);
-
-    // 🛡 Final check — if customer has unused reward eligibility, warn before closing
-    const customer = getCustomerForOrder(order);
-    const custPoints = customer?.points || 0;
-    const hasRedemptions = (order.redemptions || []).length > 0;
-    if (custPoints >= LOYALTY.REWARD_DRINK_POINTS && !hasRedemptions) {
-      const rewardLabel = custPoints >= LOYALTY.REWARD_DISCOUNT_POINTS ? 'ลด 50฿ หรือ ฟรีเครื่องดื่ม' : 'ฟรีเครื่องดื่ม';
-      const useBefore = confirm(
-        `⚠️ ลูกค้า ${order.customer_name} มี ${custPoints} แต้ม\n\n` +
-        `ยังไม่ใช้สิทธิ์ในออเดอร์นี้!\n` +
-        `(สามารถใช้: ${rewardLabel})\n\n` +
-        `กด "OK" = ปิดออเดอร์เลย ไม่ใช้สิทธิ์\n` +
-        `กด "Cancel" = ย้อนกลับ ไปใช้สิทธิ์ก่อน`
-      );
-      if (!useBefore) {
-        // Open redemption modal instead
-        showRedemptionModal(order, customer);
-        return;
-      }
-    }
 
     const redemptionStr = (order.redemptions || []).length
       ? `\nใช้แต้ม: ${(order.redemptions || []).map(r => r.type === 'drink' ? `🥤 ${r.label}` : `💰 ลด ฿${r.value}`).join(', ')}`
@@ -1541,8 +1498,7 @@ whenCloudReady(() => {
     if (!window.isEmbedded && window.OrderNotifier) {
       window.OrderNotifier.check(orders, { getOrders: () => cloudOrders || [] });
     }
-    // 🎁 Auto-prompt reward redemption for eligible customers
-    maybeAutoPromptReward(orders);
+    // (Reward redemption is now customer-driven from menu.html — no auto-prompt)
     firstOrderLoad = false;
   });
   window.cloud.onCustomers(customers => {
