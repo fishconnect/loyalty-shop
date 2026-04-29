@@ -838,10 +838,12 @@ orderLookup.addEventListener('input', () => {
   if (!q) { orderAc.style.display = 'none'; return; }
   const matches = findCustomers(q).slice(0, 8);
   let html = matches.map(c => {
-    const r = rewardsAvailable(c);
+    const pts = c.points || 0;
+    const badge = pts >= LOYALTY.REWARD_DISCOUNT_POINTS ? `<span class="badge badge-reward">🎁 ลด 50฿</span>`
+                : pts >= LOYALTY.REWARD_DRINK_POINTS    ? `<span class="badge badge-reward">🥤 ฟรี</span>` : '';
     return `<div class="ac-item" onclick="selectCustomer('${c.id}')">
-      <div class="n">${c.name} ${r>0?`<span class="badge badge-reward">🎁 ${r}</span>`:''}</div>
-      <div class="p">สะสม ${c.total_boxes} กล่อง${c.phone?` · ${c.phone}`:''}</div>
+      <div class="n">${c.name} ${badge}</div>
+      <div class="p">🌟 ${pts} แต้ม${c.phone?` · ${c.phone}`:''}</div>
     </div>`;
   }).join('');
   html += `<div class="ac-item ac-create" onclick="showNewCustomerForm()">+ เพิ่มลูกค้าใหม่: "${q}"</div>`;
@@ -856,13 +858,15 @@ orderLookup.addEventListener('blur', () => {
 function selectCustomer(id) {
   selectedCustomerId = id;
   const c = getCustomer(id);
-  const r = rewardsAvailable(c);
+  const pts = c.points || 0;
+  const badge = pts >= LOYALTY.REWARD_DISCOUNT_POINTS ? `<span class="badge badge-reward">🎁 ลด 50฿ พร้อมใช้</span>`
+              : pts >= LOYALTY.REWARD_DRINK_POINTS    ? `<span class="badge badge-reward">🥤 ฟรีเครื่องดื่มพร้อมใช้</span>` : '';
   document.getElementById('selectedCustomerBox').style.display = 'block';
   document.getElementById('selectedCustomerBox').className = 'selected-customer';
   document.getElementById('selectedCustomerBox').innerHTML = `
     <div>
-      <div style="font-weight:700">${c.name} ${r>0?`<span class="badge badge-reward">🎁 ฟรี ${r}</span>`:''}</div>
-      <div style="font-size:12px;color:#6b7280">สะสม ${c.total_boxes}/${db.settings.goal}${c.phone?` · ${c.phone}`:''}</div>
+      <div style="font-weight:700">${c.name} ${badge}</div>
+      <div style="font-size:12px;color:#6b7280">🌟 ${pts} แต้ม${c.phone?` · ${c.phone}`:''}</div>
     </div>
     <button class="x" onclick="clearSelectedCustomer()">×</button>
   `;
@@ -924,9 +928,24 @@ function saveOrder() {
       if (db.customers[id]) {
         customer = db.customers[id];
         if (customer.name === 'ไม่ระบุชื่อ' && name) customer.name = name;
+        // Backfill loyalty fields
+        if (customer.points == null) customer.points = 0;
+        if (customer.lifetime_points == null) customer.lifetime_points = 0;
+        // Award signup bonus if not yet
+        if (!customer.signup_bonus_received) {
+          customer.points += LOYALTY.SIGNUP_BONUS;
+          customer.lifetime_points += LOYALTY.SIGNUP_BONUS;
+          customer.signup_bonus_received = true;
+        }
       } else {
         customer = {
           id, name: name || 'ไม่ระบุชื่อ', phone: phone || '',
+          // New loyalty fields
+          points: LOYALTY.SIGNUP_BONUS,
+          lifetime_points: LOYALTY.SIGNUP_BONUS,
+          signup_bonus_received: true,
+          drink_redeemed_count: 0, dish_redeemed_count: 0,
+          // Legacy
           total_boxes: 0, redeemed_count: 0,
           joined: new Date().toISOString()
         };

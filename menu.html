@@ -1005,12 +1005,14 @@ function checkCustomer() {
   const db = loadDB();
   const c = db.customers[phone];
   if (c) {
-    const goal = db.settings.goal || 20;
-    const rewards = Math.floor(c.total_boxes / goal) - c.redeemed_count;
-    found.innerHTML = `<div class="customer-found ok">✅ ลูกค้าเดิม: <b>${c.name}</b> · สะสม ${c.total_boxes}/${goal}${rewards>0?` · 🎁 ฟรี ${rewards} กล่อง`:''}</div>`;
+    const pts = c.points || 0;
+    let rewardStr = '';
+    if (pts >= LOYALTY.REWARD_DISCOUNT_POINTS) rewardStr = ` · 🎁 ใช้ 15 แต้ม ลด 50฿ ได้!`;
+    else if (pts >= LOYALTY.REWARD_DRINK_POINTS) rewardStr = ` · 🥤 ใช้ 10 แต้ม ฟรีเครื่องดื่ม!`;
+    found.innerHTML = `<div class="customer-found ok">✅ ลูกค้าเดิม: <b>${c.name}</b> · 🌟 ${pts} แต้ม${rewardStr}</div>`;
     nameInput.value = c.name === 'ไม่ระบุชื่อ' ? '' : c.name;
   } else {
-    found.innerHTML = `<div class="customer-found new">🆕 ลูกค้าใหม่ — กรุณากรอกชื่อ</div>`;
+    found.innerHTML = `<div class="customer-found new">🆕 ลูกค้าใหม่ — สมัครรับ +5 แต้มฟรี!</div>`;
   }
 }
 
@@ -1028,16 +1030,35 @@ async function submitOrder() {
   const db = loadDB();
   const customerId = phone || ('walkin-' + Date.now());
   let customer = phone ? db.customers[phone] : null;
+  let signupBonusGiven = false;
   if (!customer) {
     const customerName = name || (phone ? 'ลูกค้า ' + phone.slice(-4) : 'ไม่ระบุชื่อ');
     customer = {
       id: customerId, name: customerName, phone: phone || '',
+      // New loyalty fields
+      points: LOYALTY.SIGNUP_BONUS,             // +5 signup bonus
+      lifetime_points: LOYALTY.SIGNUP_BONUS,
+      signup_bonus_received: true,
+      drink_redeemed_count: 0,
+      dish_redeemed_count: 0,
+      // Legacy fields (kept for compat — no longer actively used)
       total_boxes: 0, redeemed_count: 0,
       joined: new Date().toISOString()
     };
     db.customers[customerId] = customer;
-  } else if (name && customer.name === 'ไม่ระบุชื่อ') {
-    customer.name = name;
+    signupBonusGiven = true;
+  } else {
+    if (name && customer.name === 'ไม่ระบุชื่อ') customer.name = name;
+    // Backfill missing loyalty fields for legacy customers
+    if (customer.points == null) customer.points = 0;
+    if (customer.lifetime_points == null) customer.lifetime_points = 0;
+    // Award signup bonus if not received yet
+    if (!customer.signup_bonus_received) {
+      customer.points += LOYALTY.SIGNUP_BONUS;
+      customer.lifetime_points += LOYALTY.SIGNUP_BONUS;
+      customer.signup_bonus_received = true;
+      signupBonusGiven = true;
+    }
   }
 
   // Convert cart lines to order items (with option breakdown)
@@ -1130,7 +1151,7 @@ async function submitOrder() {
     closeCart();
     renderMenu();
     updateCartBar();
-    toast(`✓ ส่งครัวแล้ว! ${customer.name} · ฿${total}`);
+    toast(`✓ ส่งครัวแล้ว! ${customer.name} · ฿${total}${signupBonusGiven?' · 🎁 +5 แต้มสมัครใหม่!':''}`);
   } else {
     setTimeout(() => {
       window.location.href = `status.html?order=${orderId}&phone=${phone || customerId}`;
@@ -1169,15 +1190,17 @@ function renderUserWidget(customer, pendingOrder, recentDoneOrder) {
       <a class="action" href="points.html?phone=${recentDoneOrder.customer_phone || recentDoneOrder.customer_id}">ดูแต้ม →</a>
     `;
   } else if (customer) {
-    const goal = 20;
-    const rewards = Math.floor(customer.total_boxes / goal) - customer.redeemed_count;
+    const pts = customer.points || 0;
+    let rewardPill = '';
+    if (pts >= LOYALTY.REWARD_DISCOUNT_POINTS) rewardPill = ` <span class="reward-pill">🎁 ลด 50฿ พร้อมใช้</span>`;
+    else if (pts >= LOYALTY.REWARD_DRINK_POINTS) rewardPill = ` <span class="reward-pill">🥤 ฟรีเครื่องดื่มพร้อมใช้</span>`;
     const initial = customer.name.charAt(0) || '?';
     w.className = 'user-widget show';
     w.innerHTML = `
       <div class="avatar">${initial}</div>
       <div class="info">
         <div class="name">สวัสดี ${customer.name} 👋</div>
-        <div class="meta">สะสม ${customer.total_boxes}/${goal} กล่อง${rewards>0?` <span class="reward-pill">🎁 ฟรี ${rewards}</span>`:''}</div>
+        <div class="meta">🌟 ${pts} แต้ม${rewardPill}</div>
       </div>
       <a class="action" href="javascript:openCart()">สั่งใหม่</a>
     `;

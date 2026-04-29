@@ -162,7 +162,34 @@ window.MENU = [
       { id: 'kw-002', name: 'บะหมี่เกี๋ยวน้ำ-หมูแดง', price: 40, optionGroups: OPT_KIEW() },
     ]
   },
+  {
+    cat: "เครื่องดื่ม",
+    emoji: "🥤",
+    items: [
+      { id: 'dr-001', name: 'ชานมไข่มุก', price: 20 },
+      { id: 'dr-002', name: 'น้ำอัดลม',    price: 20 },
+    ]
+  },
 ];
+
+// ============================================
+// Loyalty config — โปรใหม่
+// ============================================
+window.LOYALTY = {
+  POINTS_PER_BAHT: 1 / 50,          // 50฿ = 1 แต้ม
+  SIGNUP_BONUS: 5,                   // สมัครครั้งแรก +5
+  REWARD_DRINK_POINTS: 10,           // 10 แต้ม = ฟรีเครื่องดื่ม
+  REWARD_DISCOUNT_POINTS: 15,        // 15 แต้ม = ลด 50฿
+  REWARD_DISCOUNT_AMOUNT: 50,        // จำนวนเงินที่ลด
+  AWARD_ON_STATUS: 'delivered',      // ได้แต้มเมื่อสถานะนี้
+  // เมนูเครื่องดื่มที่ใช้แลกได้ (10 แต้ม)
+  DRINK_REWARD_IDS: ['dr-001', 'dr-002'],
+};
+
+// คำนวณแต้มจากยอดเงิน (เศษทศนิยมปัด floor — 99฿ ได้ 1 แต้ม, 100฿ ได้ 2 แต้ม)
+window.calcPointsFromAmount = function(amount) {
+  return Math.floor((amount || 0) * LOYALTY.POINTS_PER_BAHT);
+};
 
 // ============================================
 // Helpers

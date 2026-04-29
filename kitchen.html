@@ -420,8 +420,9 @@ function render() {
     const status = o.status || 'pending';
     const stat = window.STATUSES[status] || window.STATUSES.pending;
     const isActive = !['delivered','done','cancelled'].includes(status);
-    const rewardInfo = isActive ? getRewardInfo(o) : { available: 0 };
-    const hasUnusedRewards = rewardInfo.available > 0 && !o.free_boxes_used;
+    const rewardInfo = isActive ? getRewardInfo(o) : { points: 0, canDrink: false, canDiscount: false };
+    const hasRedemptionsApplied = (o.redemptions || []).length > 0;
+    const showRewardButton = isActive && (rewardInfo.canDrink || rewardInfo.canDiscount || hasRedemptionsApplied);
     return `
       <div class="order ${status}">
         <div class="order-head" style="background:${status==='cancelled'?'#fee2e2':status==='delivered'||status==='done'?'#f3f4f6':'#f7f8fb'}">
@@ -466,24 +467,22 @@ function render() {
             </div>
           `;}).join('')}
           ${o.note ? `<div class="order-note"><b>หมายเหตุรวม:</b> ${o.note}</div>` : ''}
-          ${o.discount ? `<div style="margin-top:8px;padding:8px 10px;background:#dcfce7;border-radius:6px;font-size:13px;color:#166534;font-weight:700">🎁 ได้ข้าวฟรี ${o.free_boxes_used} กล่อง ราคา ฿${o.discount}</div>` : ''}
+          ${(o.redemptions && o.redemptions.length) ? `
+            <div style="margin-top:8px;padding:8px 10px;background:#dcfce7;border-radius:6px;font-size:13px;color:#166534;font-weight:700">
+              🎁 ใช้แต้ม: ${o.redemptions.map(r => r.type === 'drink' ? `🥤 ${r.label}` : `💰 ลด ฿${r.value}`).join(' · ')}
+              <span style="margin-left:6px;color:#5c6982;font-weight:500">(รวม -${o.redemptions.reduce((s,r)=>s+r.points_used,0)} แต้ม)</span>
+            </div>
+          ` : ''}
         </div>
         <div class="order-foot">
-          <span style="color:#6b7280;font-size:13px">${mainCount} กล่องหลัก (=${mainCount} แต้ม)</span>
+          <span style="color:#6b7280;font-size:13px">ยอด ฿${o.original_total || o.total} = ${window.calcPointsFromAmount(o.original_total || o.total)} แต้ม</span>
           <span class="total">฿${o.total} <span class="small">${o.discount?'ลูกค้าจ่าย':'รวม'}</span></span>
         </div>
         ${isActive ? `
-          ${hasUnusedRewards ? `
+          ${showRewardButton ? `
             <div style="padding:8px 16px 0">
-              <button onclick="openFreePrompt('${o.id}')" style="width:100%;padding:12px;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;box-shadow:0 3px 10px rgba(22,163,74,.25);display:flex;align-items:center;justify-content:center;gap:6px">
-                🎁 ได้ข้าวฟรี <span style="background:rgba(255,255,255,.2);padding:2px 8px;border-radius:999px;font-size:12px">${rewardInfo.available} กล่อง</span>
-              </button>
-            </div>
-          ` : ''}
-          ${o.free_boxes_used ? `
-            <div style="padding:8px 16px 0">
-              <button onclick="openFreePrompt('${o.id}')" style="width:100%;padding:10px;background:#dcfce7;color:#166534;border:1.5px solid #16a34a;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer">
-                🎁 ได้ข้าวฟรี ${o.free_boxes_used} กล่อง ราคา ฿${o.discount} (กดเพื่อแก้)
+              <button onclick="openFreePrompt('${o.id}')" style="width:100%;padding:12px;background:linear-gradient(135deg,${hasRedemptionsApplied?'#16a34a,#15803d':rewardInfo.canDiscount?'#16a34a,#15803d':'#1652F0,#0738C9'});color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.15);display:flex;align-items:center;justify-content:center;gap:6px">
+                🎁 ${hasRedemptionsApplied ? 'แก้ไข/ใช้แต้มเพิ่ม' : 'ใช้แต้ม'} <span style="background:rgba(255,255,255,.2);padding:2px 8px;border-radius:999px;font-size:12px">${rewardInfo.points} แต้ม</span>
               </button>
             </div>
           ` : ''}
@@ -520,14 +519,14 @@ async function advanceStatus(orderId, nextStatus) {
   const order = orderSrc.find(o => o.id === orderId);
   if (!order) return;
 
-  // Final stage = delivered → commit boxes & redemption
+  // Final stage = delivered → award points
   if (nextStatus === 'delivered') {
-    const mainBoxes = countMainDishes(order.items);
-    const freeUsed = order.free_boxes_used || 0;
-    const summary = freeUsed > 0
-      ? `${order.customer_name} · ฿${order.total} (ได้ข้าวฟรี ${freeUsed} กล่อง)`
-      : `${order.customer_name} · ฿${order.total}`;
-    if (!confirm(`ยืนยันจัดส่งสำเร็จ?\n\n${summary}\n\nระบบจะเพิ่ม ${mainBoxes} กล่อง + ตัดสิทธิ์ฟรี (ถ้าใช้)`)) return;
+    const baseAmount = order.original_total || order.total;
+    const points = window.calcPointsFromAmount(baseAmount);
+    const redemptionStr = (order.redemptions || []).length
+      ? `\nใช้แต้ม: ${(order.redemptions || []).map(r => r.type === 'drink' ? `🥤 ${r.label}` : `💰 ลด ฿${r.value}`).join(', ')}`
+      : '';
+    if (!confirm(`ยืนยันจัดส่งสำเร็จ?\n\n${order.customer_name} · ลูกค้าจ่าย ฿${order.total}${redemptionStr}\n\nลูกค้าจะได้ +${points} แต้ม`)) return;
     await finalizeOrder(orderId);
     return;
   }
@@ -547,94 +546,122 @@ async function advanceStatus(orderId, nextStatus) {
 
 async function markDone(orderId) { return advanceStatus(orderId, 'delivered'); }
 
-// Compute customer's reward state — used to show "ใช้ฟรี" button
-function getRewardInfo(order) {
+// Compute customer's points — used to show redemption buttons
+function getCustomerForOrder(order) {
   const db = loadDB();
   let customer = db.customers[order.customer_id];
   if (!customer && cloudCustomers && cloudCustomers[order.customer_id]) customer = cloudCustomers[order.customer_id];
-  if (!customer) return { available: 0, customer: null };
-  const goal = db.settings.goal || 20;
-  const mainBoxes = countMainDishes(order.items);
-  const newTotal = (customer.total_boxes || 0) + mainBoxes;
-  const available = Math.floor(newTotal / goal) - (customer.redeemed_count || 0);
-  return { available: Math.max(0, available), customer, mainBoxes };
+  return customer || null;
+}
+function getRewardInfo(order) {
+  const customer = getCustomerForOrder(order);
+  if (!customer) return { points: 0, canDrink: false, canDiscount: false, customer: null };
+  const points = customer.points || 0;
+  return {
+    points,
+    canDrink: points >= LOYALTY.REWARD_DRINK_POINTS,
+    canDiscount: points >= LOYALTY.REWARD_DISCOUNT_POINTS,
+    customer
+  };
 }
 
-// ========== Apply Free Reward (during pending — before cooking done) ==========
+// ========== Apply Redemption (during pending — before cooking done) ==========
 function openFreePrompt(orderId) {
   const db = loadDB();
   const orderSrc = cloudOrders !== null ? cloudOrders : db.pendingOrders;
   const order = orderSrc.find(o => o.id === orderId);
   if (!order) return;
   const info = getRewardInfo(order);
-  if (info.available === 0) return toast('⚠️ ลูกค้ายังไม่มีสิทธิ์ฟรี');
-  showFreePromptModal(order, info.customer, info.available, info.mainBoxes);
+  if (!info.customer) return toast('⚠️ ไม่พบข้อมูลลูกค้า');
+  showRedemptionModal(order, info.customer);
 }
 
-function showFreePromptModal(order, customer, available, mainBoxes) {
-  const dbS = loadDB().settings;
-  const defaultPrice = dbS.pricePerBox || 50;
-  const maxUse = Math.min(available, mainBoxes);
+function showRedemptionModal(order, customer) {
   const phone = (customer.phone || order.customer_phone || '').replace(/\D/g, '');
+  const points = customer.points || 0;
   const baseTotal = order.original_total || order.total;
+  const redemptions = order.redemptions || [];
+  const drinkCount = redemptions.filter(r => r.type === 'drink').length;
+  const discountCount = redemptions.filter(r => r.type === 'discount').length;
+  const remainingPoints = points; // Points already deducted when applied
 
-  // Compute discount preview by simulating: take main-dish prices in desc order
-  const mainItems = (order.original_items || order.items)
-    .filter(it => {
-      const cat = MENU.find(c => c.items.some(i => i.id === it.id));
-      return cat && !cat.isAddOn;
-    })
-    .flatMap(it => {
-      const cat = MENU.find(c => c.items.some(i => i.id === it.id));
-      const mainPrice = cat?.items.find(i => i.id === it.id)?.price || defaultPrice;
-      return Array(it.qty).fill(mainPrice);
-    })
-    .sort((a, b) => b - a); // sort desc
+  const canDrink = remainingPoints >= LOYALTY.REWARD_DRINK_POINTS;
+  const remainingForDiscount = baseTotal - (order.discount || 0);
+  const canDiscount = remainingPoints >= LOYALTY.REWARD_DISCOUNT_POINTS && remainingForDiscount > 0;
 
-  function calcDiscount(n) {
-    return mainItems.slice(0, n).reduce((s, p) => s + p, 0);
+  let drinkButtons = '';
+  if (canDrink) {
+    LOYALTY.DRINK_REWARD_IDS.forEach(drinkId => {
+      const cat = MENU.find(c => c.items.some(i => i.id === drinkId));
+      const drink = cat?.items.find(i => i.id === drinkId);
+      if (drink) {
+        drinkButtons += `
+          <button onclick="applyDrinkReward('${order.id}', '${drinkId}')" style="width:100%;padding:14px;background:linear-gradient(135deg,#1652F0,#0738C9);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:800;margin-bottom:8px;cursor:pointer;box-shadow:0 4px 12px rgba(22,82,240,.25);display:flex;justify-content:space-between;align-items:center">
+            <span>🥤 ฟรี ${drink.name}</span>
+            <span style="background:rgba(255,255,255,.2);padding:3px 10px;border-radius:999px;font-size:12px">−10 แต้ม</span>
+          </button>
+        `;
+      }
+    });
   }
 
-  const optionButtons = [];
-  for (let i = maxUse; i >= 1; i--) {
-    const discount = calcDiscount(i);
-    optionButtons.push(`
-      <button onclick="applyFree('${order.id}', ${i})" style="width:100%;padding:14px;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:800;margin-bottom:8px;cursor:pointer;box-shadow:0 4px 12px rgba(22,163,74,.25)">
-        🎁 ได้ข้าวฟรี ${i} กล่อง ราคา ฿${discount} <span style="opacity:.85;font-weight:600">(เก็บ ฿${baseTotal - discount})</span>
-      </button>
-    `);
+  const discountButton = canDiscount ? `
+    <button onclick="applyDiscountReward('${order.id}')" style="width:100%;padding:14px;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:800;margin-bottom:8px;cursor:pointer;box-shadow:0 4px 12px rgba(22,163,74,.25);display:flex;justify-content:space-between;align-items:center">
+      <span>💰 ลด ฿${Math.min(LOYALTY.REWARD_DISCOUNT_AMOUNT, remainingForDiscount)} จากยอด</span>
+      <span style="background:rgba(255,255,255,.2);padding:3px 10px;border-radius:999px;font-size:12px">−15 แต้ม</span>
+    </button>
+  ` : '';
+
+  let appliedList = '';
+  if (redemptions.length > 0) {
+    appliedList = `
+      <div style="border-top:1px dashed #d1d5db;margin-top:12px;padding-top:12px">
+        <div style="font-size:12px;color:#5c6982;font-weight:700;margin-bottom:8px">✓ ใช้แล้วในออเดอร์นี้</div>
+        ${redemptions.map((r, idx) => `
+          <div style="background:#f0fdf4;padding:10px 12px;border-radius:10px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;font-size:13px">
+            <span style="font-weight:700;color:#166534">
+              ${r.type === 'drink' ? `🥤 ${r.label}` : `💰 ลด ฿${r.value}`}
+              <span style="color:#5c6982;font-weight:500;margin-left:6px">−${r.points_used} แต้ม</span>
+            </span>
+            <button onclick="removeRedemption('${order.id}', ${idx})" style="background:transparent;border:none;color:#dc2626;font-size:18px;cursor:pointer;padding:0 6px">×</button>
+          </div>
+        `).join('')}
+      </div>
+    `;
   }
 
-  const currentlyApplied = order.free_boxes_used || 0;
+  const noRewardsAvailable = !canDrink && !canDiscount && redemptions.length === 0;
 
   const html = `
     <div style="position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:300;display:flex;align-items:flex-end;justify-content:center;padding:0" onclick="this.remove()">
       <div onclick="event.stopPropagation()" style="background:#fff;width:100%;max-width:520px;border-radius:24px 24px 0 0;padding:24px 20px;max-height:92vh;overflow-y:auto">
         <div style="text-align:center;margin-bottom:14px">
           <div style="font-size:48px">🎁</div>
-          <div style="font-size:18px;font-weight:800;color:#0a1530;margin-top:4px">ได้ข้าวฟรี</div>
-          <div style="font-size:14px;color:#5c6982;margin-top:4px"><b>${customer.name}</b> มีสิทธิ์ฟรี <b style="color:#16a34a">${available} กล่อง</b> · ออเดอร์นี้มี ${mainBoxes} จานหลัก</div>
-          ${currentlyApplied > 0 ? `<div style="background:#dcfce7;color:#166534;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:700;display:inline-block;margin-top:8px">ตอนนี้ใช้อยู่ ${currentlyApplied} กล่อง</div>` : ''}
+          <div style="font-size:18px;font-weight:800;color:#0a1530;margin-top:4px">ใช้แต้มสะสม</div>
+          <div style="font-size:14px;color:#5c6982;margin-top:4px"><b>${customer.name}</b> มี <b style="color:#16a34a">${points} แต้ม</b></div>
         </div>
         <div style="background:#f7f8fb;padding:12px;border-radius:10px;font-size:14px;text-align:center;margin-bottom:14px">
-          <div style="color:#5c6982">ยอดเต็ม</div>
-          <div style="font-size:22px;font-weight:900;color:#1652F0">฿${baseTotal}</div>
+          <div style="display:flex;justify-content:space-around">
+            <div><div style="color:#5c6982;font-size:12px">ยอดเต็ม</div><div style="font-weight:800;color:#1652F0">฿${baseTotal}</div></div>
+            <div><div style="color:#5c6982;font-size:12px">ส่วนลด</div><div style="font-weight:800;color:#dc2626">−฿${order.discount || 0}</div></div>
+            <div><div style="color:#5c6982;font-size:12px">ลูกค้าจ่าย</div><div style="font-weight:800;color:#16a34a">฿${order.total}</div></div>
+          </div>
         </div>
-        <div style="background:#fef3c7;color:#92400e;padding:10px 12px;border-radius:8px;font-size:12px;margin-bottom:10px;line-height:1.5">
-          ℹ️ <b>ใช้สิทธิ์แล้ว order ยังอยู่ในคิว</b> — ทำอาหารเสร็จค่อยกด "ทำเสร็จ"
-        </div>
-        ${optionButtons.join('')}
-        ${currentlyApplied > 0 ? `
-          <button onclick="unapplyFree('${order.id}')" style="width:100%;padding:14px;background:#fee2e2;color:#dc2626;border:1.5px solid #dc2626;border-radius:12px;font-size:15px;font-weight:700;margin-bottom:8px;cursor:pointer">
-            ↩️ ยกเลิกข้าวฟรี (กลับเป็น ฿${baseTotal})
-          </button>
+        ${noRewardsAvailable ? `
+          <div style="background:#fef3c7;color:#92400e;padding:14px;border-radius:10px;text-align:center;font-size:14px;margin-bottom:10px">
+            ลูกค้ามี ${points} แต้ม · ยังไม่พอแลก<br>
+            <span style="font-size:12px;color:#5c6982">ต้องการ 10 แต้ม สำหรับฟรีเครื่องดื่ม / 15 แต้ม สำหรับลด 50฿</span>
+          </div>
         ` : ''}
+        ${drinkButtons}
+        ${discountButton}
+        ${appliedList}
         ${phone ? `
-          <a href="tel:${phone}" style="display:block;text-align:center;padding:14px;background:#fef3c7;color:#92400e;border:1.5px solid #f59e0b;border-radius:12px;font-size:15px;font-weight:700;text-decoration:none;margin-bottom:8px">
+          <a href="tel:${phone}" style="display:block;text-align:center;padding:12px;margin-top:10px;background:#fef3c7;color:#92400e;border:1.5px solid #f59e0b;border-radius:12px;font-size:14px;font-weight:700;text-decoration:none">
             📞 โทรถามลูกค้าก่อน (${phone})
           </a>
         ` : ''}
-        <button onclick="this.closest('div[style*=fixed]').remove()" style="width:100%;padding:12px;background:transparent;color:#6b7280;border:none;font-size:14px;cursor:pointer">ปิด</button>
+        <button onclick="this.closest('div[style*=fixed]').remove()" style="width:100%;padding:12px;margin-top:10px;background:transparent;color:#6b7280;border:none;font-size:14px;cursor:pointer">ปิด</button>
       </div>
     </div>
   `;
@@ -643,81 +670,179 @@ function showFreePromptModal(order, customer, available, mainBoxes) {
   document.body.appendChild(tmp.firstElementChild);
 }
 
-async function applyFree(orderId, freeQty) {
-  document.querySelectorAll('div[style*="z-index:300"]').forEach(el => el.remove());
+async function applyDrinkReward(orderId, drinkId) {
   const db = loadDB();
   const orderSrc = cloudOrders !== null ? cloudOrders : db.pendingOrders;
   const order = orderSrc.find(o => o.id === orderId);
   if (!order) return;
+  const customer = getCustomerForOrder(order);
+  if (!customer) return toast('⚠️ ไม่พบลูกค้า');
+  if ((customer.points || 0) < LOYALTY.REWARD_DRINK_POINTS) return toast('⚠️ แต้มไม่พอ');
 
-  // Use ORIGINAL items/total to recompute (allows re-applying with different qty)
-  const originalItems = order.original_items || JSON.parse(JSON.stringify(order.items));
-  const originalTotal = order.original_total || order.total;
+  // Find drink in menu
+  const cat = MENU.find(c => c.items.some(i => i.id === drinkId));
+  const drink = cat?.items.find(i => i.id === drinkId);
+  if (!drink) return toast('⚠️ ไม่พบเมนูเครื่องดื่ม');
 
-  // Reset items
-  let items = JSON.parse(JSON.stringify(originalItems));
-  let remaining = freeQty;
-  let discount = 0;
-  // Sort by main-dish price desc — give free to most valuable first
-  const sorted = [...items].sort((a, b) => {
-    const aCat = MENU.find(c => c.items.some(i => i.id === a.id));
-    const bCat = MENU.find(c => c.items.some(i => i.id === b.id));
-    const aMain = aCat?.items.find(i => i.id === a.id)?.price || db.settings.pricePerBox || 50;
-    const bMain = bCat?.items.find(i => i.id === b.id)?.price || db.settings.pricePerBox || 50;
-    return bMain - aMain;
+  document.querySelectorAll('div[style*="z-index:300"]').forEach(el => el.remove());
+
+  // Add free drink to order items
+  const newItems = JSON.parse(JSON.stringify(order.items));
+  newItems.push({
+    id: drink.id, name: drink.name, mainName: drink.name,
+    price: drink.price, qty: 1, freeQty: 1, isReward: true, options: [], note: ''
   });
-  for (const it of sorted) {
-    if (remaining <= 0) break;
-    const cat = MENU.find(c => c.items.some(i => i.id === it.id));
-    if (cat?.isAddOn) continue;
-    // ราคาข้าวเฉพาะตัวข้าว (ไม่รวมไข่/add-ons)
-    const mainItem = cat?.items.find(i => i.id === it.id);
-    const mainPrice = mainItem?.price || db.settings.pricePerBox || 50;
-    const useFree = Math.min(remaining, it.qty);
-    it.freeQty = useFree;
-    it.discount = mainPrice * useFree; // ← ลดแค่ราคาข้าว
-    discount += it.discount;
-    remaining -= useFree;
-  }
-  const adjustedTotal = originalTotal - discount;
+
+  // Save original on first redemption
+  if (!order.original_items) order.original_items = JSON.parse(JSON.stringify(order.items));
+  if (!order.original_total) order.original_total = order.total;
+
+  // Push redemption
+  const redemptions = [...(order.redemptions || []), {
+    type: 'drink', drinkId: drink.id, label: drink.name,
+    points_used: LOYALTY.REWARD_DRINK_POINTS, value: drink.price,
+    at: new Date().toISOString()
+  }];
+  // Discount = sum of redemption values for free drinks + discount value
+  const newDiscount = redemptions.reduce((s, r) => s + (r.type === 'drink' ? r.value : r.value), 0);
+  // Total visible to customer = original + drink (free, discounted) - discount value of dishes
+  // Simpler: drink doesn't add to base total, dish discount subtracts. Recompute clean:
+  // total before reward = original_total
+  // discount = sum of drink values + dish discount (since drinks are free we add them and discount = price)
+  const itemsSubtotal = newItems.reduce((s, it) => s + it.price * (it.qty - (it.freeQty || 0)), 0);
 
   const updates = {
-    items, total: adjustedTotal,
-    discount, free_boxes_used: freeQty,
-    original_items: originalItems, original_total: originalTotal
+    items: newItems,
+    original_items: order.original_items,
+    original_total: order.original_total,
+    redemptions,
+    discount: newDiscount,
+    total: itemsSubtotal
   };
 
   const local = db.pendingOrders.find(o => o.id === orderId);
   if (local) Object.assign(local, updates);
   saveDB(db);
 
-  if (window.cloud) await window.cloud.updateOrder(orderId, updates);
+  // Deduct points from customer
+  customer.points = (customer.points || 0) - LOYALTY.REWARD_DRINK_POINTS;
+  customer.drink_redeemed_count = (customer.drink_redeemed_count || 0) + 1;
+  db.customers[customer.id] = customer;
+  saveDB(db);
 
-  toast(`🎁 ได้ข้าวฟรี ${freeQty} กล่อง ราคา ฿${discount} · ทำอาหารต่อได้`);
+  if (window.cloud) {
+    await window.cloud.updateOrder(orderId, updates);
+    await window.cloud.saveCustomer(customer);
+  }
+
+  toast(`🥤 ใช้ 10 แต้ม → ฟรี ${drink.name}`);
   render();
 }
 
-async function unapplyFree(orderId) {
-  document.querySelectorAll('div[style*="z-index:300"]').forEach(el => el.remove());
+async function applyDiscountReward(orderId) {
   const db = loadDB();
   const orderSrc = cloudOrders !== null ? cloudOrders : db.pendingOrders;
   const order = orderSrc.find(o => o.id === orderId);
   if (!order) return;
+  const customer = getCustomerForOrder(order);
+  if (!customer) return toast('⚠️ ไม่พบลูกค้า');
+  if ((customer.points || 0) < LOYALTY.REWARD_DISCOUNT_POINTS) return toast('⚠️ แต้มไม่พอ');
+
+  document.querySelectorAll('div[style*="z-index:300"]').forEach(el => el.remove());
+
+  if (!order.original_items) order.original_items = JSON.parse(JSON.stringify(order.items));
+  if (!order.original_total) order.original_total = order.total;
+
+  // Cap discount at remaining order amount
+  const currentDiscount = order.discount || 0;
+  const baseTotal = order.original_total;
+  const remaining = Math.max(0, baseTotal - currentDiscount);
+  const discountValue = Math.min(LOYALTY.REWARD_DISCOUNT_AMOUNT, remaining);
+
+  if (discountValue <= 0) return toast('⚠️ ลดส่วนลดไม่ได้แล้ว');
+
+  const redemptions = [...(order.redemptions || []), {
+    type: 'discount', label: `ลด ฿${discountValue}`,
+    points_used: LOYALTY.REWARD_DISCOUNT_POINTS, value: discountValue,
+    at: new Date().toISOString()
+  }];
+  const newDiscount = currentDiscount + discountValue;
+  const newTotal = Math.max(0, baseTotal - newDiscount);
+
   const updates = {
-    items: order.original_items || order.items,
-    total: order.original_total || order.total,
-    discount: 0,
-    free_boxes_used: 0
+    original_items: order.original_items,
+    original_total: order.original_total,
+    redemptions,
+    discount: newDiscount,
+    total: newTotal
+  };
+
+  const local = db.pendingOrders.find(o => o.id === orderId);
+  if (local) Object.assign(local, updates);
+  saveDB(db);
+
+  customer.points = (customer.points || 0) - LOYALTY.REWARD_DISCOUNT_POINTS;
+  customer.dish_redeemed_count = (customer.dish_redeemed_count || 0) + 1;
+  db.customers[customer.id] = customer;
+  saveDB(db);
+
+  if (window.cloud) {
+    await window.cloud.updateOrder(orderId, updates);
+    await window.cloud.saveCustomer(customer);
+  }
+
+  toast(`💰 ใช้ 15 แต้ม → ลด ฿${discountValue}`);
+  render();
+}
+
+async function removeRedemption(orderId, idx) {
+  const db = loadDB();
+  const orderSrc = cloudOrders !== null ? cloudOrders : db.pendingOrders;
+  const order = orderSrc.find(o => o.id === orderId);
+  if (!order) return;
+  const redemptions = [...(order.redemptions || [])];
+  const removed = redemptions.splice(idx, 1)[0];
+  if (!removed) return;
+
+  document.querySelectorAll('div[style*="z-index:300"]').forEach(el => el.remove());
+
+  let newItems = JSON.parse(JSON.stringify(order.items));
+  if (removed.type === 'drink') {
+    // Remove the free drink item (find from end — most recently added)
+    for (let i = newItems.length - 1; i >= 0; i--) {
+      if (newItems[i].id === removed.drinkId && newItems[i].isReward && newItems[i].freeQty) {
+        newItems.splice(i, 1);
+        break;
+      }
+    }
+  }
+
+  // Recompute discount + total
+  const newDiscount = redemptions.reduce((s, r) => s + r.value, 0);
+  const itemsSubtotal = newItems.reduce((s, it) => s + it.price * (it.qty - (it.freeQty || 0)), 0);
+  const newTotal = removed.type === 'discount' ? Math.max(0, order.original_total - newDiscount) : itemsSubtotal;
+
+  const updates = {
+    items: newItems, redemptions, discount: newDiscount, total: newTotal
   };
   const local = db.pendingOrders.find(o => o.id === orderId);
-  if (local) {
-    Object.assign(local, updates);
-    delete local.original_items;
-    delete local.original_total;
-  }
+  if (local) Object.assign(local, updates);
   saveDB(db);
+
+  // Refund points to customer
+  const customer = getCustomerForOrder(order);
+  if (customer) {
+    customer.points = (customer.points || 0) + removed.points_used;
+    if (removed.type === 'drink') customer.drink_redeemed_count = Math.max(0, (customer.drink_redeemed_count || 0) - 1);
+    else customer.dish_redeemed_count = Math.max(0, (customer.dish_redeemed_count || 0) - 1);
+    db.customers[customer.id] = customer;
+    saveDB(db);
+    if (window.cloud) await window.cloud.saveCustomer(customer);
+  }
+
   if (window.cloud) await window.cloud.updateOrder(orderId, updates);
-  toast('↩️ ยกเลิกข้าวฟรี');
+
+  toast(`↩️ คืน ${removed.points_used} แต้ม`);
   render();
 }
 
@@ -727,26 +852,35 @@ async function finalizeOrder(orderId) {
   const order = orderSrc.find(o => o.id === orderId);
   if (!order) return;
 
-  // Get customer
+  // Get / create customer
   let customer = db.customers[order.customer_id];
   if (!customer && cloudCustomers && cloudCustomers[order.customer_id]) {
     customer = cloudCustomers[order.customer_id];
     db.customers[order.customer_id] = customer;
   }
   if (!customer) {
-    customer = { id: order.customer_id, name: order.customer_name, phone: order.customer_phone, total_boxes: 0, redeemed_count: 0, joined: order.date };
+    customer = {
+      id: order.customer_id, name: order.customer_name, phone: order.customer_phone,
+      points: 0, lifetime_points: 0, signup_bonus_received: false,
+      drink_redeemed_count: 0, dish_redeemed_count: 0,
+      total_boxes: 0, redeemed_count: 0, joined: order.date
+    };
     db.customers[order.customer_id] = customer;
   }
+  // Backfill missing loyalty fields
+  if (customer.points == null) customer.points = 0;
+  if (customer.lifetime_points == null) customer.lifetime_points = 0;
 
-  const mainBoxes = countMainDishes(order.items);
-  const price = db.settings.pricePerBox || 50;
-  const freeQty = order.free_boxes_used || 0;
+  // Award points based on ORIGINAL total (before redemption discount) — Q3 ก่อนหักส่วนลด
+  const baseAmount = order.original_total || order.total;
+  let pointsToAward = 0;
+  if (!order.points_awarded) {
+    pointsToAward = window.calcPointsFromAmount(baseAmount);
+    customer.points = (customer.points || 0) + pointsToAward;
+    customer.lifetime_points = (customer.lifetime_points || 0) + pointsToAward;
+  }
 
-  // Add boxes + redeem rewards
-  customer.total_boxes += mainBoxes;
-  if (freeQty > 0) customer.redeemed_count = (customer.redeemed_count || 0) + freeQty;
-
-  // Push to db.orders (items already have freeQty marks if applied earlier)
+  // Push to db.orders (history)
   if (!db.orders) db.orders = [];
   db.orders.push({
     id: 'O' + Date.now(),
@@ -754,19 +888,19 @@ async function finalizeOrder(orderId) {
     completed_at: new Date().toISOString(),
     customer_id: customer.id,
     customer_name: customer.name,
-    boxes: mainBoxes,
     items: order.items,
-    price_per_box: price,
     total: order.total,
     discount: order.discount || 0,
-    free_boxes_used: freeQty,
+    redemptions: order.redemptions || [],
+    points_awarded: pointsToAward,
     note: order.note || '',
     source: order.source || 'online'
   });
 
   const updates = {
     status: 'done',
-    completed_at: new Date().toISOString()
+    completed_at: new Date().toISOString(),
+    points_awarded: pointsToAward
   };
   const localOrder = db.pendingOrders.find(o => o.id === orderId);
   if (localOrder) Object.assign(localOrder, updates);
@@ -780,12 +914,8 @@ async function finalizeOrder(orderId) {
 
   render();
 
-  if (freeQty > 0) {
-    toast(`✓ เสร็จ + ได้ข้าวฟรี ${freeQty} กล่อง · ลูกค้าจ่าย ฿${order.total}`);
-  } else {
-    const goal = db.settings.goal || 20;
-    toast(`✓ เสร็จ! ${customer.name} สะสม ${customer.total_boxes}/${goal}`);
-  }
+  const summary = `${customer.name} +${pointsToAward} แต้ม (รวม ${customer.points})`;
+  toast(`✓ เสร็จ! ${summary}`);
 }
 
 // ========== Print Thermal Receipt ==========
