@@ -126,6 +126,11 @@
   }
   .toast.show { opacity: 1; }
 
+  @keyframes rewardPulse {
+    0%, 100% { box-shadow: inset 0 0 0 0 rgba(245,158,11,.0); }
+    50% { box-shadow: inset 0 0 12px 0 rgba(245,158,11,.3); }
+  }
+
   /* ========== Thermal Receipt Print ========== */
   #printArea { display: none; }
   @media print {
@@ -423,8 +428,22 @@ function render() {
     const rewardInfo = isActive ? getRewardInfo(o) : { points: 0, canDrink: false, canDiscount: false };
     const hasRedemptionsApplied = (o.redemptions || []).length > 0;
     const showRewardButton = isActive && (rewardInfo.canDrink || rewardInfo.canDiscount || hasRedemptionsApplied);
+    // Reward banner: customer eligible but hasn't redeemed yet
+    const showRewardBanner = isActive && (rewardInfo.canDrink || rewardInfo.canDiscount) && !hasRedemptionsApplied;
+    const bannerLabel = rewardInfo.points >= 25 ? `🎁🎁 ใช้ทั้ง 2 ได้! (ลด 50฿ + ฟรีเครื่องดื่ม)`
+                      : rewardInfo.canDiscount  ? `💰 ใช้ลด 50฿ ได้!`
+                      : `🥤 ฟรีเครื่องดื่มได้!`;
     return `
       <div class="order ${status}">
+        ${showRewardBanner ? `
+          <div onclick="openFreePrompt('${o.id}')" style="background:linear-gradient(135deg,#fef3c7,#fde68a);padding:10px 14px;border-bottom:3px solid #f59e0b;cursor:pointer;display:flex;justify-content:space-between;align-items:center;animation:rewardPulse 1.8s ease-in-out infinite">
+            <div>
+              <div style="font-weight:800;color:#92400e;font-size:13px">${bannerLabel}</div>
+              <div style="font-size:11px;color:#92400e;opacity:.8;margin-top:2px">ลูกค้ามี ${rewardInfo.points} แต้ม · กดเพื่อเลือก</div>
+            </div>
+            <div style="background:#f59e0b;color:#fff;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:800">ใช้แต้ม →</div>
+          </div>
+        ` : ''}
         <div class="order-head" style="background:${status==='cancelled'?'#fee2e2':status==='delivered'||status==='done'?'#f3f4f6':'#f7f8fb'}">
           <div>
             <div class="name">${o.customer_name}</div>
@@ -523,6 +542,27 @@ async function advanceStatus(orderId, nextStatus) {
   if (nextStatus === 'delivered') {
     const baseAmount = order.original_total || order.total;
     const points = window.calcPointsFromAmount(baseAmount);
+
+    // 🛡 Final check — if customer has unused reward eligibility, warn before closing
+    const customer = getCustomerForOrder(order);
+    const custPoints = customer?.points || 0;
+    const hasRedemptions = (order.redemptions || []).length > 0;
+    if (custPoints >= LOYALTY.REWARD_DRINK_POINTS && !hasRedemptions) {
+      const rewardLabel = custPoints >= LOYALTY.REWARD_DISCOUNT_POINTS ? 'ลด 50฿ หรือ ฟรีเครื่องดื่ม' : 'ฟรีเครื่องดื่ม';
+      const useBefore = confirm(
+        `⚠️ ลูกค้า ${order.customer_name} มี ${custPoints} แต้ม\n\n` +
+        `ยังไม่ใช้สิทธิ์ในออเดอร์นี้!\n` +
+        `(สามารถใช้: ${rewardLabel})\n\n` +
+        `กด "OK" = ปิดออเดอร์เลย ไม่ใช้สิทธิ์\n` +
+        `กด "Cancel" = ย้อนกลับ ไปใช้สิทธิ์ก่อน`
+      );
+      if (!useBefore) {
+        // Open redemption modal instead
+        showRedemptionModal(order, customer);
+        return;
+      }
+    }
+
     const redemptionStr = (order.redemptions || []).length
       ? `\nใช้แต้ม: ${(order.redemptions || []).map(r => r.type === 'drink' ? `🥤 ${r.label}` : `💰 ลด ฿${r.value}`).join(', ')}`
       : '';
@@ -576,18 +616,32 @@ function openFreePrompt(orderId) {
   showRedemptionModal(order, info.customer);
 }
 
-function showRedemptionModal(order, customer) {
+function showRedemptionModal(order, customer, opts) {
+  opts = opts || {};
   const phone = (customer.phone || order.customer_phone || '').replace(/\D/g, '');
   const points = customer.points || 0;
   const baseTotal = order.original_total || order.total;
   const redemptions = order.redemptions || [];
   const drinkCount = redemptions.filter(r => r.type === 'drink').length;
   const discountCount = redemptions.filter(r => r.type === 'discount').length;
-  const remainingPoints = points; // Points already deducted when applied
+  const remainingPoints = points;
 
   const canDrink = remainingPoints >= LOYALTY.REWARD_DRINK_POINTS;
   const remainingForDiscount = baseTotal - (order.discount || 0);
   const canDiscount = remainingPoints >= LOYALTY.REWARD_DISCOUNT_POINTS && remainingForDiscount > 0;
+  const canCombo = remainingPoints >= (LOYALTY.REWARD_DRINK_POINTS + LOYALTY.REWARD_DISCOUNT_POINTS) &&
+                   remainingForDiscount > 0 && redemptions.length === 0;
+
+  // Combo button — visible only if customer can use both
+  const comboButton = canCombo ? `
+    <div style="background:linear-gradient(135deg,#fef3c7,#fde68a);padding:4px;border-radius:14px;margin-bottom:10px;border:2px solid #f59e0b">
+      <button onclick="openComboPicker('${order.id}')" style="width:100%;padding:14px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border:none;border-radius:11px;font-size:15px;font-weight:900;cursor:pointer;box-shadow:0 4px 12px rgba(245,158,11,.3);display:flex;justify-content:space-between;align-items:center">
+        <span>🎁🎁 ใช้ทั้ง 2 (ลด 50฿ + เครื่องดื่ม)</span>
+        <span style="background:rgba(255,255,255,.25);padding:3px 10px;border-radius:999px;font-size:12px">−25 แต้ม ✨</span>
+      </button>
+      <div style="text-align:center;font-size:11px;color:#92400e;font-weight:700;padding:4px">⭐ คุ้มสุด — รับมูลค่ารวมสูงสุด</div>
+    </div>
+  ` : '';
 
   let drinkButtons = '';
   if (canDrink) {
@@ -596,8 +650,8 @@ function showRedemptionModal(order, customer) {
       const drink = cat?.items.find(i => i.id === drinkId);
       if (drink) {
         drinkButtons += `
-          <button onclick="applyDrinkReward('${order.id}', '${drinkId}')" style="width:100%;padding:14px;background:linear-gradient(135deg,#1652F0,#0738C9);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:800;margin-bottom:8px;cursor:pointer;box-shadow:0 4px 12px rgba(22,82,240,.25);display:flex;justify-content:space-between;align-items:center">
-            <span>🥤 ฟรี ${drink.name}</span>
+          <button onclick="applyDrinkReward('${order.id}', '${drinkId}')" style="width:100%;padding:14px;background:linear-gradient(135deg,#1652F0,#0738C9);color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:800;margin-bottom:6px;cursor:pointer;box-shadow:0 3px 10px rgba(22,82,240,.2);display:flex;justify-content:space-between;align-items:center">
+            <span>🥤 ฟรี ${drink.name} (฿${drink.price})</span>
             <span style="background:rgba(255,255,255,.2);padding:3px 10px;border-radius:999px;font-size:12px">−10 แต้ม</span>
           </button>
         `;
@@ -635,10 +689,16 @@ function showRedemptionModal(order, customer) {
   const html = `
     <div style="position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:300;display:flex;align-items:flex-end;justify-content:center;padding:0" onclick="this.remove()">
       <div onclick="event.stopPropagation()" style="background:#fff;width:100%;max-width:520px;border-radius:24px 24px 0 0;padding:24px 20px;max-height:92vh;overflow-y:auto">
+        ${opts.auto ? `
+          <div style="background:linear-gradient(135deg,#dc2626,#991b1b);color:#fff;padding:8px 14px;border-radius:999px;font-size:11px;font-weight:800;text-align:center;margin-bottom:10px;animation:rewardPulse 1.4s ease-in-out infinite">
+            🔔 แจ้งเตือนอัตโนมัติ — Order ใหม่เข้ามา
+          </div>
+        ` : ''}
         <div style="text-align:center;margin-bottom:14px">
           <div style="font-size:48px">🎁</div>
-          <div style="font-size:18px;font-weight:800;color:#0a1530;margin-top:4px">ใช้แต้มสะสม</div>
+          <div style="font-size:18px;font-weight:800;color:#0a1530;margin-top:4px">${opts.auto ? 'ลูกค้ามีสิทธิ์!' : 'ใช้แต้มสะสม'}</div>
           <div style="font-size:14px;color:#5c6982;margin-top:4px"><b>${customer.name}</b> มี <b style="color:#16a34a">${points} แต้ม</b></div>
+          <div style="font-size:12px;color:#9ca3af;margin-top:2px">Order #${order.id.slice(-6)} · ฿${baseTotal}</div>
         </div>
         <div style="background:#f7f8fb;padding:12px;border-radius:10px;font-size:14px;text-align:center;margin-bottom:14px">
           <div style="display:flex;justify-content:space-around">
@@ -653,8 +713,10 @@ function showRedemptionModal(order, customer) {
             <span style="font-size:12px;color:#5c6982">ต้องการ 10 แต้ม สำหรับฟรีเครื่องดื่ม / 15 แต้ม สำหรับลด 50฿</span>
           </div>
         ` : ''}
-        ${drinkButtons}
+        ${comboButton}
+        ${(canCombo && (canDrink || canDiscount)) ? '<div style="text-align:center;color:#9ca3af;font-size:11px;margin:6px 0 10px">— หรือใช้แยก —</div>' : ''}
         ${discountButton}
+        ${drinkButtons}
         ${appliedList}
         ${phone ? `
           <a href="tel:${phone}" style="display:block;text-align:center;padding:12px;margin-top:10px;background:#fef3c7;color:#92400e;border:1.5px solid #f59e0b;border-radius:12px;font-size:14px;font-weight:700;text-decoration:none">
@@ -737,6 +799,59 @@ async function applyDrinkReward(orderId, drinkId) {
 
   toast(`🥤 ใช้ 10 แต้ม → ฟรี ${drink.name}`);
   render();
+}
+
+// "ใช้ทั้ง 2" — ลด 50฿ + เลือกเครื่องดื่มฟรี (-25 แต้ม)
+function openComboPicker(orderId) {
+  const db = loadDB();
+  const orderSrc = cloudOrders !== null ? cloudOrders : db.pendingOrders;
+  const order = orderSrc.find(o => o.id === orderId);
+  if (!order) return;
+  const customer = getCustomerForOrder(order);
+  if (!customer) return toast('⚠️ ไม่พบลูกค้า');
+  if ((customer.points || 0) < 25) return toast('⚠️ แต้มไม่พอ (ต้อง 25)');
+
+  document.querySelectorAll('div[style*="z-index:300"]').forEach(el => el.remove());
+
+  const drinkButtons = LOYALTY.DRINK_REWARD_IDS.map(drinkId => {
+    const cat = MENU.find(c => c.items.some(i => i.id === drinkId));
+    const drink = cat?.items.find(i => i.id === drinkId);
+    if (!drink) return '';
+    return `
+      <button onclick="applyComboReward('${order.id}','${drinkId}')" style="width:100%;padding:14px;background:linear-gradient(135deg,#1652F0,#0738C9);color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:800;margin-bottom:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center">
+        <span>🥤 ${drink.name} (฿${drink.price})</span>
+        <span style="font-size:12px;opacity:.85">→ เลือก</span>
+      </button>
+    `;
+  }).join('');
+
+  const html = `
+    <div style="position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:300;display:flex;align-items:flex-end;justify-content:center" onclick="this.remove()">
+      <div onclick="event.stopPropagation()" style="background:#fff;width:100%;max-width:520px;border-radius:24px 24px 0 0;padding:24px 20px;max-height:92vh;overflow-y:auto">
+        <div style="text-align:center;margin-bottom:14px">
+          <div style="font-size:40px">🥤</div>
+          <div style="font-size:17px;font-weight:800;color:#0a1530;margin-top:4px">เลือกเครื่องดื่มฟรี</div>
+          <div style="font-size:13px;color:#5c6982;margin-top:4px">ใช้ทั้ง 2 (ลด 50฿ + เครื่องดื่ม) · −25 แต้ม</div>
+        </div>
+        ${drinkButtons}
+        <button onclick="this.closest('div[style*=fixed]').remove()" style="width:100%;padding:12px;margin-top:10px;background:transparent;color:#6b7280;border:none;font-size:14px;cursor:pointer">ยกเลิก</button>
+      </div>
+    </div>
+  `;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  document.body.appendChild(tmp.firstElementChild);
+}
+
+async function applyComboReward(orderId, drinkId) {
+  document.querySelectorAll('div[style*="z-index:300"]').forEach(el => el.remove());
+  // Apply discount first, then drink
+  await applyDiscountReward(orderId);
+  // Small delay to ensure state is updated
+  setTimeout(async () => {
+    await applyDrinkReward(orderId, drinkId);
+    toast('🎁🎁 ใช้ครบ! ลด 50฿ + ฟรีเครื่องดื่ม (−25 แต้ม)');
+  }, 200);
 }
 
 async function applyDiscountReward(orderId) {
@@ -1255,6 +1370,51 @@ function maybeAutoPrint(orders) {
 }
 let firstOrderLoad = true;
 
+// ========== Auto-prompt reward redemption on new order ==========
+const promptedOrderIds = new Set();
+let _rewardPromptInProgress = false;
+
+function maybeAutoPromptReward(orders) {
+  // Find pending orders where customer has reward eligibility, not yet redeemed, not yet prompted
+  const candidates = orders.filter(o => {
+    if (o.status !== 'pending') return false;
+    if (promptedOrderIds.has(o.id)) return false;
+    if (sessionStorage.getItem('rewardPrompted-' + o.id)) return false;
+    if ((o.redemptions || []).length > 0) return false;
+    const info = getRewardInfo(o);
+    return info.canDrink || info.canDiscount;
+  });
+
+  if (firstOrderLoad) {
+    // Mark all existing as prompted to avoid spamming on first load
+    candidates.forEach(o => {
+      promptedOrderIds.add(o.id);
+      sessionStorage.setItem('rewardPrompted-' + o.id, '1');
+    });
+    return;
+  }
+
+  if (candidates.length === 0 || _rewardPromptInProgress) return;
+
+  // Show modal for first candidate (process one at a time)
+  const order = candidates[0];
+  promptedOrderIds.add(order.id);
+  sessionStorage.setItem('rewardPrompted-' + order.id, '1');
+
+  const info = getRewardInfo(order);
+  _rewardPromptInProgress = true;
+  setTimeout(() => {
+    showRedemptionModal(order, info.customer, { auto: true });
+    // Clear flag after modal closes (set when modal removed)
+    const checkClose = setInterval(() => {
+      if (!document.querySelector('div[style*="z-index:300"]')) {
+        _rewardPromptInProgress = false;
+        clearInterval(checkClose);
+      }
+    }, 300);
+  }, 1500);
+}
+
 // ========== Edit Order ==========
 let editingOrder = null;
 let editingItems = [];
@@ -1381,6 +1541,8 @@ whenCloudReady(() => {
     if (!window.isEmbedded && window.OrderNotifier) {
       window.OrderNotifier.check(orders, { getOrders: () => cloudOrders || [] });
     }
+    // 🎁 Auto-prompt reward redemption for eligible customers
+    maybeAutoPromptReward(orders);
     firstOrderLoad = false;
   });
   window.cloud.onCustomers(customers => {
