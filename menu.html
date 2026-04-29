@@ -772,7 +772,9 @@ function renderOptionGroups() {
   wrap.innerHTML = item.optionGroups.map((g, gi) => {
     const isRequired = g.kind === 'required' || (g.min || 0) > 0;
     const isSingle = g.max === 1;
+    const isBoundedMulti = !isSingle && g.max > 1 && g.max < 99;
     const sel = custCurrent.options[gi] || [];
+    const reachedMax = (g.max && g.max < 99) ? sel.length >= g.max : false;
     return `
       <div class="cust-section option-group">
         <div class="og-label">
@@ -780,14 +782,18 @@ function renderOptionGroups() {
           ${isRequired
             ? '<span class="og-required">จำเป็น</span>'
             : '<span class="og-optional">เลือกได้</span>'}
-          ${isSingle ? '' : '<span class="og-optional">เลือกหลายอย่างได้</span>'}
+          ${isBoundedMulti ? `<span class="og-optional">เลือกได้สูงสุด ${g.max}</span>` : ''}
+          ${(!isSingle && !isBoundedMulti) ? '<span class="og-optional">เลือกหลายอย่างได้</span>' : ''}
+          ${(reachedMax && !isSingle) ? `<span style="color:#dc2626;font-size:11px;font-weight:700;margin-left:auto">ครบ ${g.max} แล้ว</span>` : ''}
         </div>
         <div class="og-choices">
           ${g.choices.map(c => {
             const active = sel.includes(c);
+            const disabled = !active && reachedMax && !isSingle;
             return `
               <div class="og-chip ${active ? 'active' : ''}"
-                   onclick="toggleOption(${gi}, '${escAttr(c)}', ${isSingle})">
+                   style="${disabled ? 'opacity:.4;pointer-events:none' : ''}"
+                   onclick="toggleOption(${gi}, '${escAttr(c)}', ${isSingle}, ${g.max || 99})">
                 <span>${c}</span>
                 ${g.priceEach > 0 ? `<span class="og-price">+${g.priceEach}฿</span>` : ''}
               </div>
@@ -799,14 +805,21 @@ function renderOptionGroups() {
   }).join('');
 }
 
-function toggleOption(groupIdx, choice, isSingle) {
+function toggleOption(groupIdx, choice, isSingle, max) {
   if (!custCurrent.options) custCurrent.options = {};
   let arr = custCurrent.options[groupIdx] || [];
   if (isSingle) {
     arr = arr.includes(choice) ? [] : [choice];
   } else {
-    if (arr.includes(choice)) arr = arr.filter(c => c !== choice);
-    else arr = [...arr, choice];
+    if (arr.includes(choice)) {
+      arr = arr.filter(c => c !== choice);
+    } else {
+      if (max && max < 99 && arr.length >= max) {
+        toast(`⚠️ เลือกได้สูงสุด ${max} อย่าง`, true);
+        return;
+      }
+      arr = [...arr, choice];
+    }
   }
   custCurrent.options[groupIdx] = arr;
   renderOptionGroups();
