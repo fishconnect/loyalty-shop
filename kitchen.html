@@ -183,6 +183,7 @@
 
 <script>
   const isEmbedded = new URLSearchParams(location.search).get('embed') === '1';
+  window.isEmbedded = isEmbedded; // expose for later scripts
   function isLoggedIn() { return sessionStorage.getItem('admin_logged_in') === '1'; }
   function doLogin() {
     const pwd = document.getElementById('loginPwd').value;
@@ -275,6 +276,7 @@
 
 <script type="module" src="firebase.js"></script>
 <script src="menu-data.js"></script>
+<script src="notifier.js"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 const STORAGE_KEY = 'loyaltyShopV2';
@@ -1211,6 +1213,10 @@ whenCloudReady(() => {
     render();
     // Auto-print new pending orders (skip first load)
     maybeAutoPrint(orders);
+    // 🔔 Sound + visual alert (only when standalone — parent index.html handles it when embedded)
+    if (!window.isEmbedded && window.OrderNotifier) {
+      window.OrderNotifier.check(orders, { getOrders: () => cloudOrders || [] });
+    }
     firstOrderLoad = false;
   });
   window.cloud.onCustomers(customers => {
