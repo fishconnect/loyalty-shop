@@ -596,11 +596,11 @@
     </div>
     <label style="margin-top:10px">🔉 ระดับเสียง <span id="notifVolLabel" style="float:right;color:#1652F0;font-weight:700">100%</span></label>
     <input type="range" id="notifVolume" min="0" max="100" value="100" oninput="onVolumeChange(this.value)" style="width:100%">
-    <label style="margin-top:10px">🗣️ ความเร็วเสียงพูด <span id="notifRateLabel" style="float:right;color:#1652F0;font-weight:700">1.0x</span></label>
-    <input type="range" id="notifRate" min="50" max="200" value="100" oninput="onRateChange(this.value)" style="width:100%">
+    <label style="margin-top:10px">⏱️ ความถี่ beep ซ้ำ <span id="notifRepeatLabel" style="float:right;color:#1652F0;font-weight:700">2 วิ</span></label>
+    <input type="range" id="notifRepeat" min="1" max="10" step="1" value="2" oninput="onRepeatChange(this.value)" style="width:100%">
     <button class="btn-secondary" onclick="testNotifSound()" style="width:100%;margin-top:10px">🔔 ทดสอบเสียงแจ้งเตือน</button>
     <div class="hint" style="margin-top:10px;line-height:1.6;font-size:12px">
-      ระบบจะเล่นเสียงพูดภาษาไทยเมื่อมีออเดอร์ใหม่ และดังซ้ำทุก 30 วินาทีจนกว่าจะกดยืนยันรายการ<br>
+      เมื่อมีออเดอร์ใหม่ ระบบจะดัง beep ซ้ำต่อเนื่องจนกว่าจะกด <b>ยืนยันรายการ</b> ทุกออเดอร์<br>
       📱 บนมือถือ/แท็บเล็ตต้อง <b>กดที่หน้าจอ 1 ครั้ง</b> เพื่อปลดล็อคเสียง (browser policy)
     </div>
   </div>
@@ -1738,10 +1738,9 @@ function onVolumeChange(v) {
   document.getElementById('notifVolLabel').textContent = v + '%';
   if (window.OrderNotifier) window.OrderNotifier.setVolume(parseInt(v) / 100);
 }
-function onRateChange(v) {
-  const rate = parseInt(v) / 100;
-  document.getElementById('notifRateLabel').textContent = rate.toFixed(2) + 'x';
-  if (window.OrderNotifier) window.OrderNotifier.setRate(rate);
+function onRepeatChange(v) {
+  document.getElementById('notifRepeatLabel').textContent = v + ' วิ';
+  if (window.OrderNotifier) window.OrderNotifier.setRepeatSec(parseFloat(v));
 }
 function testNotifSound() {
   if (!window.OrderNotifier) { toast('⚠️ ระบบเสียงยังไม่พร้อม'); return; }
@@ -1752,7 +1751,7 @@ function initNotifSettingsUI() {
   if (!window.OrderNotifier) return;
   const t = document.getElementById('notifSoundToggle');
   const v = document.getElementById('notifVolume');
-  const r = document.getElementById('notifRate');
+  const r = document.getElementById('notifRepeat');
   if (t) t.checked = window.OrderNotifier.isEnabled();
   if (v) {
     const vol = Math.round(window.OrderNotifier.getVolume() * 100);
@@ -1760,9 +1759,9 @@ function initNotifSettingsUI() {
     document.getElementById('notifVolLabel').textContent = vol + '%';
   }
   if (r) {
-    const rate = window.OrderNotifier.getRate();
-    r.value = Math.round(rate * 100);
-    document.getElementById('notifRateLabel').textContent = rate.toFixed(2) + 'x';
+    const sec = window.OrderNotifier.getRepeatSec();
+    r.value = sec;
+    document.getElementById('notifRepeatLabel').textContent = sec + ' วิ';
   }
 }
 // Run init on DOM ready

@@ -1,12 +1,11 @@
-// notifier.js — แจ้งเตือนออเดอร์ใหม่ด้วย beep + เสียงคนพูดภาษาไทย + visual alert
+// notifier.js — แจ้งเตือนออเดอร์ใหม่ด้วย beep ต่อเนื่อง จนกดยืนยัน
 // ใช้ร่วมกัน kitchen.html + index.html
 window.OrderNotifier = (function () {
   const KEY = 'orderNotifier';
   const settings = {
     enabled: localStorage.getItem(KEY + '.enabled') !== '0',
     volume: parseFloat(localStorage.getItem(KEY + '.volume') || '1'),
-    repeatSec: 30,
-    rate: parseFloat(localStorage.getItem(KEY + '.rate') || '1.0'),
+    repeatSec: parseFloat(localStorage.getItem(KEY + '.repeatSec') || '2'),
   };
 
   const seenPendingIds = new Set();
@@ -15,26 +14,10 @@ window.OrderNotifier = (function () {
   let unlocked = false;
   const originalTitle = document.title;
   let getOrdersFn = null;
-  let voicesReady = false;
-  let cachedVoices = [];
 
   function log(...args) { try { console.log('[Notifier]', ...args); } catch (e) {} }
 
-  // ===== Load voices (Chrome ต้องรอ async) =====
-  function refreshVoices() {
-    if (!('speechSynthesis' in window)) return;
-    try {
-      cachedVoices = window.speechSynthesis.getVoices() || [];
-      if (cachedVoices.length > 0) voicesReady = true;
-      log('Voices loaded:', cachedVoices.length, 'Thai:', cachedVoices.filter(v => v.lang && v.lang.toLowerCase().startsWith('th')).map(v => v.name));
-    } catch (e) { log('refreshVoices err', e); }
-  }
-  if ('speechSynthesis' in window) {
-    refreshVoices();
-    window.speechSynthesis.onvoiceschanged = refreshVoices;
-  }
-
-  // ===== Web Audio (beep) — ทำงานแน่ๆ ทุก browser =====
+  // ===== Web Audio (beep) =====
   let _ctx = null;
   function getCtx() {
     if (!_ctx) {
@@ -70,31 +53,6 @@ window.OrderNotifier = (function () {
     } catch (e) { log('beep err', e); }
   }
 
-  // ===== Web Speech API (เสียงคนพูดไทย) =====
-  function speak(text) {
-    if (!settings.enabled) return;
-    if (!('speechSynthesis' in window)) { log('No speechSynthesis'); return; }
-    try {
-      window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(text);
-      u.lang = 'th-TH';
-      u.rate = settings.rate;
-      u.pitch = 1.1;
-      u.volume = settings.volume;
-      if (!voicesReady) refreshVoices();
-      const thaiVoice = cachedVoices.find(v => v.lang && v.lang.toLowerCase().startsWith('th'));
-      if (thaiVoice) {
-        u.voice = thaiVoice;
-        log('Speak (th):', text, 'voice:', thaiVoice.name);
-      } else {
-        log('Speak (no Thai voice — using default):', text);
-      }
-      u.onerror = (e) => log('TTS error:', e.error || e);
-      u.onend = () => log('TTS ended:', text);
-      window.speechSynthesis.speak(u);
-    } catch (e) { log('speak err', e); }
-  }
-
   // ===== Unlock audio =====
   function unlock() {
     if (unlocked) return;
@@ -104,20 +62,12 @@ window.OrderNotifier = (function () {
       const ctx = getCtx();
       if (ctx) ctx.resume();
     } catch (e) {}
-    try {
-      // Some browsers need a silent utterance to unlock TTS
-      const u = new SpeechSynthesisUtterance(' ');
-      u.volume = 0; u.lang = 'th-TH';
-      window.speechSynthesis.speak(u);
-    } catch (e) {}
     hideUnlockBanner();
     showBanner('✓ เปิดเสียงแจ้งเตือนแล้ว', 2200, '#16a34a');
-    // Confirm with a small beep so user knows it's working
     setTimeout(() => playBeep([700, 1000]), 100);
-    setTimeout(() => speak('พร้อมรับออเดอร์'), 400);
   }
 
-  // ===== Visual: tab title + flash + banner =====
+  // ===== Visual =====
   function setTitle(pendingCount) {
     if (pendingCount > 0) document.title = `🔔(${pendingCount}) ${originalTitle}`;
     else document.title = originalTitle;
@@ -125,7 +75,7 @@ window.OrderNotifier = (function () {
   function flash() {
     if (!document.body) return;
     document.body.classList.add('order-flash-on');
-    setTimeout(() => document.body.classList.remove('order-flash-on'), 600);
+    setTimeout(() => document.body.classList.remove('order-flash-on'), 500);
   }
   function showBanner(msg, ms, color) {
     let el = document.getElementById('orderNotifierToast');
@@ -174,26 +124,25 @@ window.OrderNotifier = (function () {
     if (unlockBannerEl) { unlockBannerEl.remove(); unlockBannerEl = null; }
   }
 
-  // ===== Inject CSS =====
+  // ===== CSS =====
   const style = document.createElement('style');
   style.textContent = `
     @keyframes orderFlashKf { 0%,100%{background-color:transparent} 50%{background-color:rgba(220,38,38,.18)} }
-    body.order-flash-on { animation: orderFlashKf .55s ease-in-out; }
+    body.order-flash-on { animation: orderFlashKf .45s ease-in-out; }
     @keyframes orderUnlockPulse { 0%,100%{transform:translateX(-50%) scale(1)} 50%{transform:translateX(-50%) scale(1.06)} }
   `;
   document.head.appendChild(style);
 
-  // ===== Repeat timer =====
+  // ===== Continuous repeat (until confirmed) =====
   function startRepeat() {
     if (repeatTimer) return;
-    log('Repeat started');
+    log('Repeat started, every', settings.repeatSec, 'sec');
     repeatTimer = setInterval(() => {
       const orders = getOrdersFn ? getOrdersFn() : [];
       const c = orders.filter(o => o.status === 'pending').length;
       if (c <= 0) { stopRepeat(); return; }
-      log('Repeat alert, count:', c);
+      log('Continuous beep, pending:', c);
       playBeep([880, 1200, 880]);
-      speak(`มีออเดอร์รอยืนยัน ${c} รายการ`);
       flash();
     }, settings.repeatSec * 1000);
   }
@@ -221,12 +170,10 @@ window.OrderNotifier = (function () {
 
     if (newOnes.length > 0) {
       const msg = newOnes.length === 1 ? 'ออเดอร์มาใหม่!' : `ออเดอร์มาใหม่ ${newOnes.length} รายการ!`;
-      log('NEW ORDER!', msg, 'unlocked:', unlocked);
+      log('NEW ORDER!', msg);
       playBeep([880, 1200, 1500, 1200, 880]); // attention-grabbing pattern
-      speak(msg);
       flash();
       showBanner('🔔 ' + msg, 4000, '#dc2626');
-      // If audio not unlocked, show unlock banner
       if (!unlocked) showUnlockBanner();
     }
 
@@ -234,13 +181,13 @@ window.OrderNotifier = (function () {
     else stopRepeat();
   }
 
-  // ===== Listen for ANY user interaction to unlock =====
+  // ===== Auto-unlock on any user gesture =====
   function tryUnlock() { if (!unlocked) unlock(); }
   ['click', 'touchstart', 'touchend', 'keydown', 'pointerdown'].forEach(ev => {
     document.addEventListener(ev, tryUnlock, { capture: true, passive: true });
   });
 
-  // ===== Show unlock banner on page load (after small delay) =====
+  // ===== Show unlock banner on page load =====
   function init() {
     setTimeout(() => {
       if (!unlocked && settings.enabled) showUnlockBanner();
@@ -252,18 +199,16 @@ window.OrderNotifier = (function () {
     init();
   }
 
-  log('OrderNotifier loaded. enabled:', settings.enabled, 'volume:', settings.volume);
+  log('OrderNotifier loaded. enabled:', settings.enabled, 'volume:', settings.volume, 'repeatSec:', settings.repeatSec);
 
   return {
     check, unlock,
     test() {
       log('TEST sound triggered');
       unlock();
-      // Force play beep IMMEDIATELY (in user gesture context)
       playBeep([880, 1200, 1500, 1200, 880]);
       flash();
       showBanner('🔔 ทดสอบเสียง — ถ้าไม่ได้ยินบีบ ตรวจระดับเสียงเครื่อง', 3500, '#1652F0');
-      setTimeout(() => speak('ทดสอบเสียงแจ้งเตือน ออเดอร์มาใหม่'), 700);
     },
     setEnabled(v) {
       settings.enabled = !!v;
@@ -277,12 +222,12 @@ window.OrderNotifier = (function () {
       localStorage.setItem(KEY + '.volume', String(settings.volume));
     },
     getVolume() { return settings.volume; },
-    setRate(v) {
-      settings.rate = Math.max(0.5, Math.min(2, parseFloat(v) || 1));
-      localStorage.setItem(KEY + '.rate', String(settings.rate));
+    setRepeatSec(v) {
+      settings.repeatSec = Math.max(0.5, Math.min(10, parseFloat(v) || 2));
+      localStorage.setItem(KEY + '.repeatSec', String(settings.repeatSec));
+      if (repeatTimer) { stopRepeat(); startRepeat(); }
     },
-    getRate() { return settings.rate; },
+    getRepeatSec() { return settings.repeatSec; },
     isUnlocked() { return unlocked; },
-    _debug: { settings, getCtx, refreshVoices, get cachedVoices() { return cachedVoices; } }
   };
 })();
