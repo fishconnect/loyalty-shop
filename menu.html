@@ -268,6 +268,33 @@
   }
   .addon-chip.active .check::before { content: "✓"; font-weight: 900; font-size: 13px; }
 
+  /* Option Groups (เลือกเนื้อ / เพิ่ม +10 / ไข่ +5 / เลือกเส้น) */
+  .option-group { margin-bottom: 18px; }
+  .og-label { font-size: 14px; font-weight: 800; color: #0a1530; margin-bottom: 10px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+  .og-required { background: #dc2626; color: #fff; font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 999px; }
+  .og-optional { background: #e5e7eb; color: #6b7280; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 999px; }
+  .og-choices { display: flex; flex-wrap: wrap; gap: 8px; }
+  .og-chip {
+    padding: 9px 14px; border: 1.5px solid #d1ddff; border-radius: 999px;
+    background: #fff; font-size: 13px; font-weight: 600; color: #1f2a44;
+    cursor: pointer; transition: all .15s; user-select: none;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .og-chip:hover { border-color: #1652F0; }
+  .og-chip.active {
+    background: linear-gradient(135deg, #1652F0, #0738C9); color: #fff;
+    border-color: #1652F0; box-shadow: 0 3px 10px rgba(22,82,240,.3);
+  }
+  .og-chip .og-price { font-size: 11px; font-weight: 700; color: #f59e0b; }
+  .og-chip.active .og-price { color: #fbbf24; }
+
+  /* Cart line option chips */
+  .cart-line .opt-list { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .cart-line .opt-chip { background: #ebf0ff; color: #1652F0; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; }
+  .cart-line .opt-chip.req { background: #f0fdf4; color: #166534; }
+  .cart-line .opt-chip.add10 { background: #fef3c7; color: #92400e; }
+  .cart-line .opt-chip.add5 { background: #fce7f3; color: #be185d; }
+
   /* Note input */
   textarea, input.note-input {
     width: 100%; padding: 12px; font-size: 15px;
@@ -526,10 +553,8 @@
         </div>
       </div>
 
-      <div class="cust-section" id="addonSection">
-        <h3>🍳 เพิ่มเติม (เลือกได้)</h3>
-        <div class="addons" id="addonList"></div>
-      </div>
+      <!-- Dynamic option groups (เลือกเนื้อ / เพิ่ม +10 / ไข่ +5 / เลือกเส้น) -->
+      <div id="optionGroupsContainer"></div>
 
       <div class="cust-section">
         <h3>📝 หมายเหตุพิเศษ</h3>
@@ -585,16 +610,19 @@
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 const STORAGE_KEY = 'loyaltyShopV2';
-let cart = JSON.parse(sessionStorage.getItem('cartV2') || '[]'); // [{cartId, mainId, qty, addOnIds:[], note}]
+// Cart line: { cartId, mainId, qty, options: { [groupIdx]: [choiceName, ...] }, note }
+let cart = JSON.parse(sessionStorage.getItem('cartV2') || '[]');
+
+// Migrate / clear old cart format (had addOnIds)
+if (cart.length && cart[0].addOnIds !== undefined) {
+  cart = [];
+  sessionStorage.removeItem('cartV2');
+}
 
 // Effective menu (with admin overrides applied)
 let menuConfig = JSON.parse(localStorage.getItem('menuConfig') || '{"overrides":{},"custom":[]}');
 let EFFECTIVE_MENU = window.applyMenuConfig ? window.applyMenuConfig(menuConfig) : MENU;
 function getEffectiveMenu() { return EFFECTIVE_MENU; }
-
-// Get all add-on items from add-on category
-function getAddOnCategory() { return EFFECTIVE_MENU.find(c => c.isAddOn); }
-function getAddOns() { return (getAddOnCategory()?.items || []).filter(a => a.available !== false); }
 
 function loadDB() {
   try {
@@ -626,7 +654,7 @@ function findItem(id) {
 function renderMenu() {
   const cats = document.getElementById('cats');
   const main = document.getElementById('menuMain');
-  // Hide add-on category from main list
+  // All categories are visible (no separate add-on category in new menu)
   const visibleCats = EFFECTIVE_MENU.filter(c => !c.isAddOn);
 
   cats.innerHTML = '<div class="cats-inner">' +
@@ -688,7 +716,9 @@ function scrollToCat(id) {
 
 // ============ Customize Modal ============
 let editingCartId = null;
-let custCurrent = { mainId: null, qty: 1, addOnIds: [], note: '' };
+let custCurrent = { mainId: null, qty: 1, options: {}, note: '' };
+
+function escAttr(s) { return String(s).replace(/'/g, "&#39;").replace(/"/g, '&quot;'); }
 
 function openCustomize(itemId, cartId) {
   const found = findItem(itemId);
@@ -699,10 +729,15 @@ function openCustomize(itemId, cartId) {
   if (cartId) {
     const line = cart.find(l => l.cartId === cartId);
     if (line) {
-      custCurrent = { mainId: line.mainId, qty: line.qty, addOnIds: [...line.addOnIds], note: line.note || '' };
+      custCurrent = {
+        mainId: line.mainId,
+        qty: line.qty,
+        options: JSON.parse(JSON.stringify(line.options || {})),
+        note: line.note || ''
+      };
     }
   } else {
-    custCurrent = { mainId: itemId, qty: 1, addOnIds: [], note: '' };
+    custCurrent = { mainId: itemId, qty: 1, options: {}, note: '' };
   }
 
   const custEmojiEl = document.getElementById('custEmoji');
@@ -717,18 +752,7 @@ function openCustomize(itemId, cartId) {
   document.getElementById('custQty').textContent = custCurrent.qty;
   document.getElementById('custItemNote').value = custCurrent.note;
 
-  // Render add-ons
-  const addOns = getAddOns();
-  document.getElementById('addonSection').style.display = addOns.length ? 'block' : 'none';
-  document.getElementById('addonList').innerHTML = addOns.map(a => `
-    <div class="addon-chip ${custCurrent.addOnIds.includes(a.id) ? 'active' : ''}" onclick="toggleAddOn('${a.id}')">
-      <div>
-        <div class="name">${a.name}</div>
-        <div class="price">+฿${a.price}</div>
-      </div>
-      <div class="check"></div>
-    </div>
-  `).join('');
+  renderOptionGroups();
 
   // Edit mode shows remove button
   document.getElementById('btnRemoveLine').style.display = cartId ? 'grid' : 'none';
@@ -736,6 +760,57 @@ function openCustomize(itemId, cartId) {
 
   updateCustTotal();
   document.getElementById('modalCust').classList.add('show');
+}
+
+function renderOptionGroups() {
+  const item = findItem(custCurrent.mainId)?.item;
+  const wrap = document.getElementById('optionGroupsContainer');
+  if (!item || !item.optionGroups || !item.optionGroups.length) {
+    wrap.innerHTML = '';
+    return;
+  }
+  wrap.innerHTML = item.optionGroups.map((g, gi) => {
+    const isRequired = g.kind === 'required' || (g.min || 0) > 0;
+    const isSingle = g.max === 1;
+    const sel = custCurrent.options[gi] || [];
+    return `
+      <div class="cust-section option-group">
+        <div class="og-label">
+          <span>${g.label}</span>
+          ${isRequired
+            ? '<span class="og-required">จำเป็น</span>'
+            : '<span class="og-optional">เลือกได้</span>'}
+          ${isSingle ? '' : '<span class="og-optional">เลือกหลายอย่างได้</span>'}
+        </div>
+        <div class="og-choices">
+          ${g.choices.map(c => {
+            const active = sel.includes(c);
+            return `
+              <div class="og-chip ${active ? 'active' : ''}"
+                   onclick="toggleOption(${gi}, '${escAttr(c)}', ${isSingle})">
+                <span>${c}</span>
+                ${g.priceEach > 0 ? `<span class="og-price">+${g.priceEach}฿</span>` : ''}
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function toggleOption(groupIdx, choice, isSingle) {
+  if (!custCurrent.options) custCurrent.options = {};
+  let arr = custCurrent.options[groupIdx] || [];
+  if (isSingle) {
+    arr = arr.includes(choice) ? [] : [choice];
+  } else {
+    if (arr.includes(choice)) arr = arr.filter(c => c !== choice);
+    else arr = [...arr, choice];
+  }
+  custCurrent.options[groupIdx] = arr;
+  renderOptionGroups();
+  updateCustTotal();
 }
 
 function closeCustomize() {
@@ -749,35 +824,17 @@ function adjustCustQty(delta) {
   updateCustTotal();
 }
 
-function toggleAddOn(addOnId) {
-  const idx = custCurrent.addOnIds.indexOf(addOnId);
-  if (idx >= 0) custCurrent.addOnIds.splice(idx, 1);
-  else custCurrent.addOnIds.push(addOnId);
-  document.querySelectorAll('.addon-chip').forEach(el => {
-    const id = el.querySelector('[onclick]')?.getAttribute('onclick');
-  });
-  // Re-render
-  const addOns = getAddOns();
-  document.getElementById('addonList').innerHTML = addOns.map(a => `
-    <div class="addon-chip ${custCurrent.addOnIds.includes(a.id) ? 'active' : ''}" onclick="toggleAddOn('${a.id}')">
-      <div>
-        <div class="name">${a.name}</div>
-        <div class="price">+฿${a.price}</div>
-      </div>
-      <div class="check"></div>
-    </div>
-  `).join('');
-  updateCustTotal();
-}
-
 function calcLineTotal(line) {
   const main = findItem(line.mainId)?.item;
   if (!main) return 0;
-  const addOnPrice = line.addOnIds.reduce((s, id) => {
-    const a = getAddOns().find(x => x.id === id);
-    return s + (a?.price || 0);
-  }, 0);
-  return (main.price + addOnPrice) * line.qty;
+  let unit = main.price || 0;
+  if (main.optionGroups && line.options) {
+    main.optionGroups.forEach((g, gi) => {
+      const sel = line.options[gi] || [];
+      unit += (g.priceEach || 0) * sel.length;
+    });
+  }
+  return unit * (line.qty || 1);
 }
 
 function updateCustTotal() {
@@ -785,17 +842,35 @@ function updateCustTotal() {
   document.getElementById('btnAddTotal').textContent = '฿' + total;
 }
 
+function validateRequiredOptions(item, options) {
+  if (!item.optionGroups) return true;
+  for (let gi = 0; gi < item.optionGroups.length; gi++) {
+    const g = item.optionGroups[gi];
+    const required = g.kind === 'required' || (g.min || 0) > 0;
+    if (required) {
+      const sel = (options && options[gi]) || [];
+      if (sel.length < (g.min || 1)) {
+        toast('⚠️ กรุณาเลือก: ' + g.label, true);
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 function addToCart() {
   custCurrent.note = document.getElementById('custItemNote').value.trim();
+  const item = findItem(custCurrent.mainId)?.item;
+  if (!item) return;
+  if (!validateRequiredOptions(item, custCurrent.options)) return;
+
   if (editingCartId) {
     const idx = cart.findIndex(l => l.cartId === editingCartId);
-    if (idx >= 0) {
-      cart[idx] = { ...cart[idx], ...custCurrent };
-    }
+    if (idx >= 0) cart[idx] = { ...cart[idx], ...custCurrent };
     toast('✓ อัปเดตแล้ว');
   } else {
     cart.push({ cartId: 'c-' + Date.now() + Math.random().toString(36).slice(2,5), ...custCurrent });
-    toast(`✓ เพิ่ม "${findItem(custCurrent.mainId).item.name}" แล้ว`);
+    toast(`✓ เพิ่ม "${item.name}" แล้ว`);
   }
   saveCart();
   renderMenu();
@@ -846,19 +921,28 @@ function renderCartLines() {
   wrap.innerHTML = cart.map(line => {
     const main = findItem(line.mainId)?.item;
     if (!main) return '';
-    const addOns = line.addOnIds.map(id => getAddOns().find(a => a.id === id)).filter(Boolean);
     const lineTotal = calcLineTotal(line);
+    // Build option chips
+    let optChips = '';
+    if (main.optionGroups && line.options) {
+      const chips = [];
+      main.optionGroups.forEach((g, gi) => {
+        const sel = line.options[gi] || [];
+        sel.forEach(c => {
+          const cls = (g.priceEach === 0) ? 'req' : (g.priceEach === 10 ? 'add10' : 'add5');
+          const prefix = g.priceEach > 0 ? '+' : '';
+          chips.push(`<span class="opt-chip ${cls}">${prefix}${c}${g.priceEach > 0 ? ` (+${g.priceEach})` : ''}</span>`);
+        });
+      });
+      if (chips.length) optChips = `<div class="opt-list">${chips.join('')}</div>`;
+    }
     return `
       <div class="cart-line">
         <div class="head">
           <div class="name">${main.name}</div>
           <button class="x" onclick="removeLine('${line.cartId}')">×</button>
         </div>
-        ${addOns.length ? `
-          <div class="addons-list">
-            ${addOns.map(a => `<span class="addon-tag">+ ${a.name}</span>`).join('')}
-          </div>
-        ` : ''}
+        ${optChips}
         ${line.note ? `<div class="note-text">📝 ${line.note}</div>` : ''}
         <div class="foot">
           <div class="qty-mini">
@@ -943,21 +1027,40 @@ async function submitOrder() {
     customer.name = name;
   }
 
-  // Convert cart lines to order items (expanded with addons as combined entries)
+  // Convert cart lines to order items (with option breakdown)
   const items = [];
   cart.forEach(line => {
     const main = findItem(line.mainId)?.item;
     if (!main) return;
-    const addOns = line.addOnIds.map(id => getAddOns().find(a => a.id === id)).filter(Boolean);
-    const addOnPrice = addOns.reduce((s, a) => s + a.price, 0);
-    const unitPrice = main.price + addOnPrice;
+    // Flatten options into a structured list + name suffix
+    const optList = [];
+    let optPrice = 0;
+    if (main.optionGroups && line.options) {
+      main.optionGroups.forEach((g, gi) => {
+        const sel = line.options[gi] || [];
+        sel.forEach(c => {
+          optList.push({ group: g.label, choice: c, price: g.priceEach || 0 });
+          optPrice += g.priceEach || 0;
+        });
+      });
+    }
+    const unitPrice = (main.price || 0) + optPrice;
+    // Display name: include required-choice in parens, +addOns inline
+    const reqParts = [], addParts = [];
+    optList.forEach(o => {
+      if (o.price === 0) reqParts.push(o.choice);
+      else addParts.push('+' + o.choice);
+    });
+    const displayName = main.name
+      + (reqParts.length ? ' (' + reqParts.join(', ') + ')' : '')
+      + (addParts.length ? ' ' + addParts.join(' ') : '');
     items.push({
       id: line.mainId,
-      name: main.name + (addOns.length ? ' + ' + addOns.map(a => a.name).join(' + ') : ''),
+      name: displayName,
       price: unitPrice,
       qty: line.qty,
       mainName: main.name,
-      addOns: addOns.map(a => a.name),
+      options: optList,
       note: line.note || ''
     });
   });

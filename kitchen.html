@@ -440,10 +440,25 @@ function render() {
             const free = it.freeQty || 0;
             const paid = it.qty - free;
             const lineTotal = it.price * paid;
+            // Use mainName if available (new menu) so we can show options separately
+            const mainNm = it.mainName || it.name;
+            // Build option chips from new structure
+            let optHTML = '';
+            if (it.options && it.options.length) {
+              const chips = it.options.map(o => {
+                const isReq = !o.price;
+                const bg = isReq ? '#dcfce7;color:#166534' : (o.price === 10 ? '#fef3c7;color:#92400e' : '#fce7f3;color:#be185d');
+                const prefix = isReq ? '' : '+';
+                const px = isReq ? '' : ` (+${o.price})`;
+                return `<span style="background:${bg};padding:2px 9px;border-radius:999px;font-size:12px;font-weight:700;margin:2px 3px 0 0;display:inline-block">${prefix}${o.choice}${px}</span>`;
+              }).join('');
+              optHTML = `<div style="margin-top:5px">${chips}</div>`;
+            }
             return `
             <div class="order-item-row">
               <div class="name">
-                <div>${it.name}${free>0?` <span style="background:#16a34a;color:#fff;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:800;margin-left:4px">ฟรี ${free}</span>`:''}</div>
+                <div style="font-weight:700">${mainNm}${free>0?` <span style="background:#16a34a;color:#fff;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:800;margin-left:4px">ฟรี ${free}</span>`:''}</div>
+                ${optHTML}
                 ${it.note ? `<div style="margin-top:4px;background:#fef3c7;color:#92400e;padding:4px 10px;border-radius:6px;font-size:13px;font-weight:700;border-left:3px solid #f59e0b;display:inline-block">📝 ${it.note}</div>` : ''}
               </div>
               <div class="qty">×${it.qty}</div>
@@ -811,10 +826,20 @@ function browserPrint(order) {
     const paid = it.qty - free;
     const lineTotal = it.price * paid;
     const freeStr = free > 0 ? ` <span class="rc-free">[ฟรี ${free}]</span>` : '';
+    const mainNm = it.mainName || it.name;
+    // Build option lines
+    let optStr = '';
+    if (it.options && it.options.length) {
+      optStr = it.options.map(o => {
+        const prefix = o.price > 0 ? '+ ' : '› ';
+        const px = o.price > 0 ? ` (+${o.price})` : '';
+        return `<div style="font-size:10pt;margin:0.5mm 0 0 4mm">${prefix}${o.choice}${px}</div>`;
+      }).join('');
+    }
     const noteStr = it.note ? `<div style="font-size:10pt;font-style:italic;color:#000;margin:1mm 0 0 4mm">📝 ${it.note}</div>` : '';
     return `
       <div class="rc-item">
-        <div class="name">${it.qty}× ${it.name}${freeStr}${noteStr}</div>
+        <div class="name">${it.qty}× ${mainNm}${freeStr}${optStr}${noteStr}</div>
         <div class="price">${free > 0 && paid === 0 ? 'ฟรี' : '฿' + lineTotal}</div>
       </div>
     `;
@@ -1001,10 +1026,19 @@ function buildESCPOS(order) {
     const paid = it.qty - free;
     const lineTotal = it.price * paid;
     const right = (free > 0 && paid === 0) ? 'FREE' : '฿' + lineTotal;
-    const namePart = it.qty + 'x ' + it.name;
+    const mainNm = it.mainName || it.name;
+    const namePart = it.qty + 'x ' + mainNm;
     // Pad to 32 chars total
     const padding = Math.max(1, 32 - namePart.length - right.length);
     ln(namePart + ' '.repeat(padding) + right);
+    // Print options (one per line)
+    if (it.options && it.options.length) {
+      for (const o of it.options) {
+        const prefix = o.price > 0 ? '   + ' : '   - ';
+        const px = o.price > 0 ? ' (+' + o.price + ')' : '';
+        ln(prefix + o.choice + px);
+      }
+    }
     if (free > 0) ln('   [FREE x' + free + ']');
     if (it.note) ln('   note: ' + it.note);
   }
