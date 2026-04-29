@@ -347,9 +347,26 @@
   <div class="tab" data-page="settings">⚙️</div>
 </div>
 
-<!-- ========== เมนู (สั่งให้ลูกค้าหน้าร้าน) ========== -->
+<!-- ========== เมนูทั่วไป (จัดการ + Add-on + iframe สั่ง) ========== -->
 <div class="page" id="page-menu" style="padding:0">
-  <iframe id="menuFrame" src="about:blank" style="border:0;width:100%;height:calc(100vh - 130px);display:block" title="Menu"></iframe>
+  <div style="padding:14px 14px 6px;background:linear-gradient(135deg,#1652F0,#0738C9);color:#fff">
+    <h2 style="font-size:18px;margin:0">🍽️ เมนูร้าน (ลูกค้าทั่วไป)</h2>
+    <div style="font-size:12px;opacity:.9;margin-top:4px">ลิงก์ลูกค้า: <a href="menu.html" target="_blank" style="color:#fbbf24;font-weight:800">/menu.html</a> · ร่วมโปรแต้ม</div>
+  </div>
+  <div style="display:flex;background:#f7f8fb;border-bottom:1px solid #e5e7eb;overflow-x:auto">
+    <button class="m-subtab active" onclick="setMenuView('items')" id="mtab-items" style="flex:1;min-width:110px;padding:10px;border:none;background:transparent;font-weight:700;color:#1652F0;border-bottom:3px solid #1652F0;cursor:pointer;font-family:inherit">📋 รายการ</button>
+    <button class="m-subtab" onclick="setMenuView('addons')" id="mtab-addons" style="flex:1;min-width:110px;padding:10px;border:none;background:transparent;font-weight:700;color:#6b7280;border-bottom:3px solid transparent;cursor:pointer;font-family:inherit">🧂 Add-on</button>
+    <button class="m-subtab" onclick="setMenuView('order')" id="mtab-order" style="flex:1;min-width:110px;padding:10px;border:none;background:transparent;font-weight:700;color:#6b7280;border-bottom:3px solid transparent;cursor:pointer;font-family:inherit">🍽 สั่งหน้าร้าน</button>
+  </div>
+  <div id="menu-items-view" style="padding:14px;max-height:calc(100vh - 230px);overflow-y:auto">
+    <div id="regularItemList"></div>
+  </div>
+  <div id="menu-addons-view" style="padding:14px;display:none;max-height:calc(100vh - 230px);overflow-y:auto">
+    <div id="regularAddOnList"></div>
+  </div>
+  <div id="menu-order-view" style="display:none">
+    <iframe id="menuFrame" src="about:blank" style="border:0;width:100%;height:calc(100vh - 230px);display:block" title="Menu"></iframe>
+  </div>
 </div>
 
 <!-- ========== 🏭 เมนูโรงงาน (จัดการ + iframe สั่งหน้าร้าน) ========== -->
@@ -358,13 +375,17 @@
     <h2 style="font-size:18px;margin:0">🏭 เมนูโรงงาน</h2>
     <div style="font-size:12px;opacity:.9;margin-top:4px">ลิงก์ลูกค้าโรงงาน: <a href="factory.html" target="_blank" style="color:#fbbf24;font-weight:800">/factory.html</a> · 50฿/รายการ · ไม่ร่วมโปรแต้ม</div>
   </div>
-  <div style="display:flex;background:#f7f8fb;border-bottom:1px solid #e5e7eb">
-    <button class="factory-tab active" onclick="setFactoryView('manage')" id="ftab-manage" style="flex:1;padding:10px;border:none;background:transparent;font-weight:700;color:#1652F0;border-bottom:3px solid #1652F0;cursor:pointer;font-family:inherit">📋 จัดการเมนู</button>
-    <button class="factory-tab" onclick="setFactoryView('order')" id="ftab-order" style="flex:1;padding:10px;border:none;background:transparent;font-weight:700;color:#6b7280;border-bottom:3px solid transparent;cursor:pointer;font-family:inherit">🍽 สั่งให้โรงงาน</button>
+  <div style="display:flex;background:#f7f8fb;border-bottom:1px solid #e5e7eb;overflow-x:auto">
+    <button class="factory-tab active" onclick="setFactoryView('manage')" id="ftab-manage" style="flex:1;min-width:110px;padding:10px;border:none;background:transparent;font-weight:700;color:#1652F0;border-bottom:3px solid #1652F0;cursor:pointer;font-family:inherit">📋 รายการ</button>
+    <button class="factory-tab" onclick="setFactoryView('addons')" id="ftab-addons" style="flex:1;min-width:110px;padding:10px;border:none;background:transparent;font-weight:700;color:#6b7280;border-bottom:3px solid transparent;cursor:pointer;font-family:inherit">🧂 Add-on</button>
+    <button class="factory-tab" onclick="setFactoryView('order')" id="ftab-order" style="flex:1;min-width:110px;padding:10px;border:none;background:transparent;font-weight:700;color:#6b7280;border-bottom:3px solid transparent;cursor:pointer;font-family:inherit">🍽 สั่งให้โรงงาน</button>
   </div>
   <div id="factory-manage-view" style="padding:14px;max-height:calc(100vh - 230px);overflow-y:auto">
     <button class="btn-primary" onclick="addFactoryItem()" style="width:100%;margin-bottom:10px">➕ เพิ่มรายการเมนูโรงงาน</button>
     <div id="factoryItemList"></div>
+  </div>
+  <div id="factory-addons-view" style="padding:14px;display:none;max-height:calc(100vh - 230px);overflow-y:auto">
+    <div id="factoryAddOnList"></div>
   </div>
   <div id="factory-order-view" style="display:none">
     <iframe id="factoryFrame" src="about:blank" style="border:0;width:100%;height:calc(100vh - 230px);display:block" title="Factory Menu"></iframe>
@@ -839,8 +860,8 @@ document.querySelectorAll('.tab').forEach(t => {
     }
     // Lazy-load iframes (use dataset flag because empty src resolves to current URL)
     if (t.dataset.page === 'menu') {
-      const f = document.getElementById('menuFrame');
-      if (!f.dataset.loaded) { f.src = 'menu.html?embed=1&mode=shop'; f.dataset.loaded = '1'; }
+      // Default to items view
+      if (typeof renderRegularItemList === 'function') renderRegularItemList();
     }
     if (t.dataset.page === 'kitchen') {
       const f = document.getElementById('kitchenFrame');
@@ -860,17 +881,192 @@ function getEffectiveFactoryMenu() {
 }
 
 function setFactoryView(v) {
-  const isManage = v === 'manage';
-  document.getElementById('factory-manage-view').style.display = isManage ? 'block' : 'none';
-  document.getElementById('factory-order-view').style.display = isManage ? 'none' : 'block';
-  document.getElementById('ftab-manage').style.color = isManage ? '#1652F0' : '#6b7280';
-  document.getElementById('ftab-manage').style.borderBottomColor = isManage ? '#1652F0' : 'transparent';
-  document.getElementById('ftab-order').style.color = !isManage ? '#1652F0' : '#6b7280';
-  document.getElementById('ftab-order').style.borderBottomColor = !isManage ? '#1652F0' : 'transparent';
-  if (!isManage) {
+  const views = {
+    manage: document.getElementById('factory-manage-view'),
+    addons: document.getElementById('factory-addons-view'),
+    order:  document.getElementById('factory-order-view'),
+  };
+  Object.keys(views).forEach(k => { views[k].style.display = (k === v) ? 'block' : 'none'; });
+  ['manage', 'addons', 'order'].forEach(k => {
+    const tab = document.getElementById('ftab-' + k);
+    if (!tab) return;
+    const active = k === v;
+    tab.style.color = active ? '#1652F0' : '#6b7280';
+    tab.style.borderBottomColor = active ? '#1652F0' : 'transparent';
+  });
+  if (v === 'addons') renderFactoryAddOns();
+  if (v === 'order') {
     const f = document.getElementById('factoryFrame');
     if (!f.dataset.loaded) { f.src = 'menu.html?embed=1&mode=factory'; f.dataset.loaded = '1'; }
   }
+}
+
+// Render add-on toggles for factory menu
+function renderFactoryAddOns() {
+  const wrap = document.getElementById('factoryAddOnList');
+  // Get unique choices from base FACTORY_MENU (not filtered yet)
+  const choices = window.getMenuChoices ? window.getMenuChoices(window.FACTORY_MENU || []) : [];
+  if (!choices.length) { wrap.innerHTML = '<div style="text-align:center;color:#9ca3af;padding:40px">ไม่มี option</div>'; return; }
+  const disabled = new Set(factoryConfig.disabledChoices || []);
+  // Group by priceEach
+  const groups = { 0: [], 5: [], 10: [], other: [] };
+  choices.forEach(c => {
+    if (c.priceEach === 0) groups[0].push(c);
+    else if (c.priceEach === 5) groups[5].push(c);
+    else if (c.priceEach === 10) groups[10].push(c);
+    else groups.other.push(c);
+  });
+  const groupLabel = { 0: '🟢 ตัวเลือก (ฟรี)', 5: '🩷 +5 บาท', 10: '🟡 +10 บาท', other: '⚪ อื่นๆ' };
+  let html = '';
+  ['0', '5', '10', 'other'].forEach(k => {
+    const list = groups[k];
+    if (!list.length) return;
+    html += `<div style="margin-bottom:18px"><h3 style="font-size:14px;color:#1652F0;font-weight:800;margin-bottom:8px">${groupLabel[k]} <span style="color:#9ca3af;font-size:11px;font-weight:500">(${list.length})</span></h3>`;
+    html += list.map(c => {
+      const isDisabled = disabled.has(c.name);
+      return `
+        <div style="background:#fff;border:1.5px solid ${isDisabled?'#fca5a5':'#e2e7ef'};border-radius:12px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:10px;${isDisabled?'background:#fee2e2':''}">
+          <div style="flex:1">
+            <div style="font-weight:700;font-size:14px;color:${isDisabled?'#991b1b':'#0a1530'}">${c.name}${isDisabled?' <span style="color:#dc2626;font-size:11px">(หมด)</span>':''}</div>
+            ${c.priceEach > 0 ? `<div style="font-size:11px;color:#92400e">+${c.priceEach}฿</div>` : ''}
+          </div>
+          <button onclick="toggleFactoryChoice('${c.name.replace(/'/g, "\\'")}')" style="padding:6px 14px;background:${isDisabled?'#fef3c7;color:#92400e;border:1.5px solid #f59e0b':'#f0fdf4;color:#16a34a;border:1.5px solid #16a34a'};border-radius:8px;font-size:12px;font-weight:800;cursor:pointer">${isDisabled?'นำกลับ':'หมด'}</button>
+        </div>
+      `;
+    }).join('');
+    html += '</div>';
+  });
+  wrap.innerHTML = html;
+}
+
+async function toggleFactoryChoice(choiceName) {
+  factoryConfig.disabledChoices = factoryConfig.disabledChoices || [];
+  const idx = factoryConfig.disabledChoices.indexOf(choiceName);
+  if (idx >= 0) factoryConfig.disabledChoices.splice(idx, 1);
+  else factoryConfig.disabledChoices.push(choiceName);
+  await saveFactoryConfig();
+  renderFactoryAddOns();
+  toast(idx >= 0 ? `✓ "${choiceName}" นำกลับ` : `⚠️ "${choiceName}" กำหนดเป็นของหมด`);
+}
+
+// ========== Regular menu (ลูกค้าทั่วไป) — Quick Manage ==========
+function setMenuView(v) {
+  const views = {
+    items:  document.getElementById('menu-items-view'),
+    addons: document.getElementById('menu-addons-view'),
+    order:  document.getElementById('menu-order-view'),
+  };
+  Object.keys(views).forEach(k => { views[k].style.display = (k === v) ? 'block' : 'none'; });
+  ['items', 'addons', 'order'].forEach(k => {
+    const tab = document.getElementById('mtab-' + k);
+    if (!tab) return;
+    const active = k === v;
+    tab.style.color = active ? '#1652F0' : '#6b7280';
+    tab.style.borderBottomColor = active ? '#1652F0' : 'transparent';
+  });
+  if (v === 'items')  renderRegularItemList();
+  if (v === 'addons') renderRegularAddOns();
+  if (v === 'order') {
+    const f = document.getElementById('menuFrame');
+    if (!f.dataset.loaded) { f.src = 'menu.html?embed=1&mode=shop'; f.dataset.loaded = '1'; }
+  }
+}
+
+function getEffectiveRegularMenu() {
+  const cfg = JSON.parse(localStorage.getItem('menuConfig') || '{"overrides":{},"custom":[]}');
+  return window.applyMenuConfig ? window.applyMenuConfig(cfg) : (window.MENU || []);
+}
+
+function renderRegularItemList() {
+  const wrap = document.getElementById('regularItemList');
+  const cats = getEffectiveRegularMenu();
+  if (!cats.length) { wrap.innerHTML = '<div style="text-align:center;color:#9ca3af;padding:40px">ยังไม่มีเมนู</div>'; return; }
+  wrap.innerHTML = cats.map(cat => `
+    <div style="margin-bottom:18px">
+      <h3 style="font-size:14px;color:#1652F0;font-weight:800;margin-bottom:8px">${cat.emoji} ${cat.cat} <span style="color:#9ca3af;font-size:11px;font-weight:500">(${cat.items.length})</span></h3>
+      ${cat.items.map(it => `
+        <div style="background:#fff;border:1.5px solid #e2e7ef;border-radius:12px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:8px;${it.available===false?'opacity:.5':''}">
+          <div style="flex:1">
+            <div style="font-weight:700;font-size:14px">${it.name}${it.available===false?' <span style="color:#dc2626;font-size:11px">(หมด)</span>':''}</div>
+            <div style="font-size:11px;color:#6b7280">ID: ${it.id}${(it.optionGroups && it.optionGroups.length) ? ' · มี '+it.optionGroups.length+' option' : ''}</div>
+          </div>
+          <input type="number" value="${it.price}" onchange="updateRegularItemPrice('${it.id}', this.value)" style="width:60px;padding:4px 6px;border:1.5px solid #d1d5db;border-radius:6px;font-size:13px;text-align:right;font-weight:700;color:#1652F0">
+          <span style="font-size:11px;color:#6b7280">฿</span>
+          <button onclick="toggleRegularItem('${it.id}')" style="padding:6px 10px;background:${it.available===false?'#fef3c7;color:#92400e':'#f0fdf4;color:#16a34a'};border:1.5px solid ${it.available===false?'#f59e0b':'#16a34a'};border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">${it.available===false?'นำกลับ':'หมด'}</button>
+        </div>
+      `).join('')}
+    </div>
+  `).join('');
+}
+
+async function updateRegularItemPrice(itemId, val) {
+  const price = parseFloat(val) || 0;
+  let cfg = JSON.parse(localStorage.getItem('menuConfig') || '{"overrides":{},"custom":[]}');
+  cfg.overrides = cfg.overrides || {};
+  cfg.overrides[itemId] = { ...(cfg.overrides[itemId] || {}), price };
+  localStorage.setItem('menuConfig', JSON.stringify(cfg));
+  if (window.cloud?.saveMenuConfig) try { await window.cloud.saveMenuConfig(cfg); } catch(e){}
+  toast(`✓ ราคาอัพเดตเป็น ฿${price}`);
+}
+
+async function toggleRegularItem(itemId) {
+  let cfg = JSON.parse(localStorage.getItem('menuConfig') || '{"overrides":{},"custom":[]}');
+  cfg.overrides = cfg.overrides || {};
+  const cur = cfg.overrides[itemId] || {};
+  const newAvail = cur.available === false ? true : false;
+  cfg.overrides[itemId] = { ...cur, available: newAvail };
+  localStorage.setItem('menuConfig', JSON.stringify(cfg));
+  if (window.cloud?.saveMenuConfig) try { await window.cloud.saveMenuConfig(cfg); } catch(e){}
+  renderRegularItemList();
+  toast(newAvail ? '✓ นำกลับเข้าเมนูแล้ว' : '⚠️ กำหนดเป็นของหมด');
+}
+
+function renderRegularAddOns() {
+  const wrap = document.getElementById('regularAddOnList');
+  const choices = window.getMenuChoices ? window.getMenuChoices(window.MENU || []) : [];
+  if (!choices.length) { wrap.innerHTML = '<div style="text-align:center;color:#9ca3af;padding:40px">ไม่มี option</div>'; return; }
+  const cfg = JSON.parse(localStorage.getItem('menuConfig') || '{"overrides":{},"custom":[]}');
+  const disabled = new Set(cfg.disabledChoices || []);
+  const groups = { 0: [], 5: [], 10: [], other: [] };
+  choices.forEach(c => {
+    if (c.priceEach === 0) groups[0].push(c);
+    else if (c.priceEach === 5) groups[5].push(c);
+    else if (c.priceEach === 10) groups[10].push(c);
+    else groups.other.push(c);
+  });
+  const groupLabel = { 0: '🟢 ตัวเลือก (ฟรี — เนื้อหลัก/เส้น)', 5: '🩷 +5 บาท (ไข่/อื่นๆ)', 10: '🟡 +10 บาท (กุ้ง/ปลาหมึก/พิเศษ)', other: '⚪ อื่นๆ' };
+  let html = '';
+  ['0', '5', '10', 'other'].forEach(k => {
+    const list = groups[k];
+    if (!list.length) return;
+    html += `<div style="margin-bottom:18px"><h3 style="font-size:14px;color:#1652F0;font-weight:800;margin-bottom:8px">${groupLabel[k]} <span style="color:#9ca3af;font-size:11px;font-weight:500">(${list.length})</span></h3>`;
+    html += list.map(c => {
+      const isDisabled = disabled.has(c.name);
+      return `
+        <div style="background:#fff;border:1.5px solid ${isDisabled?'#fca5a5':'#e2e7ef'};border-radius:12px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:10px;${isDisabled?'background:#fee2e2':''}">
+          <div style="flex:1">
+            <div style="font-weight:700;font-size:14px;color:${isDisabled?'#991b1b':'#0a1530'}">${c.name}${isDisabled?' <span style="color:#dc2626;font-size:11px">(หมด)</span>':''}</div>
+            ${c.priceEach > 0 ? `<div style="font-size:11px;color:#92400e">+${c.priceEach}฿</div>` : ''}
+          </div>
+          <button onclick="toggleRegularChoice('${c.name.replace(/'/g, "\\'")}')" style="padding:6px 14px;background:${isDisabled?'#fef3c7;color:#92400e;border:1.5px solid #f59e0b':'#f0fdf4;color:#16a34a;border:1.5px solid #16a34a'};border-radius:8px;font-size:12px;font-weight:800;cursor:pointer">${isDisabled?'นำกลับ':'หมด'}</button>
+        </div>
+      `;
+    }).join('');
+    html += '</div>';
+  });
+  wrap.innerHTML = html;
+}
+
+async function toggleRegularChoice(choiceName) {
+  let cfg = JSON.parse(localStorage.getItem('menuConfig') || '{"overrides":{},"custom":[]}');
+  cfg.disabledChoices = cfg.disabledChoices || [];
+  const idx = cfg.disabledChoices.indexOf(choiceName);
+  if (idx >= 0) cfg.disabledChoices.splice(idx, 1);
+  else cfg.disabledChoices.push(choiceName);
+  localStorage.setItem('menuConfig', JSON.stringify(cfg));
+  if (window.cloud?.saveMenuConfig) try { await window.cloud.saveMenuConfig(cfg); } catch(e){}
+  renderRegularAddOns();
+  toast(idx >= 0 ? `✓ "${choiceName}" นำกลับ` : `⚠️ "${choiceName}" กำหนดเป็นของหมด`);
 }
 
 function renderFactoryManager() {

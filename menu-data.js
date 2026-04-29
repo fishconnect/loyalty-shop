@@ -452,32 +452,62 @@ window.STATUSES = {
   cancelled:  { label: 'ยกเลิก',         custLabel: 'ออเดอร์นี้ถูกยกเลิก', icon: '❌', color: '#dc2626', next: null, nextLabel: '', stage: 0 }
 };
 
-// 🏭 Apply factory menu config (overrides + custom factory items)
+// Get unique add-on/option choices from a menu (used by admin to toggle availability)
+window.getMenuChoices = function(menu) {
+  const map = new Map();
+  (menu || []).forEach(cat => {
+    cat.items.forEach(it => {
+      (it.optionGroups || []).forEach(g => {
+        (g.choices || []).forEach(c => {
+          if (!map.has(c)) {
+            map.set(c, { name: c, priceEach: g.priceEach || 0, sampleLabel: g.label });
+          }
+        });
+      });
+    });
+  });
+  return Array.from(map.values()).sort((a, b) => (a.priceEach - b.priceEach) || a.name.localeCompare(b.name, 'th'));
+};
+
+// Filter out disabled choices in optionGroups (helper used by both apply funcs)
+function _filterDisabledChoices(item, disabledSet) {
+  if (!item.optionGroups || !disabledSet || disabledSet.size === 0) return item;
+  const filtered = item.optionGroups.map(g => ({
+    ...g,
+    choices: (g.choices || []).filter(c => !disabledSet.has(c))
+  })).filter(g => g.choices.length > 0); // drop empty groups
+  return { ...item, optionGroups: filtered };
+}
+
+// 🏭 Apply factory menu config (overrides + custom factory items + disabledChoices)
 window.applyFactoryConfig = function(config) {
-  config = config || { overrides: {}, custom: [] };
+  config = config || { overrides: {}, custom: [], disabledChoices: [] };
   const ov = config.overrides || {};
   const custom = config.custom || [];
+  const disabled = new Set(config.disabledChoices || []);
 
   let result = (window.FACTORY_MENU || []).map(cat => ({
     ...cat,
     items: cat.items.map(it => {
       const o = ov[it.id];
-      if (!o) return { ...it, available: true };
-      return {
+      let item;
+      if (!o) item = { ...it, available: true };
+      else item = {
         ...it,
         ...(o.name ? { name: o.name } : {}),
         ...(o.price != null ? { price: Number(o.price) } : {}),
         available: o.available !== false
       };
+      return _filterDisabledChoices(item, disabled);
     })
   }));
 
   custom.forEach(c => {
-    const item = {
+    const item = _filterDisabledChoices({
       id: c.id, name: c.name, price: Number(c.price),
       available: c.available !== false,
       ...(c.optionGroups ? { optionGroups: c.optionGroups } : {})
-    };
+    }, disabled);
     const targetCat = result.find(cat => cat.cat === c.category);
     if (targetCat) targetCat.items.push(item);
     else result.push({ cat: c.category || 'อื่นๆ', emoji: c.emoji || '🏭', items: [item] });
@@ -487,32 +517,35 @@ window.applyFactoryConfig = function(config) {
 };
 
 window.applyMenuConfig = function(config) {
-  config = config || { overrides: {}, custom: [] };
+  config = config || { overrides: {}, custom: [], disabledChoices: [] };
   const ov = config.overrides || {};
   const custom = config.custom || [];
+  const disabled = new Set(config.disabledChoices || []);
 
   let result = MENU.map(cat => ({
     ...cat,
     items: cat.items.map(it => {
       const o = ov[it.id];
-      if (!o) return { ...it, available: true };
-      return {
+      let item;
+      if (!o) item = { ...it, available: true };
+      else item = {
         ...it,
         ...(o.name ? { name: o.name } : {}),
         ...(o.price != null ? { price: Number(o.price) } : {}),
         ...(o.image ? { image: o.image } : {}),
         available: o.available !== false
       };
+      return _filterDisabledChoices(item, disabled);
     })
   }));
 
   custom.forEach(c => {
-    const item = {
+    const item = _filterDisabledChoices({
       id: c.id, name: c.name, price: Number(c.price),
       available: c.available !== false,
       ...(c.image ? { image: c.image } : {}),
       ...(c.optionGroups ? { optionGroups: c.optionGroups } : {})
-    };
+    }, disabled);
     const targetCat = result.find(cat => cat.cat === c.category);
     if (targetCat) targetCat.items.push(item);
     else result.push({ cat: c.category || 'อื่นๆ', emoji: c.emoji || '🍽️', items: [item] });
