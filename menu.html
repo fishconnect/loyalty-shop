@@ -848,7 +848,7 @@ function renderOptionGroups() {
     return;
   }
   wrap.innerHTML = item.optionGroups.map((g, gi) => {
-    const isRequired = g.kind === 'required' || (g.min || 0) > 0;
+    const isRequired = (g.min || 0) > 0;
     const isSingle = g.max === 1;
     const isBoundedMulti = !isSingle && g.max > 1 && g.max < 99;
     const sel = custCurrent.options[gi] || [];
@@ -937,10 +937,10 @@ function validateRequiredOptions(item, options) {
   if (!item.optionGroups) return true;
   for (let gi = 0; gi < item.optionGroups.length; gi++) {
     const g = item.optionGroups[gi];
-    const required = g.kind === 'required' || (g.min || 0) > 0;
-    if (required) {
+    const minRequired = g.min || 0;
+    if (minRequired > 0) {
       const sel = (options && options[gi]) || [];
-      if (sel.length < (g.min || 1)) {
+      if (sel.length < minRequired) {
         toast('⚠️ กรุณาเลือก: ' + g.label, true);
         return false;
       }
