@@ -93,6 +93,23 @@ window.cloud = {
     });
   },
 
+  // 🏭 Factory menu config (separate from regular menu)
+  async saveFactoryConfig(config) {
+    try { await setDoc(doc(fdb, 'settings', 'factory'), config, { merge: true }); }
+    catch (e) { console.warn('[cloud] saveFactoryConfig', e); }
+  },
+  async getFactoryConfig() {
+    try {
+      const s = await getDoc(doc(fdb, 'settings', 'factory'));
+      return s.exists() ? s.data() : { overrides: {}, custom: [] };
+    } catch (e) { return { overrides: {}, custom: [] }; }
+  },
+  onFactoryConfig(cb) {
+    return onSnapshot(doc(fdb, 'settings', 'factory'), snap => {
+      cb(snap.exists() ? snap.data() : { overrides: {}, custom: [] });
+    });
+  },
+
   // Admin password
   async saveAdminPassword(pwd) {
     try { await setDoc(doc(fdb, 'settings', 'admin'), { password: pwd }, { merge: true }); }

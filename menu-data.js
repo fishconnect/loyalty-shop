@@ -452,6 +452,40 @@ window.STATUSES = {
   cancelled:  { label: 'ยกเลิก',         custLabel: 'ออเดอร์นี้ถูกยกเลิก', icon: '❌', color: '#dc2626', next: null, nextLabel: '', stage: 0 }
 };
 
+// 🏭 Apply factory menu config (overrides + custom factory items)
+window.applyFactoryConfig = function(config) {
+  config = config || { overrides: {}, custom: [] };
+  const ov = config.overrides || {};
+  const custom = config.custom || [];
+
+  let result = (window.FACTORY_MENU || []).map(cat => ({
+    ...cat,
+    items: cat.items.map(it => {
+      const o = ov[it.id];
+      if (!o) return { ...it, available: true };
+      return {
+        ...it,
+        ...(o.name ? { name: o.name } : {}),
+        ...(o.price != null ? { price: Number(o.price) } : {}),
+        available: o.available !== false
+      };
+    })
+  }));
+
+  custom.forEach(c => {
+    const item = {
+      id: c.id, name: c.name, price: Number(c.price),
+      available: c.available !== false,
+      ...(c.optionGroups ? { optionGroups: c.optionGroups } : {})
+    };
+    const targetCat = result.find(cat => cat.cat === c.category);
+    if (targetCat) targetCat.items.push(item);
+    else result.push({ cat: c.category || 'อื่นๆ', emoji: c.emoji || '🏭', items: [item] });
+  });
+
+  return result;
+};
+
 window.applyMenuConfig = function(config) {
   config = config || { overrides: {}, custom: [] };
   const ov = config.overrides || {};

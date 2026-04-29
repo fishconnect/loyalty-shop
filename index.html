@@ -339,6 +339,7 @@
 <div class="tabs">
   <div class="tab active" data-page="order">📝</div>
   <div class="tab" data-page="menu">🍽️ เมนู</div>
+  <div class="tab" data-page="factory">🏭 โรงงาน</div>
   <div class="tab" data-page="kitchen">👨‍🍳 ครัว <span id="tabBadge" style="display:none;background:#dc2626;color:#fff;border-radius:999px;padding:0 5px;font-size:10px;margin-left:2px"></span></div>
   <div class="tab" data-page="check">เช็ก</div>
   <div class="tab" data-page="customers">ลูกค้า</div>
@@ -349,6 +350,25 @@
 <!-- ========== เมนู (สั่งให้ลูกค้าหน้าร้าน) ========== -->
 <div class="page" id="page-menu" style="padding:0">
   <iframe id="menuFrame" src="about:blank" style="border:0;width:100%;height:calc(100vh - 130px);display:block" title="Menu"></iframe>
+</div>
+
+<!-- ========== 🏭 เมนูโรงงาน (จัดการ + iframe สั่งหน้าร้าน) ========== -->
+<div class="page" id="page-factory" style="padding:0">
+  <div style="padding:14px 14px 6px;background:linear-gradient(135deg,#1652F0,#0738C9);color:#fff">
+    <h2 style="font-size:18px;margin:0">🏭 เมนูโรงงาน</h2>
+    <div style="font-size:12px;opacity:.9;margin-top:4px">ลิงก์ลูกค้าโรงงาน: <a href="factory.html" target="_blank" style="color:#fbbf24;font-weight:800">/factory.html</a> · 50฿/รายการ · ไม่ร่วมโปรแต้ม</div>
+  </div>
+  <div style="display:flex;background:#f7f8fb;border-bottom:1px solid #e5e7eb">
+    <button class="factory-tab active" onclick="setFactoryView('manage')" id="ftab-manage" style="flex:1;padding:10px;border:none;background:transparent;font-weight:700;color:#1652F0;border-bottom:3px solid #1652F0;cursor:pointer;font-family:inherit">📋 จัดการเมนู</button>
+    <button class="factory-tab" onclick="setFactoryView('order')" id="ftab-order" style="flex:1;padding:10px;border:none;background:transparent;font-weight:700;color:#6b7280;border-bottom:3px solid transparent;cursor:pointer;font-family:inherit">🍽 สั่งให้โรงงาน</button>
+  </div>
+  <div id="factory-manage-view" style="padding:14px;max-height:calc(100vh - 230px);overflow-y:auto">
+    <button class="btn-primary" onclick="addFactoryItem()" style="width:100%;margin-bottom:10px">➕ เพิ่มรายการเมนูโรงงาน</button>
+    <div id="factoryItemList"></div>
+  </div>
+  <div id="factory-order-view" style="display:none">
+    <iframe id="factoryFrame" src="about:blank" style="border:0;width:100%;height:calc(100vh - 230px);display:block" title="Factory Menu"></iframe>
+  </div>
 </div>
 
 <!-- ========== ครัว (รับออเดอร์) ========== -->
@@ -826,7 +846,120 @@ document.querySelectorAll('.tab').forEach(t => {
       const f = document.getElementById('kitchenFrame');
       if (!f.dataset.loaded) { f.src = 'kitchen.html?embed=1'; f.dataset.loaded = '1'; }
     }
+    if (t.dataset.page === 'factory') {
+      renderFactoryManager();
+    }
   });
+});
+
+// ========== 🏭 Factory Menu Manager ==========
+let factoryConfig = JSON.parse(localStorage.getItem('factoryConfig') || '{"overrides":{},"custom":[]}');
+
+function getEffectiveFactoryMenu() {
+  return window.applyFactoryConfig ? window.applyFactoryConfig(factoryConfig) : (window.FACTORY_MENU || []);
+}
+
+function setFactoryView(v) {
+  const isManage = v === 'manage';
+  document.getElementById('factory-manage-view').style.display = isManage ? 'block' : 'none';
+  document.getElementById('factory-order-view').style.display = isManage ? 'none' : 'block';
+  document.getElementById('ftab-manage').style.color = isManage ? '#1652F0' : '#6b7280';
+  document.getElementById('ftab-manage').style.borderBottomColor = isManage ? '#1652F0' : 'transparent';
+  document.getElementById('ftab-order').style.color = !isManage ? '#1652F0' : '#6b7280';
+  document.getElementById('ftab-order').style.borderBottomColor = !isManage ? '#1652F0' : 'transparent';
+  if (!isManage) {
+    const f = document.getElementById('factoryFrame');
+    if (!f.dataset.loaded) { f.src = 'menu.html?embed=1&mode=factory'; f.dataset.loaded = '1'; }
+  }
+}
+
+function renderFactoryManager() {
+  const wrap = document.getElementById('factoryItemList');
+  const cats = getEffectiveFactoryMenu();
+  if (!cats.length) { wrap.innerHTML = '<div style="text-align:center;color:#9ca3af;padding:40px">ยังไม่มีเมนู</div>'; return; }
+  wrap.innerHTML = cats.map(cat => `
+    <div style="margin-bottom:18px">
+      <h3 style="font-size:14px;color:#1652F0;font-weight:800;margin-bottom:8px">${cat.emoji} ${cat.cat} <span style="color:#9ca3af;font-size:11px;font-weight:500">(${cat.items.length})</span></h3>
+      ${cat.items.map(it => `
+        <div style="background:#fff;border:1.5px solid #e2e7ef;border-radius:12px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:8px;${it.available===false?'opacity:.5':''}">
+          <div style="flex:1">
+            <div style="font-weight:700;font-size:14px">${it.name}${it.available===false?' <span style="color:#dc2626;font-size:11px">(หมด)</span>':''}</div>
+            <div style="font-size:11px;color:#6b7280">ID: ${it.id}${(it.optionGroups && it.optionGroups.length) ? ' · มี '+it.optionGroups.length+' option' : ''}</div>
+          </div>
+          <input type="number" value="${it.price}" onchange="updateFactoryItemPrice('${it.id}', this.value)" style="width:60px;padding:4px 6px;border:1.5px solid #d1d5db;border-radius:6px;font-size:13px;text-align:right;font-weight:700;color:#1652F0">
+          <span style="font-size:11px;color:#6b7280">฿</span>
+          <button onclick="toggleFactoryItem('${it.id}')" style="padding:6px 10px;background:${it.available===false?'#fef3c7;color:#92400e':'#f0fdf4;color:#16a34a'};border:1.5px solid ${it.available===false?'#f59e0b':'#16a34a'};border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">${it.available===false?'นำกลับ':'หมด'}</button>
+          ${(it.id || '').startsWith('cf-') ? `<button onclick="deleteFactoryItem('${it.id}')" style="padding:6px 8px;background:#fee2e2;color:#dc2626;border:1.5px solid #dc2626;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">🗑</button>` : ''}
+        </div>
+      `).join('')}
+    </div>
+  `).join('');
+}
+
+async function updateFactoryItemPrice(itemId, val) {
+  const price = parseFloat(val) || 0;
+  factoryConfig.overrides = factoryConfig.overrides || {};
+  factoryConfig.overrides[itemId] = { ...(factoryConfig.overrides[itemId] || {}), price };
+  await saveFactoryConfig();
+  toast(`✓ ราคาอัพเดตเป็น ฿${price}`);
+}
+
+async function toggleFactoryItem(itemId) {
+  factoryConfig.overrides = factoryConfig.overrides || {};
+  const cur = factoryConfig.overrides[itemId] || {};
+  const newAvail = cur.available === false ? true : false;
+  factoryConfig.overrides[itemId] = { ...cur, available: newAvail };
+  await saveFactoryConfig();
+  renderFactoryManager();
+  toast(newAvail ? '✓ นำกลับเข้าเมนูแล้ว' : '⚠️ กำหนดเป็นของหมด');
+}
+
+async function deleteFactoryItem(itemId) {
+  if (!confirm('ลบรายการนี้จากเมนูโรงงาน?')) return;
+  factoryConfig.custom = (factoryConfig.custom || []).filter(c => c.id !== itemId);
+  await saveFactoryConfig();
+  renderFactoryManager();
+  toast('🗑 ลบแล้ว');
+}
+
+async function addFactoryItem() {
+  const name = prompt('ชื่อรายการเมนูโรงงาน:');
+  if (!name || !name.trim()) return;
+  const priceStr = prompt('ราคา (บาท):', '50');
+  const price = parseFloat(priceStr) || 50;
+  const cats = getEffectiveFactoryMenu().map(c => c.cat);
+  const catName = prompt('หมวด (' + cats.join(' / ') + ')\nหรือพิมพ์หมวดใหม่:', cats[0] || 'อื่นๆ');
+  if (!catName) return;
+  factoryConfig.custom = factoryConfig.custom || [];
+  factoryConfig.custom.push({
+    id: 'cf-' + Date.now() + Math.random().toString(36).slice(2,5),
+    name: name.trim(), price, available: true, category: catName
+  });
+  await saveFactoryConfig();
+  renderFactoryManager();
+  toast(`✓ เพิ่ม "${name}" แล้ว`);
+}
+
+async function saveFactoryConfig() {
+  localStorage.setItem('factoryConfig', JSON.stringify(factoryConfig));
+  if (window.cloud?.saveFactoryConfig) {
+    try { await window.cloud.saveFactoryConfig(factoryConfig); }
+    catch (e) { console.warn('save factory config failed', e); }
+  }
+}
+
+// Subscribe to factory config from cloud
+whenCloudReady(() => {
+  if (window.cloud?.onFactoryConfig) {
+    window.cloud.onFactoryConfig(config => {
+      factoryConfig = config || { overrides: {}, custom: [] };
+      localStorage.setItem('factoryConfig', JSON.stringify(factoryConfig));
+      // Re-render if currently on factory tab
+      if (document.querySelector('[data-page=factory]')?.classList.contains('active')) {
+        renderFactoryManager();
+      }
+    });
+  }
 });
 
 // ========== Order: Autocomplete ==========

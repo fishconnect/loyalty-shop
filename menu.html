@@ -750,10 +750,11 @@ if (cart.length && cart[0].addOnIds !== undefined) {
   sessionStorage.removeItem(_CART_KEY);
 }
 
-// Effective menu (factory uses FACTORY_MENU, regular uses MENU + admin overrides)
+// Effective menu (factory uses FACTORY_MENU + factoryConfig, regular uses MENU + menuConfig)
 let menuConfig = JSON.parse(localStorage.getItem('menuConfig') || '{"overrides":{},"custom":[]}');
+let factoryConfig = JSON.parse(localStorage.getItem('factoryConfig') || '{"overrides":{},"custom":[]}');
 let EFFECTIVE_MENU = isFactoryMode
-  ? (window.FACTORY_MENU || [])
+  ? (window.applyFactoryConfig ? window.applyFactoryConfig(factoryConfig) : (window.FACTORY_MENU || []))
   : (window.applyMenuConfig ? window.applyMenuConfig(menuConfig) : MENU);
 function getEffectiveMenu() { return EFFECTIVE_MENU; }
 
@@ -839,15 +840,25 @@ function renderMenu() {
   }).join('');
 }
 
-// Subscribe to menu config changes from cloud
+// Subscribe to menu config changes from cloud (regular OR factory)
 whenCloudReady(() => {
-  window.cloud.onMenuConfig(config => {
-    menuConfig = config || { overrides: {}, custom: [] };
-    localStorage.setItem('menuConfig', JSON.stringify(menuConfig));
-    EFFECTIVE_MENU = window.applyMenuConfig(menuConfig);
-    renderMenu();
-    updateCartBar();
-  });
+  if (isFactoryMode) {
+    window.cloud.onFactoryConfig?.(config => {
+      factoryConfig = config || { overrides: {}, custom: [] };
+      localStorage.setItem('factoryConfig', JSON.stringify(factoryConfig));
+      EFFECTIVE_MENU = window.applyFactoryConfig(factoryConfig);
+      renderMenu();
+      updateCartBar();
+    });
+  } else {
+    window.cloud.onMenuConfig(config => {
+      menuConfig = config || { overrides: {}, custom: [] };
+      localStorage.setItem('menuConfig', JSON.stringify(menuConfig));
+      EFFECTIVE_MENU = window.applyMenuConfig(menuConfig);
+      renderMenu();
+      updateCartBar();
+    });
+  }
 });
 
 function scrollToCat(id) {
