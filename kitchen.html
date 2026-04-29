@@ -996,6 +996,18 @@ function fmtReceiptDate(iso) {
   return d.toLocaleString('th-TH', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' });
 }
 
+// 🔒 PDPA — mask middle digits of phone for printed receipts
+// 0817961234 → 081-XXX-1234 (show first 3 + last 4)
+function maskPhone(phone) {
+  if (!phone) return '';
+  const d = String(phone).replace(/\D/g, '');
+  if (d.length < 8) return phone;
+  const start = d.slice(0, 3);
+  const end = d.slice(-4);
+  const middleLen = d.length - 7;
+  return `${start}-${'X'.repeat(middleLen)}-${end}`;
+}
+
 function getBTPrinter() {
   // Local connection first
   if (window.btPrinter?.chr) return window.btPrinter;
@@ -1060,7 +1072,7 @@ function browserPrint(order) {
     <div class="rc-row"><span>Order</span><span><b>#${order.id.slice(-6)}</b></span></div>
     <div class="rc-row"><span>เวลา</span><span>${fmtReceiptDate(order.date)}</span></div>
     <div class="rc-row"><span>ลูกค้า</span><span><b>${order.customer_name}</b></span></div>
-    ${order.customer_phone ? `<div class="rc-row"><span>เบอร์</span><span>${order.customer_phone}</span></div>` : ''}
+    ${order.customer_phone ? `<div class="rc-row"><span>เบอร์</span><span>${maskPhone(order.customer_phone)}</span></div>` : ''}
     <hr class="rc-divider">
     ${itemsHTML}
     ${order.note ? `<hr class="rc-divider"><div style="font-size:11pt"><b>หมายเหตุ:</b> ${order.note}</div>` : ''}
@@ -1220,7 +1232,7 @@ function buildESCPOS(order) {
   ln('Order: #' + order.id.slice(-6));
   ln('Time : ' + fmtReceiptDate(order.date));
   ln('Cust : ' + order.customer_name);
-  if (order.customer_phone) ln('Phone: ' + order.customer_phone);
+  if (order.customer_phone) ln('Phone: ' + maskPhone(order.customer_phone));
   ln('--------------------------------');
 
   for (const it of order.items) {
