@@ -652,6 +652,12 @@
     </div>
     <div class="cart-body">
       <div id="cartLines"></div>
+
+      <!-- 🏭 Factory mode: button to add custom items -->
+      <button id="btnAddCustom" onclick="openCustomItemModal()" style="display:none;width:100%;margin-top:8px;padding:12px;background:#fff;color:#1652F0;border:2px dashed #1652F0;border-radius:12px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit">
+        ➕ เพิ่มรายการเอง (รายการที่ไม่มีในเมนู)
+      </button>
+
       <div class="cart-summary" id="cartSummary" style="display:none">
         <span class="label">รวมทั้งหมด</span>
         <span class="amt" id="modalTotal">฿0</span>
@@ -681,6 +687,45 @@
   </div>
 </div>
 
+<!-- ============ Custom Item Modal (factory only) ============ -->
+<div class="modal-bg" id="modalCustomItem">
+  <div class="modal" style="max-width:420px">
+    <button class="close" onclick="closeCustomItemModal()">×</button>
+    <div class="cust-hero" style="padding:24px 20px 12px">
+      <div class="cust-emoji">📝</div>
+      <div class="cust-name">เพิ่มรายการเอง</div>
+      <div class="cust-note">ระบุชื่อ + จำนวน + ราคา</div>
+    </div>
+    <div class="cust-body" style="padding-top:0">
+      <div class="cust-section">
+        <h3>ชื่อรายการ <span class="req">*</span></h3>
+        <input type="text" class="note-input" id="customItemName" placeholder="เช่น ผัดผักรวม">
+      </div>
+      <div class="cust-section">
+        <h3>จำนวน</h3>
+        <div class="qty-stepper">
+          <button class="minus" onclick="adjustCustomItemQty(-1)">−</button>
+          <div class="qty" id="customItemQty">1</div>
+          <button onclick="adjustCustomItemQty(1)">+</button>
+        </div>
+      </div>
+      <div class="cust-section">
+        <h3>ราคา (บาท) <span class="req">*</span></h3>
+        <input type="number" class="note-input" id="customItemPrice" value="50" inputmode="numeric" min="0">
+      </div>
+      <div class="cust-section">
+        <h3>📝 หมายเหตุ</h3>
+        <input type="text" class="note-input" id="customItemNote" placeholder="เช่น ไม่ใส่พริก">
+      </div>
+    </div>
+    <div class="cust-footer">
+      <button class="btn-add-cart" onclick="addCustomItem()">
+        <span>เพิ่มลงตะกร้า</span>
+      </button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script type="module" src="firebase.js"></script>
@@ -688,19 +733,40 @@
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 const STORAGE_KEY = 'loyaltyShopV2';
+
+// 🏭 Factory mode (?mode=factory) — separate menu, no loyalty, custom items allowed
+const _urlMode = new URLSearchParams(location.search).get('mode');
+const isFactoryMode = _urlMode === 'factory';
+window.isFactoryMode = isFactoryMode;
+
 // Cart line: { cartId, mainId, qty, options: { [groupIdx]: [choiceName, ...] }, note }
-let cart = JSON.parse(sessionStorage.getItem('cartV2') || '[]');
+// Custom item line: { cartId, isCustom: true, customName, customPrice, qty, note }
+const _CART_KEY = isFactoryMode ? 'cartFactory' : 'cartV2';
+let cart = JSON.parse(sessionStorage.getItem(_CART_KEY) || '[]');
 
 // Migrate / clear old cart format (had addOnIds)
 if (cart.length && cart[0].addOnIds !== undefined) {
   cart = [];
-  sessionStorage.removeItem('cartV2');
+  sessionStorage.removeItem(_CART_KEY);
 }
 
-// Effective menu (with admin overrides applied)
+// Effective menu (factory uses FACTORY_MENU, regular uses MENU + admin overrides)
 let menuConfig = JSON.parse(localStorage.getItem('menuConfig') || '{"overrides":{},"custom":[]}');
-let EFFECTIVE_MENU = window.applyMenuConfig ? window.applyMenuConfig(menuConfig) : MENU;
+let EFFECTIVE_MENU = isFactoryMode
+  ? (window.FACTORY_MENU || [])
+  : (window.applyMenuConfig ? window.applyMenuConfig(menuConfig) : MENU);
 function getEffectiveMenu() { return EFFECTIVE_MENU; }
+
+// Update header + hide returning-customer widget for factory mode
+if (isFactoryMode) {
+  document.title = '🏭 เมนูโรงงาน · ครัวผู้ใหญ่ปอง';
+  document.addEventListener('DOMContentLoaded', () => {
+    const h = document.querySelector('header h1');
+    const sub = document.querySelector('header .sub');
+    if (h) h.innerHTML = '🏭 ครัวผู้ใหญ่ปอง <span style="background:#fbbf24;color:#78350f;font-size:11px;padding:2px 8px;border-radius:999px;font-weight:800;margin-left:6px">โรงงาน</span>';
+    if (sub) sub.textContent = '🍽 เมนูพิเศษโรงงาน · 50฿/รายการ';
+  });
+}
 
 function loadDB() {
   try {
@@ -916,6 +982,10 @@ function adjustCustQty(delta) {
 }
 
 function calcLineTotal(line) {
+  // Custom item line
+  if (line.isCustom) {
+    return (line.customPrice || 0) * (line.qty || 1);
+  }
   const main = findItem(line.mainId)?.item;
   if (!main) return 0;
   let unit = main.price || 0;
@@ -979,7 +1049,7 @@ function removeFromCart() {
   toast('🗑️ ลบแล้ว', true);
 }
 
-function saveCart() { sessionStorage.setItem('cartV2', JSON.stringify(cart)); }
+function saveCart() { sessionStorage.setItem(_CART_KEY, JSON.stringify(cart)); }
 
 function getCartTotal() {
   let total = 0, count = 0;
@@ -1014,9 +1084,31 @@ function renderCartLines() {
     return;
   }
   wrap.innerHTML = cart.map(line => {
+    const lineTotal = calcLineTotal(line);
+
+    // Custom item line (factory mode)
+    if (line.isCustom) {
+      return `
+        <div class="cart-line" style="border-left:4px solid #f59e0b">
+          <div class="head">
+            <div class="name">📝 ${line.customName} <span style="font-size:11px;color:#92400e;background:#fef3c7;padding:2px 8px;border-radius:999px;font-weight:700;margin-left:4px">รายการเอง</span></div>
+            <button class="x" onclick="removeLine('${line.cartId}')">×</button>
+          </div>
+          ${line.note ? `<div class="note-text">📝 ${line.note}</div>` : ''}
+          <div class="foot">
+            <div class="qty-mini">
+              <button class="m" onclick="adjustLineQty('${line.cartId}', -1)">−</button>
+              <div class="q">${line.qty}</div>
+              <button onclick="adjustLineQty('${line.cartId}', 1)">+</button>
+            </div>
+            <span class="line-total">฿${lineTotal}</span>
+          </div>
+        </div>
+      `;
+    }
+
     const main = findItem(line.mainId)?.item;
     if (!main) return '';
-    const lineTotal = calcLineTotal(line);
     // Build option chips
     let optChips = '';
     if (main.optionGroups && line.options) {
@@ -1058,9 +1150,49 @@ function renderCartLines() {
   document.getElementById('modalTotal').textContent = '฿' + total;
   document.getElementById('cartSummary').style.display = 'flex';
   document.getElementById('customerForm').style.display = 'block';
+  // Show "เพิ่มรายการเอง" only in factory mode
+  const btnCustom = document.getElementById('btnAddCustom');
+  if (btnCustom) btnCustom.style.display = isFactoryMode ? 'block' : 'none';
   // Re-render rewards + breakdown when cart changes
   if (typeof renderRewardsBox === 'function') renderRewardsBox();
   if (typeof renderOrderBreakdown === 'function') renderOrderBreakdown();
+}
+
+// ============ Custom Item (factory mode) ============
+let customItemQty = 1;
+function openCustomItemModal() {
+  customItemQty = 1;
+  document.getElementById('customItemName').value = '';
+  document.getElementById('customItemPrice').value = '50';
+  document.getElementById('customItemNote').value = '';
+  document.getElementById('customItemQty').textContent = '1';
+  document.getElementById('modalCustomItem').classList.add('show');
+}
+function closeCustomItemModal() {
+  document.getElementById('modalCustomItem').classList.remove('show');
+}
+function adjustCustomItemQty(delta) {
+  customItemQty = Math.max(1, customItemQty + delta);
+  document.getElementById('customItemQty').textContent = customItemQty;
+}
+function addCustomItem() {
+  const name = document.getElementById('customItemName').value.trim();
+  const price = parseFloat(document.getElementById('customItemPrice').value) || 0;
+  const note = document.getElementById('customItemNote').value.trim();
+  if (!name) { toast('⚠️ กรุณาใส่ชื่อรายการ', true); return; }
+  if (price < 0) { toast('⚠️ ราคาไม่ถูกต้อง', true); return; }
+  cart.push({
+    cartId: 'cc-' + Date.now() + Math.random().toString(36).slice(2,5),
+    isCustom: true,
+    customName: name, customPrice: price, qty: customItemQty,
+    note
+  });
+  saveCart();
+  renderMenu();
+  renderCartLines();
+  updateCartBar();
+  closeCustomItemModal();
+  toast(`✓ เพิ่ม "${name}" แล้ว`);
 }
 
 function removeLine(cartId) {
@@ -1121,6 +1253,8 @@ function checkCustomer() {
 function renderRewardsBox() {
   const box = document.getElementById('rewardsBox');
   if (!box) return;
+  // Factory mode: no loyalty
+  if (isFactoryMode) { box.style.display = 'none'; return; }
   const phone = normPhone(document.getElementById('custPhone').value);
   if (phone.length < 9) { box.style.display = 'none'; return; }
   const c = loadDB().customers[phone];
@@ -1278,32 +1412,31 @@ async function submitOrder() {
   if (isShopMode && !phone && !name) return toast('⚠️ กรอกเบอร์ หรือชื่อ อย่างน้อยอย่างใดอย่างหนึ่ง', true);
 
   const db = loadDB();
-  const customerId = phone || ('walkin-' + Date.now());
+  const customerId = phone || (isFactoryMode ? 'factory-' + Date.now() : 'walkin-' + Date.now());
   let customer = phone ? db.customers[phone] : null;
   let signupBonusGiven = false;
   if (!customer) {
-    const customerName = name || (phone ? 'ลูกค้า ' + phone.slice(-4) : 'ไม่ระบุชื่อ');
+    const customerName = name || (phone ? 'ลูกค้า ' + phone.slice(-4) : (isFactoryMode ? 'โรงงาน' : 'ไม่ระบุชื่อ'));
     customer = {
       id: customerId, name: customerName, phone: phone || '',
-      // New loyalty fields
-      points: LOYALTY.SIGNUP_BONUS,             // +5 signup bonus
-      lifetime_points: LOYALTY.SIGNUP_BONUS,
-      signup_bonus_received: true,
+      // Loyalty fields — factory customers don't get signup bonus or earn points
+      points: isFactoryMode ? 0 : LOYALTY.SIGNUP_BONUS,
+      lifetime_points: isFactoryMode ? 0 : LOYALTY.SIGNUP_BONUS,
+      signup_bonus_received: !isFactoryMode,    // skip bonus for factory
+      is_factory: !!isFactoryMode,
       drink_redeemed_count: 0,
       dish_redeemed_count: 0,
-      // Legacy fields (kept for compat — no longer actively used)
       total_boxes: 0, redeemed_count: 0,
       joined: new Date().toISOString()
     };
     db.customers[customerId] = customer;
-    signupBonusGiven = true;
+    signupBonusGiven = !isFactoryMode;
   } else {
     if (name && customer.name === 'ไม่ระบุชื่อ') customer.name = name;
-    // Backfill missing loyalty fields for legacy customers
     if (customer.points == null) customer.points = 0;
     if (customer.lifetime_points == null) customer.lifetime_points = 0;
-    // Award signup bonus if not received yet
-    if (!customer.signup_bonus_received) {
+    // Skip signup bonus for factory orders even if customer hasn't gotten it
+    if (!isFactoryMode && !customer.signup_bonus_received) {
       customer.points += LOYALTY.SIGNUP_BONUS;
       customer.lifetime_points += LOYALTY.SIGNUP_BONUS;
       customer.signup_bonus_received = true;
@@ -1314,6 +1447,20 @@ async function submitOrder() {
   // Convert cart lines to order items (with option breakdown)
   const items = [];
   cart.forEach(line => {
+    // Custom item line (factory)
+    if (line.isCustom) {
+      items.push({
+        id: line.cartId,
+        name: '📝 ' + line.customName,
+        mainName: line.customName,
+        price: line.customPrice || 0,
+        qty: line.qty || 1,
+        isCustom: true,
+        options: [],
+        note: line.note || ''
+      });
+      return;
+    }
     const main = findItem(line.mainId)?.item;
     if (!main) return;
     // Flatten options into a structured list + name suffix
@@ -1407,7 +1554,7 @@ async function submitOrder() {
     total: finalTotal,
     note: '',
     status: 'pending',
-    source: isShopMode ? 'walk-in' : 'online',
+    source: isFactoryMode ? 'factory' : (isShopMode ? 'walk-in' : 'online'),
   };
   // Preserve original for points calculation
   if (redemptions.length > 0) {

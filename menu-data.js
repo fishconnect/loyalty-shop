@@ -273,6 +273,110 @@ window.MENU = [
 ];
 
 // ============================================
+// FACTORY MENU — เมนูสำหรับโรงงาน (50฿/จาน, ไม่ร่วมโปรแต้ม)
+// ============================================
+const _F_EGG = ['ไข่ดาว', 'ไข่เจียว'];
+const _F_NOODLES = ['เส้นเล็ก', 'เส้นใหญ่', 'หมี่ขาว', 'บะหมี่', 'วุ้นเส้น', 'มาม่า'];
+
+// Free egg add-on (ฟรี รวมในราคาแล้ว)
+const F_OPT_FREE_EGG = () => ({
+  kind: 'addOn', label: '🥚 ฟรี ไข่ดาว/ไข่เจียว (เลือก 1)',
+  min: 0, max: 1, priceEach: 0, choices: [..._F_EGG]
+});
+
+// Protein presets
+const F_PROTEIN_BASIC = () => ({
+  kind: 'required', label: 'เลือกเนื้อ', min: 1, max: 1, priceEach: 0,
+  choices: ['หมูชิ้น', 'หมูสับ', 'ไก่']
+});
+const F_PROTEIN_BASIC_SEA = () => ({
+  kind: 'required', label: 'เลือกเนื้อ', min: 1, max: 1, priceEach: 0,
+  choices: ['หมูชิ้น', 'หมูสับ', 'ไก่', 'รวมมิตรทะเล']
+});
+const F_PROTEIN_SEA = () => ({
+  kind: 'required', label: 'เลือกเนื้อ', min: 1, max: 1, priceEach: 0,
+  choices: ['หมูกรอบ', 'กุ้ง', 'ปลาหมึก', 'รวมมิตร']
+});
+const F_NOODLE_CHOICE = () => ({
+  kind: 'required', label: 'เลือกเส้น', min: 1, max: 1, priceEach: 0, choices: [..._F_NOODLES]
+});
+const F_NOODLE_TOPPING = () => ({
+  kind: 'required', label: 'เลือกเนื้อ (ฟรี)', min: 1, max: 1, priceEach: 0,
+  choices: ['หมู', 'รวมมิตรทะเล']
+});
+
+window.FACTORY_MENU = [
+  {
+    cat: "ผัด / ราดข้าว",
+    emoji: "🌶️",
+    items: [
+      { id: 'fc-001', name: 'ผัดกระเพรา',          price: 50, optionGroups: [F_PROTEIN_BASIC(), F_OPT_FREE_EGG()] },
+      { id: 'fc-002', name: 'ผัดกระเพรารวมมิตร',    price: 50, optionGroups: [F_PROTEIN_SEA()] },
+      { id: 'fc-003', name: 'ผัดพริกแกง',           price: 50, optionGroups: [F_PROTEIN_SEA(), F_OPT_FREE_EGG()] },
+      { id: 'fc-004', name: 'ผัดพริกแกงรวมมิตร',    price: 50, optionGroups: [F_PROTEIN_SEA()] },
+      { id: 'fc-005', name: 'ผัดพะแนง',              price: 50, optionGroups: [F_PROTEIN_BASIC(), F_OPT_FREE_EGG()] },
+      { id: 'fc-006', name: 'ผัดพริกสด',             price: 50, optionGroups: [F_PROTEIN_BASIC(), F_OPT_FREE_EGG()] },
+      { id: 'fc-007', name: 'ราดหน้า',               price: 50, optionGroups: [F_PROTEIN_BASIC_SEA()] },
+      { id: 'fc-008', name: 'ผัดซีอิ๊ว',              price: 50, optionGroups: [F_PROTEIN_BASIC_SEA()] },
+    ]
+  },
+  {
+    cat: "ข้าวผัด / ข้าวต้ม",
+    emoji: "🍚",
+    items: [
+      { id: 'fc-101', name: 'ข้าวผัด',           price: 50, optionGroups: [F_PROTEIN_BASIC(), F_OPT_FREE_EGG()] },
+      { id: 'fc-102', name: 'ข้าวผัดรวมมิตร',     price: 50, optionGroups: [F_PROTEIN_BASIC_SEA()] },
+      { id: 'fc-103', name: 'ข้าวต้ม',            price: 50, optionGroups: [F_PROTEIN_BASIC_SEA()] },
+      { id: 'fc-104', name: 'มาม่าผัดขี้เมา',     price: 50, optionGroups: [F_PROTEIN_BASIC_SEA()] },
+    ]
+  },
+  {
+    cat: "สุกี้ / ยำ",
+    emoji: "🍲",
+    items: [
+      { id: 'fc-201', name: 'สุกี้น้ำ',  price: 50, optionGroups: [F_PROTEIN_BASIC_SEA()] },
+      { id: 'fc-202', name: 'สุกี้แห้ง', price: 50, optionGroups: [F_PROTEIN_BASIC_SEA()] },
+      { id: 'fc-203', name: 'ยำรวมมิตร', price: 50, optionGroups: [
+        { kind: 'required', label: 'เลือกเส้น', min: 1, max: 1, priceEach: 0, choices: ['วุ้นเส้น', 'มาม่า'] }
+      ] },
+    ]
+  },
+  {
+    cat: "ก๋วยเตี๋ยว / เย็นตาโฟ",
+    emoji: "🍜",
+    items: [
+      { id: 'fc-301', name: 'ก๋วยเตี๋ยวหมูน้ำใส', price: 50, optionGroups: [F_NOODLE_CHOICE(), F_NOODLE_TOPPING()] },
+      { id: 'fc-302', name: 'ก๋วยเตี๋ยวต้มยำ',     price: 50, optionGroups: [F_NOODLE_CHOICE(), F_NOODLE_TOPPING()] },
+      { id: 'fc-303', name: 'ก๋วยเตี๋ยวแห้ง',      price: 50, optionGroups: [F_NOODLE_CHOICE(), F_NOODLE_TOPPING()] },
+      { id: 'fc-304', name: 'เย็นตาโฟ',             price: 50, optionGroups: [F_NOODLE_CHOICE(), F_NOODLE_TOPPING()] },
+      { id: 'fc-305', name: 'เย็นตาโฟต้มยำ',       price: 50, optionGroups: [F_NOODLE_CHOICE(), F_NOODLE_TOPPING()] },
+    ]
+  },
+  {
+    cat: "ข้าวพิเศษ",
+    emoji: "🍱",
+    items: [
+      { id: 'fc-401', name: 'ข้าวปลาดุกทอด',           price: 50, optionGroups: [F_OPT_FREE_EGG()] },
+      { id: 'fc-402', name: 'ข้าวปลาดุกผัดพริกแกง',     price: 50 },
+      { id: 'fc-403', name: 'ข้าวปลาดุกผัดกระเพรา',     price: 50 },
+      { id: 'fc-404', name: 'ข้าวหมูทอด',              price: 50, optionGroups: [F_OPT_FREE_EGG()] },
+      { id: 'fc-405', name: 'ข้าวหมูทอดกระเทียม',     price: 50, optionGroups: [F_OPT_FREE_EGG()] },
+      { id: 'fc-406', name: 'ข้าวไข่เจียวกุ้ง',         price: 50 },
+    ]
+  },
+  {
+    cat: "ของแห้ง / อื่นๆ",
+    emoji: "🍜",
+    items: [
+      { id: 'fc-501', name: 'มาม่าน้ำข้น (ของแห้ง)',    price: 50 },
+      { id: 'fc-502', name: 'ไข่ดิบ (ของแห้ง)',         price: 50 },
+      { id: 'fc-503', name: 'ข้าวเปล่า + ไข่ดิบ',       price: 50 },
+      { id: 'fc-504', name: 'ข้าวเปล่า + มาม่าต้มยำ',   price: 50 },
+    ]
+  },
+];
+
+// ============================================
 // Loyalty config — โปรใหม่
 // ============================================
 window.LOYALTY = {

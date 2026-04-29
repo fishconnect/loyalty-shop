@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#1652F0">
+<title>เมนูโรงงาน · ครัวผู้ใหญ่ปอง</title>
+<link rel="icon" href="logo.jpg">
+<style>
+  body {
+    margin: 0; min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, #1652F0, #0738C9);
+    font-family: -apple-system, "Segoe UI", "Sarabun", sans-serif;
+    color: #fff; text-align: center; padding: 20px;
+  }
+  .box {
+    background: rgba(255,255,255,.15);
+    backdrop-filter: blur(8px);
+    padding: 40px 30px; border-radius: 20px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.3);
+    max-width: 360px; width: 100%;
+  }
+  img { width: 96px; height: 96px; border-radius: 18px; box-shadow: 0 8px 24px rgba(0,0,0,.25); object-fit: cover }
+  h1 { font-size: 22px; font-weight: 800; margin: 16px 0 6px }
+  .sub { opacity: .9; font-size: 14px; margin-bottom: 20px }
+  .badge { background: #fbbf24; color: #78350f; padding: 6px 14px; border-radius: 999px; font-size: 12px; font-weight: 800; display: inline-block; margin-bottom: 10px }
+  .loading { font-size: 13px; opacity: .8; margin-top: 16px }
+  .spinner {
+    width: 32px; height: 32px; margin: 16px auto 0;
+    border: 3px solid rgba(255,255,255,.3); border-top-color: #fff;
+    border-radius: 50%; animation: spin .9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg) } }
+</style>
+</head>
+<body>
+  <div class="box">
+    <img src="logo.jpg" alt="logo">
+    <div class="badge">🏭 FACTORY ORDER</div>
+    <h1>เมนูโรงงาน</h1>
+    <div class="sub">ครัวผู้ใหญ่ปอง · 50฿/รายการ</div>
+    <div class="spinner"></div>
+    <div class="loading">กำลังเปิดเมนู...</div>
+  </div>
+  <script>
+    location.replace('menu.html?mode=factory');
+  </script>
+</body>
+</html>

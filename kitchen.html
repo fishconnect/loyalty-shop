@@ -426,8 +426,15 @@ function render() {
     const stat = window.STATUSES[status] || window.STATUSES.pending;
     const isActive = !['delivered','done','cancelled'].includes(status);
     const hasRedemptionsApplied = (o.redemptions || []).length > 0;
+    const isFactory = o.source === 'factory';
     return `
       <div class="order ${status}">
+        ${isFactory ? `
+          <div style="background:linear-gradient(135deg,#1652F0,#0738C9);color:#fff;padding:6px 14px;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:space-between">
+            <span>🏭 ORDER จากโรงงาน</span>
+            <span style="background:#fbbf24;color:#78350f;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:800">ไม่ร่วมแต้ม</span>
+          </div>
+        ` : ''}
         <div class="order-head" style="background:${status==='cancelled'?'#fee2e2':status==='delivered'||status==='done'?'#f3f4f6':'#f7f8fb'}">
           <div>
             <div class="name">${o.customer_name}</div>
@@ -515,15 +522,17 @@ async function advanceStatus(orderId, nextStatus) {
   const order = orderSrc.find(o => o.id === orderId);
   if (!order) return;
 
-  // Final stage = delivered → award points
+  // Final stage = delivered → award points (skip if factory)
   if (nextStatus === 'delivered') {
+    const isFactoryOrder = order.source === 'factory';
     const baseAmount = order.original_total || order.total;
-    const points = window.calcPointsFromAmount(baseAmount);
+    const points = isFactoryOrder ? 0 : window.calcPointsFromAmount(baseAmount);
 
     const redemptionStr = (order.redemptions || []).length
       ? `\nใช้แต้ม: ${(order.redemptions || []).map(r => r.type === 'drink' ? `🥤 ${r.label}` : `💰 ลด ฿${r.value}`).join(', ')}`
       : '';
-    if (!confirm(`ยืนยันจัดส่งสำเร็จ?\n\n${order.customer_name} · ลูกค้าจ่าย ฿${order.total}${redemptionStr}\n\nลูกค้าจะได้ +${points} แต้ม`)) return;
+    const ptsLine = isFactoryOrder ? '\n🏭 Order โรงงาน — ไม่บวกแต้ม' : `\nลูกค้าจะได้ +${points} แต้ม`;
+    if (!confirm(`ยืนยันจัดส่งสำเร็จ?\n\n${order.customer_name} · ลูกค้าจ่าย ฿${order.total}${redemptionStr}${ptsLine}`)) return;
     await finalizeOrder(orderId);
     return;
   }
@@ -943,10 +952,12 @@ async function finalizeOrder(orderId) {
   if (customer.points == null) customer.points = 0;
   if (customer.lifetime_points == null) customer.lifetime_points = 0;
 
-  // Award points based on ORIGINAL total (before redemption discount) — Q3 ก่อนหักส่วนลด
+  // Award points based on ORIGINAL total (before redemption discount)
+  // Skip for factory orders (no loyalty)
+  const isFactoryOrder = order.source === 'factory';
   const baseAmount = order.original_total || order.total;
   let pointsToAward = 0;
-  if (!order.points_awarded) {
+  if (!isFactoryOrder && !order.points_awarded) {
     pointsToAward = window.calcPointsFromAmount(baseAmount);
     customer.points = (customer.points || 0) + pointsToAward;
     customer.lifetime_points = (customer.lifetime_points || 0) + pointsToAward;
@@ -986,7 +997,9 @@ async function finalizeOrder(orderId) {
 
   render();
 
-  const summary = `${customer.name} +${pointsToAward} แต้ม (รวม ${customer.points})`;
+  const summary = isFactoryOrder
+    ? `${customer.name} (🏭 โรงงาน · ไม่บวกแต้ม)`
+    : `${customer.name} +${pointsToAward} แต้ม (รวม ${customer.points})`;
   toast(`✓ เสร็จ! ${summary}`);
 }
 
