@@ -1376,13 +1376,35 @@ function buildESCPOS(order) {
   const ESC = 0x1B, GS = 0x1D, NL = 0x0A;
   const out = [];
   const enc = new TextEncoder();
-  const bytes = (s) => { for (const b of enc.encode(s)) out.push(b); };
+
+  // Convert UTF-8 string → TIS-620 bytes (PC874 Thai for Xprinter N160II)
+  // Thai Unicode 0x0E01–0x0E5B maps to TIS-620 0xA1–0xFB (offset 0xA0 - 0x0E00)
+  // Strips emojis and unsupported chars (replaced with space or '?')
+  const bytes = (s) => {
+    if (!s) return;
+    // Strip emoji ranges that thermal printer can't render
+    s = String(s).replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{2300}-\u{23FF}\u{2B00}-\u{2BFF}]/gu, '');
+    for (let i = 0; i < s.length; i++) {
+      const code = s.charCodeAt(i);
+      if (code <= 0x7F) {
+        out.push(code);                       // ASCII
+      } else if (code >= 0x0E01 && code <= 0x0E5B) {
+        out.push(code - 0x0E00 + 0xA0);       // Thai → TIS-620
+      } else if (code === 0x0E5C || code === 0x0E5D) {
+        out.push(code - 0x0E00 + 0xA0);       // Thai punctuation
+      } else if (code === 0x00A0) {
+        out.push(0x20);                       // nbsp → space
+      } else {
+        // Non-Thai non-ASCII → skip (avoid garbage)
+      }
+    }
+  };
   const ln = (s) => { bytes(s || ''); out.push(NL); };
 
   // Init
   out.push(ESC, 0x40);
-  // Try Thai codepage TIS-620 (CP874 = 30 in some printers)
-  out.push(ESC, 0x74, 0x14); // codepage 20 (some printers map TIS-620 here)
+  // Codepage 70 = PC874 (Thai) — confirmed by N160II self-test print
+  out.push(ESC, 0x74, 70);
 
   // Center + double size header
   out.push(ESC, 0x61, 0x01);
