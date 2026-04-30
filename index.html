@@ -2259,7 +2259,7 @@ async function onPaymentQrSelected(ev) {
     if (!confirm('ไฟล์ขนาด ' + (file.size / 1024).toFixed(0) + 'KB ใหญ่หน่อย — อัพโหลดต่อ?')) return;
   }
   // Compress to max 400×400 to keep storage small
-  const dataUrl = await compressImageToDataURL(file, 400);
+  const dataUrl = await compressImageForPaymentQr(file, 400);
   localStorage.setItem('paymentQrDataUrl', dataUrl);
   // Sync to cloud so other devices can see it too
   if (window.cloud?.saveMenuConfig) {
@@ -2301,7 +2301,9 @@ function refreshPaymentQrPreview() {
 }
 
 // Helper: compress image File → dataURL (longest side ≤ maxSide)
-function compressImageToDataURL(file, maxSide) {
+// Renamed to avoid clash with existing compressImageToDataURL() that the
+// menu-item image upload uses (different signature → different defaults)
+function compressImageForPaymentQr(file, maxSide) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
