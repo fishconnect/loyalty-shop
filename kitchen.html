@@ -1047,8 +1047,7 @@ function getBTPrinter() {
   return null;
 }
 
-// Pre-load images on page init so they're cached before any print is requested
-// (mobile browsers block print() if user gesture context is lost waiting for images)
+// Pre-load print images
 (function preloadPrintImages() {
   const urls = [
     'logo.jpg',
@@ -1058,12 +1057,32 @@ function getBTPrinter() {
   urls.forEach(src => { const img = new Image(); img.src = src; });
 })();
 
-// Simplest reliable flow: click → fill receipt → window.print() in same gesture
+// Print flow:
+// 1) If Bluetooth thermal connected → send ESC/POS via BT (works on Android Chrome)
+// 2) Else → open NEW WINDOW with self-contained receipt + auto-print
+//    (escapes iframe context — works reliably on Android/iOS where window.print()
+//     inside admin's kitchen iframe was failing)
 function printOrderReceipt(orderId) {
   const orderSrc = cloudOrders !== null ? cloudOrders : (loadDB().pendingOrders || []);
   const order = orderSrc.find(o => o.id === orderId);
   if (!order) { alert('⚠️ ไม่พบ order'); return; }
-  browserPrint(order);
+
+  // Try Bluetooth first if connected
+  const bt = getBTPrinter();
+  if (bt) {
+    toast('🔵 ส่งไป Bluetooth printer...');
+    printViaBluetooth(order, bt).then(r => {
+      if (r.success) toast('✅ พิมพ์ผ่าน Bluetooth สำเร็จ');
+      else {
+        toast('⚠️ BT ล้มเหลว → เปิดหน้าพิมพ์ปกติ');
+        setTimeout(() => openPrintWindow(order), 600);
+      }
+    });
+    return;
+  }
+
+  // No BT — open print window (escape iframe; works on Android/iOS)
+  openPrintWindow(order);
 }
 
 // Build receipt HTML (used by both hidden iframe approach and BT fallback)
@@ -1157,25 +1176,104 @@ const RECEIPT_CSS = `
   .rc-qr-url { font-size: 8pt; margin-top: 1mm; word-break: break-all; }
 `;
 
-// Simplest direct print — fills #printArea, calls window.print() IMMEDIATELY in
-// the same user gesture so iOS Safari / Android Chrome don't block it.
-// Images are pre-cached on page load (see preloadPrintImages above).
-function browserPrint(order) {
-  const printArea = document.getElementById('printArea');
-  if (!printArea) {
-    alert('พิมพ์ไม่ได้: หาที่พิมพ์ไม่เจอ');
-    return;
+// Open NEW WINDOW with self-contained receipt and auto-print.
+// Why new window: when kitchen runs inside index.html admin iframe,
+// window.print() called from inside iframe sometimes silently fails on
+// Android/iOS. A fresh window has its own context — print works reliably.
+function openPrintWindow(order) {
+  const compactCSS = `
+    @page { size: 80mm auto; margin: 0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      background: #fff; color: #000;
+      font-family: 'Sarabun', -apple-system, "Segoe UI", sans-serif;
+    }
+    body { width: 80mm; padding: 4mm; font-size: 10pt; line-height: 1.3; }
+    .rc-logo { display: block; width: 26mm; height: 26mm; object-fit: contain; margin: 0 auto 1mm; }
+    .rc-h1 { text-align: center; font-size: 20pt; font-weight: 900; margin: 0 0 1mm; letter-spacing: -0.5px; }
+    .rc-sub { text-align: center; font-size: 10pt; margin: 0 0 1mm; font-weight: 600; }
+    .rc-divider { border: 0; border-top: 1px dashed #000; margin: 1.5mm 0; }
+    .rc-row { display: flex; justify-content: space-between; font-size: 10pt; margin: 0.5mm 0; }
+    .rc-item { display: flex; justify-content: space-between; align-items: flex-start; font-size: 11pt; margin: 1mm 0; }
+    .rc-item .name { flex: 1; padding-right: 3mm; }
+    .rc-item .price { font-weight: 700; white-space: nowrap; }
+    .rc-total { text-align: right; font-size: 13pt; font-weight: 900; margin: 1.5mm 0; }
+    .rc-foot { text-align: center; font-size: 9pt; margin: 2mm 0 0; }
+    .rc-free { color: #000; font-weight: 700; }
+    .rc-qr-wrap { text-align: center; margin: 2mm 0; page-break-inside: avoid; break-inside: avoid; }
+    .rc-qr-title { font-size: 10pt; font-weight: 800; margin-bottom: 1mm; }
+    .rc-qr { width: 26mm; height: 26mm; margin: 0 auto; display: block; }
+    .rc-qr-url { display: none; }
+    @media print { body { padding: 2mm; } }
+    /* On-screen indicator (hidden when printing) */
+    .pi-banner {
+      background: #1652F0; color: #fff; padding: 8px; text-align: center;
+      font-size: 12px; font-weight: 700; position: sticky; top: 0;
+    }
+    @media print { .pi-banner { display: none; } }
+  `;
+
+  const winHTML = `<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ใบเสร็จ #${order.id.slice(-6)}</title>
+  <style>${compactCSS}</style>
+</head>
+<body>
+  <div class="pi-banner">🖨️ กำลังเปิดหน้าพิมพ์... (กดพิมพ์อีกครั้งถ้าไม่เด้ง)</div>
+  ${buildReceiptHTML(order)}
+  <div class="pi-banner" style="margin-top:8px">
+    <button onclick="window.print()" style="background:#fff;color:#1652F0;border:none;padding:10px 20px;border-radius:6px;font-weight:800;cursor:pointer">🖨️ พิมพ์อีกครั้ง</button>
+    <button onclick="window.close()" style="background:transparent;color:#fff;border:1px solid #fff;padding:10px 20px;border-radius:6px;font-weight:700;cursor:pointer;margin-left:8px">ปิด</button>
+  </div>
+  <script>
+    window.addEventListener('load', function() {
+      // Wait briefly for images to render, then print
+      var imgs = document.querySelectorAll('img');
+      var loaded = 0;
+      var printed = false;
+      function doPrint() {
+        if (printed) return; printed = true;
+        try { window.focus(); window.print(); } catch(e) { console.error(e); }
+      }
+      if (imgs.length === 0) { setTimeout(doPrint, 300); return; }
+      imgs.forEach(function(img) {
+        if (img.complete) { if (++loaded >= imgs.length) setTimeout(doPrint, 300); }
+        else {
+          img.addEventListener('load',  function() { if (++loaded >= imgs.length) setTimeout(doPrint, 300); });
+          img.addEventListener('error', function() { if (++loaded >= imgs.length) setTimeout(doPrint, 300); });
+        }
+      });
+      setTimeout(doPrint, 4000); // failsafe
+    });
+  </script>
+</body>
+</html>`;
+
+  // Try popup first (must run inside the click handler — user gesture)
+  let w;
+  try { w = window.open('', '_blank'); } catch (e) {}
+  if (!w || w.closed) {
+    // Popup blocked → fallback to in-place navigation via Blob URL
+    try {
+      const blob = new Blob([winHTML], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank') || (location.href = url);
+      return;
+    } catch (e) {
+      alert('⚠️ Browser บล็อค popup กรุณาอนุญาต popup สำหรับเว็บนี้\n\nหรือใช้ปุ่ม "พิมพ์อีกครั้ง" ในหน้าใหม่');
+      return;
+    }
   }
-  printArea.innerHTML = buildReceiptHTML(order);
-  // Call print immediately — preserves user gesture context required by mobile browsers.
-  // CSS @media print isolates #printArea so only the receipt prints (1 sheet).
-  try {
-    window.print();
-  } catch (e) {
-    console.error('[Print]', e);
-    alert('พิมพ์ไม่ได้: ' + e.message);
-  }
+  w.document.open();
+  w.document.write(winHTML);
+  w.document.close();
 }
+
+// Legacy alias — some callsites may still reference browserPrint
+const browserPrint = openPrintWindow;
 
 // ========== Web Bluetooth Thermal Printer ==========
 const BT_SERVICES = [
