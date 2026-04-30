@@ -799,14 +799,51 @@
     <label style="margin-top:10px">⏱️ ความถี่ beep ซ้ำ <span id="notifRepeatLabel" style="float:right;color:#1652F0;font-weight:700">2 วิ</span></label>
     <input type="range" id="notifRepeat" min="1" max="10" step="1" value="2" oninput="onRepeatChange(this.value)" style="width:100%">
     <button class="btn-secondary" onclick="testNotifSound()" style="width:100%;margin-top:10px">🔔 ทดสอบเสียง · สั่น · OS Notification</button>
-    <button class="btn-primary" onclick="enableOSNotif()" style="width:100%;margin-top:8px;background:linear-gradient(135deg,#dc2626,#991b1b)">🔔 เปิด OS Notification (เด้งแม้หน้าจอดับ)</button>
+    <button class="btn-primary" onclick="enableOSNotif()" style="width:100%;margin-top:8px;background:linear-gradient(135deg,#dc2626,#991b1b)">🔔 เปิด OS Notification</button>
     <div id="osNotifStatus" style="margin-top:6px;font-size:12px;text-align:center;color:#5c6982"></div>
     <div class="hint" style="margin-top:10px;line-height:1.6;font-size:12px">
       เมื่อมีออเดอร์ใหม่ ระบบจะดัง beep + สั่น + เด้ง notification ต่อเนื่องจนกว่าจะกด <b>ยืนยันรายการ</b> ทุกออเดอร์<br>
-      📱 <b>บนมือถือ:</b> กด "เปิด OS Notification" ด้านบนแล้วอนุญาต — ระบบจะเด้งเตือนแม้หน้าจอดับ/ปิดแอป<br>
+      📱 <b>บนมือถือ:</b> กด "เปิด OS Notification" แล้วอนุญาต<br>
       🔋 ขณะมีออเดอร์ค้าง — ระบบจะ <b>กันหน้าจอดับ</b> อัตโนมัติ (Wake Lock)<br>
-      ⚠️ บน iOS Safari: notification ทำงานเฉพาะตอนแอปยังเปิด (limit ของ Apple)
+      ⚠️ <b>หน้าจอปิดสนิท</b> + <b>browser ปิด</b> → notification ใน browser ใช้ไม่ได้ (ทุกเครื่อง) → ใช้ Telegram ด้านล่าง
     </div>
+  </div>
+
+  <div class="card" style="border:2px solid #0ea5e9">
+    <h2>📱 Telegram (เด้งบนมือถือเสมอ — แนะนำ!)</h2>
+    <div class="hint" style="font-size:12px;margin-bottom:10px;line-height:1.6">
+      Telegram เด้งเตือนแม้ <b>ปิดหน้าจอ ปิด browser ทุกอย่าง</b> เพราะใช้แอป Telegram ของมือถือเป็นตัวรับ — เหมือน push notification จริง<br>
+      ครั้งเดียวตั้งค่าแล้วใช้ได้ตลอด — ทุกออเดอร์ใหม่ จะ ping ไปที่ Telegram ของคุณ
+    </div>
+    <label>🤖 Bot Token <span style="color:#9ca3af;font-size:11px">(จาก @BotFather)</span></label>
+    <input type="text" id="tgBotToken" placeholder="123456:ABCdef..." style="font-family:monospace;font-size:12px" oninput="saveTelegramSettings()">
+    <label style="margin-top:8px">💬 Chat ID <span style="color:#9ca3af;font-size:11px">(จาก @userinfobot หรือ /start บอท)</span></label>
+    <input type="text" id="tgChatId" placeholder="123456789" inputmode="numeric" style="font-family:monospace;font-size:12px" oninput="saveTelegramSettings()">
+    <div class="toggle-row" style="margin:10px 0 4px">
+      <input type="checkbox" id="tgEnabled" onchange="saveTelegramSettings()">
+      <label for="tgEnabled" style="margin:0">📲 ส่งเข้า Telegram เมื่อมีออเดอร์ใหม่</label>
+    </div>
+    <button class="btn-secondary" onclick="testTelegram()" style="width:100%;margin-top:8px">📤 ทดสอบส่ง Telegram</button>
+    <div id="tgStatus" style="margin-top:6px;font-size:12px;text-align:center;color:#5c6982"></div>
+    <details style="margin-top:10px;font-size:12px;color:#5c6982">
+      <summary style="cursor:pointer;font-weight:700">📖 วิธีตั้งค่า Telegram (3 ขั้นตอน — ครั้งเดียว)</summary>
+      <div style="background:#f7f8fb;padding:10px;border-radius:8px;margin-top:6px;line-height:1.7">
+        <b>ขั้นที่ 1: สร้าง Bot</b><br>
+        1. เปิด Telegram → ค้นหา <b>@BotFather</b> → /start<br>
+        2. พิมพ์ <code>/newbot</code> → ตั้งชื่อ → ตั้ง username (ลงท้าย bot)<br>
+        3. คัดลอก Token (ยาวๆ มี : ตรงกลาง) มาใส่ช่องบน<br>
+        <br>
+        <b>ขั้นที่ 2: หา Chat ID ของคุณ</b><br>
+        1. ค้นหา <b>@userinfobot</b> ใน Telegram → /start<br>
+        2. คัดลอก ID ตัวเลข (ขึ้นต้นเลขหรือ -) มาใส่ช่องบน<br>
+        <br>
+        <b>ขั้นที่ 3: เริ่มแชทกับ Bot ของตัวเอง</b><br>
+        1. ค้นหา bot ที่สร้าง (จากขั้นที่ 1) → /start<br>
+        2. กดปุ่ม "ทดสอบส่ง Telegram" — ถ้าเด้งเข้ามือถือ = สำเร็จ!<br>
+        <br>
+        💡 ใช้ Telegram กลุ่มก็ได้ — เพิ่ม bot เข้ากลุ่ม แล้วเอา Chat ID ของกลุ่ม (ขึ้นต้น <code>-</code>)
+      </div>
+    </details>
   </div>
 
   <div class="card" id="shopStatusCard" style="border:2px solid #f59e0b">
@@ -2980,6 +3017,89 @@ function initNotifSettingsUI() {
     document.getElementById('notifRepeatLabel').textContent = sec + ' วิ';
   }
   updateOSNotifStatus();
+  // Telegram settings
+  const tg = JSON.parse(localStorage.getItem('telegramNotif') || '{}');
+  const tgT = document.getElementById('tgBotToken'); if (tgT) tgT.value = tg.token || '';
+  const tgC = document.getElementById('tgChatId');   if (tgC) tgC.value = tg.chatId || '';
+  const tgE = document.getElementById('tgEnabled');  if (tgE) tgE.checked = !!tg.enabled;
+  updateTgStatus();
+}
+
+// ========== Telegram Bot Notification ==========
+function getTelegramSettings() {
+  return JSON.parse(localStorage.getItem('telegramNotif') || '{}');
+}
+function saveTelegramSettings() {
+  const tg = {
+    token:  (document.getElementById('tgBotToken')?.value || '').trim(),
+    chatId: (document.getElementById('tgChatId')?.value || '').trim(),
+    enabled: !!document.getElementById('tgEnabled')?.checked
+  };
+  localStorage.setItem('telegramNotif', JSON.stringify(tg));
+  // Sync to cloud so all devices share Telegram routing
+  if (window.cloud?.saveTelegramConfig) {
+    window.cloud.saveTelegramConfig(tg).catch(()=>{});
+  }
+  updateTgStatus();
+}
+function updateTgStatus() {
+  const el = document.getElementById('tgStatus'); if (!el) return;
+  const tg = getTelegramSettings();
+  if (!tg.token || !tg.chatId) { el.innerHTML = '⏳ ยังไม่ได้กรอก Token + Chat ID'; el.style.color = '#f59e0b'; return; }
+  if (tg.enabled) { el.innerHTML = '✅ Telegram พร้อมส่ง — เมื่อมีออเดอร์ใหม่ จะเด้งเตือนเข้า Telegram ของคุณ'; el.style.color = '#16a34a'; }
+  else { el.innerHTML = '⏸️ ตั้งค่าครบแล้ว — แต่ยังไม่ได้เปิดใช้ (ติ๊กที่ checkbox)'; el.style.color = '#5c6982'; }
+}
+async function sendTelegramMessage(text) {
+  const tg = getTelegramSettings();
+  if (!tg.enabled || !tg.token || !tg.chatId) return false;
+  try {
+    const url = `https://api.telegram.org/bot${tg.token}/sendMessage`;
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: tg.chatId,
+        text: text,
+        parse_mode: 'HTML',
+        disable_web_page_preview: true
+      })
+    });
+    const data = await r.json();
+    if (!data.ok) { console.warn('[Telegram]', data); return false; }
+    return true;
+  } catch (e) {
+    console.warn('[Telegram] send failed', e);
+    return false;
+  }
+}
+async function testTelegram() {
+  const tg = getTelegramSettings();
+  if (!tg.token || !tg.chatId) { toast('⚠️ กรอก Token + Chat ID ก่อนครับ'); return; }
+  const ok = await sendTelegramMessage(
+    `🔔 <b>ทดสอบจาก ครัวผู้ใหญ่ปอง</b>\n\n` +
+    `ถ้าได้รับข้อความนี้แสดงว่าระบบ Telegram พร้อมใช้งาน ✅\n` +
+    `เวลาทดสอบ: ${new Date().toLocaleString('th-TH')}`
+  );
+  if (ok) toast('✅ ส่งสำเร็จ — เช็ค Telegram');
+  else toast('❌ ส่งไม่สำเร็จ — เช็ค Token / Chat ID / กด /start บอทแล้วยัง', true);
+}
+
+// Format order summary for Telegram
+function formatOrderForTelegram(order) {
+  const items = (order.items || []).map(it => {
+    const opts = (it.options || []).filter(o => o.choice).map(o => o.choice).join(', ');
+    return `• ${it.qty || 1}× ${it.mainName || it.name}${opts?` <i>(${opts})</i>`:''}${it.note?` 📝<i>${it.note}</i>`:''}`;
+  }).join('\n');
+  const phone = order.customer_phone ? `\n📞 ${order.customer_phone}` : '';
+  const dtype = order.delivery_type === 'delivery' ? '🚚 ส่ง' : order.delivery_type === 'pickup' ? '🏪 รับเอง' : '';
+  return `🔔 <b>ออเดอร์ใหม่!</b>\n\n` +
+         `👤 <b>${order.customer_name || 'ลูกค้า'}</b>${phone}\n` +
+         `${dtype}\n\n` +
+         `${items || '— ไม่มีรายการ —'}\n\n` +
+         `💰 <b>${order.total || 0} ฿</b> · ${order.boxes || 0} จาน\n` +
+         `🆔 ${order.id}\n` +
+         `🕐 ${new Date(order.date).toLocaleString('th-TH')}\n\n` +
+         `👉 เปิดครัว: https://loyalty.fishconnect.co/`;
 }
 // Run init on DOM ready
 document.addEventListener('DOMContentLoaded', initNotifSettingsUI);
@@ -3631,6 +3751,16 @@ setInterval(updatePendingBadge, 5000);
 
 // Cloud sync: subscribe to customers + orders → mirror into local
 whenCloudReady(() => {
+  // Telegram config sync
+  if (window.cloud.onTelegramConfig) {
+    window.cloud.onTelegramConfig(cfg => {
+      if (cfg) {
+        localStorage.setItem('telegramNotif', JSON.stringify(cfg));
+        if (typeof initNotifSettingsUI === 'function') try { initNotifSettingsUI(); } catch(e) {}
+      }
+    });
+  }
+
   window.cloud.onCustomers(customers => {
     Object.entries(customers).forEach(([id, c]) => {
       // Cloud is authoritative for fields it has; merge missing fields
@@ -3645,6 +3775,13 @@ whenCloudReady(() => {
     if (typeof renderReports === 'function') try { renderReports(); } catch(e){}
   });
   window.cloud.onOrders(orders => {
+    // Detect newly-arrived pending orders BEFORE we update db (so we know which are new)
+    const prevSeen = window._tgSeenOrderIds || (window._tgSeenOrderIds = new Set(
+      (db.pendingOrders || []).map(o => o.id)
+    ));
+    const newPending = orders.filter(o => o.status === 'pending' && !prevSeen.has(o.id));
+    orders.forEach(o => prevSeen.add(o.id));
+
     db.pendingOrders = orders;
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); } catch(e){}
     try { updatePendingBadge(); } catch(e){}
@@ -3653,6 +3790,20 @@ whenCloudReady(() => {
     if (window.OrderNotifier) {
       try { window.OrderNotifier.check(orders, { getOrders: () => (db.pendingOrders || []) }); }
       catch(e) { console.warn('[OrderNotifier]', e); }
+    }
+
+    // 📱 Telegram push — works through screen lock since Telegram app handles it
+    // Skip on first load (avoid spamming for orders that were already pending)
+    if (!window._tgFirstLoadDone) {
+      window._tgFirstLoadDone = true;
+    } else {
+      newPending.forEach(o => {
+        try {
+          if (typeof formatOrderForTelegram === 'function' && typeof sendTelegramMessage === 'function') {
+            sendTelegramMessage(formatOrderForTelegram(o));
+          }
+        } catch (e) { console.warn('[Telegram]', e); }
+      });
     }
 
     // Re-render customer/report views (defer to next tick so sound has time to play

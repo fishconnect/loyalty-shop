@@ -99,21 +99,46 @@ window.OrderNotifier = (function () {
     if (!ctx) { log('no audio context'); return; }
     pattern = pattern || [880, 1200, 880]; // 3-note alert
     try {
+      // Master compressor to push average loudness much higher (broadcast-style)
+      const compressor = ctx.createDynamicsCompressor();
+      compressor.threshold.value = -24;
+      compressor.knee.value = 30;
+      compressor.ratio.value = 12;
+      compressor.attack.value = 0.003;
+      compressor.release.value = 0.25;
+      const masterGain = ctx.createGain();
+      masterGain.gain.value = Math.max(0.001, settings.volume * 1.0);  // FULL gain
+      compressor.connect(masterGain);
+      masterGain.connect(ctx.destination);
+
       pattern.forEach((freq, i) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain); gain.connect(ctx.destination);
-        osc.frequency.value = freq;
-        osc.type = 'sine';
-        const t0 = ctx.currentTime + i * 0.18;
-        const dur = 0.15;
-        gain.gain.setValueAtTime(0, t0);
-        gain.gain.linearRampToValueAtTime(settings.volume * 0.5, t0 + 0.02);
-        gain.gain.linearRampToValueAtTime(0, t0 + dur);
-        osc.start(t0);
-        osc.stop(t0 + dur + 0.01);
+        const t0 = ctx.currentTime + i * 0.22;
+        const dur = 0.22;  // Longer (was 0.15)
+
+        // Stack 3 oscillators per note for big, rich, LOUD tone
+        // square = harsh+loud, sawtooth = bright, triangle = body
+        ['square', 'sawtooth', 'triangle'].forEach((type, j) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = type;
+          // Slight detune between layers for thicker sound
+          osc.frequency.value = freq * (1 + (j - 1) * 0.004);
+
+          // Peak gain per oscillator (3 stacked → 3x sum, but compressor evens out)
+          const peak = 0.45 + (j === 0 ? 0.15 : 0);  // square gets a bit more
+          gain.gain.setValueAtTime(0, t0);
+          gain.gain.linearRampToValueAtTime(peak, t0 + 0.005);
+          gain.gain.setValueAtTime(peak, t0 + dur - 0.03);
+          gain.gain.linearRampToValueAtTime(0, t0 + dur);
+
+          osc.connect(gain);
+          gain.connect(compressor);
+
+          osc.start(t0);
+          osc.stop(t0 + dur + 0.02);
+        });
       });
-      log('Beep played, volume:', settings.volume);
+      log('Beep played, volume:', settings.volume, 'pattern:', pattern);
     } catch (e) { log('beep err', e); }
   }
 

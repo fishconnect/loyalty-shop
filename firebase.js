@@ -120,6 +120,23 @@ window.cloud = {
       const s = await getDoc(doc(fdb, 'settings', 'admin'));
       return s.exists() ? (s.data().password || '1234') : '1234';
     } catch (e) { return '1234'; }
+  },
+
+  // Telegram bot config (shared across devices)
+  async saveTelegramConfig(cfg) {
+    try { await setDoc(doc(fdb, 'settings', 'telegram'), cfg, { merge: true }); }
+    catch (e) { console.warn('[cloud] saveTelegramConfig', e); }
+  },
+  async getTelegramConfig() {
+    try {
+      const s = await getDoc(doc(fdb, 'settings', 'telegram'));
+      return s.exists() ? s.data() : null;
+    } catch (e) { return null; }
+  },
+  onTelegramConfig(cb) {
+    return onSnapshot(doc(fdb, 'settings', 'telegram'), snap => {
+      cb(snap.exists() ? snap.data() : null);
+    });
   }
 };
 
