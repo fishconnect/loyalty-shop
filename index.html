@@ -362,16 +362,12 @@
   <div style="display:flex;background:#f7f8fb;border-bottom:1px solid #e5e7eb;overflow-x:auto">
     <button class="m-subtab active" onclick="setMenuView('items')" id="mtab-items" style="flex:1;min-width:110px;padding:10px;border:none;background:transparent;font-weight:700;color:#1652F0;border-bottom:3px solid #1652F0;cursor:pointer;font-family:inherit">📋 รายการ</button>
     <button class="m-subtab" onclick="setMenuView('addons')" id="mtab-addons" style="flex:1;min-width:110px;padding:10px;border:none;background:transparent;font-weight:700;color:#6b7280;border-bottom:3px solid transparent;cursor:pointer;font-family:inherit">🧂 Add-on</button>
-    <button class="m-subtab" onclick="setMenuView('order')" id="mtab-order" style="flex:1;min-width:110px;padding:10px;border:none;background:transparent;font-weight:700;color:#6b7280;border-bottom:3px solid transparent;cursor:pointer;font-family:inherit">🍽 สั่งหน้าร้าน</button>
   </div>
-  <div id="menu-items-view" style="padding:14px;max-height:calc(100vh - 230px);overflow-y:auto">
+  <div id="menu-items-view" style="padding:14px;max-height:calc(100vh - 180px);overflow-y:auto">
     <div id="regularItemList"></div>
   </div>
-  <div id="menu-addons-view" style="padding:14px;display:none;max-height:calc(100vh - 230px);overflow-y:auto">
+  <div id="menu-addons-view" style="padding:14px;display:none;max-height:calc(100vh - 180px);overflow-y:auto">
     <div id="regularAddOnList"></div>
-  </div>
-  <div id="menu-order-view" style="display:none">
-    <iframe id="menuFrame" src="about:blank" style="border:0;width:100%;height:calc(100vh - 230px);display:block" title="Menu"></iframe>
   </div>
 </div>
 
@@ -989,10 +985,9 @@ function setMenuView(v) {
   const views = {
     items:  document.getElementById('menu-items-view'),
     addons: document.getElementById('menu-addons-view'),
-    order:  document.getElementById('menu-order-view'),
   };
   Object.keys(views).forEach(k => { views[k].style.display = (k === v) ? 'block' : 'none'; });
-  ['items', 'addons', 'order'].forEach(k => {
+  ['items', 'addons'].forEach(k => {
     const tab = document.getElementById('mtab-' + k);
     if (!tab) return;
     const active = k === v;
@@ -1001,10 +996,6 @@ function setMenuView(v) {
   });
   if (v === 'items')  renderRegularItemList();
   if (v === 'addons') renderRegularAddOns();
-  if (v === 'order') {
-    const f = document.getElementById('menuFrame');
-    if (!f.dataset.loaded) { f.src = 'menu.html?embed=1&mode=shop'; f.dataset.loaded = '1'; }
-  }
 }
 
 function getEffectiveRegularMenu() {
