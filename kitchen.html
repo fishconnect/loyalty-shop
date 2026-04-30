@@ -1042,55 +1042,13 @@ function getBTPrinter() {
   return null;
 }
 
-// Detect mobile (iOS Safari, Android, iPad) — Web Bluetooth not available on iOS
-const _isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-const _hasWebBluetooth = ('bluetooth' in navigator);
-
+// Simplest possible flow: click print → browser print dialog → user picks printer
+// No Bluetooth integration in the print path. (BT can still be configured separately
+// in admin settings if user wants ESC/POS mode, but the default is OS-level print.)
 function printOrderReceipt(orderId) {
   const orderSrc = cloudOrders !== null ? cloudOrders : (loadDB().pendingOrders || []);
   const order = orderSrc.find(o => o.id === orderId);
   if (!order) return toast('⚠️ ไม่พบ order');
-
-  // Always show toast immediately so user knows click registered
-  toast('🖨️ กำลังเปิดหน้าพิมพ์...');
-
-  const bt = getBTPrinter();
-  if (bt) {
-    printViaBluetooth(order, bt).then(r => {
-      if (r.success) toast('✅ ส่งไป Bluetooth printer แล้ว');
-      else {
-        toast('⚠️ BT ไม่สำเร็จ → ใช้ browser print');
-        setTimeout(() => browserPrint(order), 600);
-      }
-    });
-    return;
-  }
-
-  // ===== No BT connection =====
-  // Mobile (especially iOS) — skip confirm dialogs, go straight to browser print.
-  // Web Bluetooth isn't supported on iOS Safari at all, so no point asking.
-  if (_isMobile || !_hasWebBluetooth) {
-    // Browser print path with native print sheet
-    browserPrint(order);
-    return;
-  }
-
-  // Desktop with no BT connection — ask before falling back
-  const lastPrinter = localStorage.getItem('btPrinterName');
-  let useBrowser = true;
-  try {
-    const msg = lastPrinter
-      ? `🔵 Bluetooth printer "${lastPrinter}" ยังไม่ได้เชื่อมต่อ\n\nOK = ใช้ปริ้นเตอร์ทั่วไป (Canon/HP/PDF)\nCancel = ไปเชื่อมต่อ Bluetooth ก่อน`
-      : `🔵 ยังไม่ได้เชื่อมต่อ Bluetooth printer\n\nOK = ใช้ปริ้นเตอร์ทั่วไป (Canon/HP/PDF)\nCancel = ไปเชื่อมต่อ Bluetooth ก่อน`;
-    useBrowser = confirm(msg);
-  } catch (e) {
-    // confirm() blocked — just go to browser print
-    useBrowser = true;
-  }
-  if (!useBrowser) {
-    toast('💡 admin → ตั้งค่า → "🔵 เชื่อมต่อ" Bluetooth');
-    return;
-  }
   browserPrint(order);
 }
 
@@ -1185,69 +1143,37 @@ const RECEIPT_CSS = `
   .rc-qr-url { font-size: 8pt; margin-top: 1mm; word-break: break-all; }
 `;
 
-// Universal print via hidden iframe — works on desktop, iOS, Android,
-// and inside iframe-in-iframe contexts (kitchen iframe within index.html admin)
+// Simple direct print — fills #printArea, calls window.print().
+// CSS @media print isolates #printArea (display:none on siblings → no blank pages).
 function browserPrint(order) {
-  const html = buildReceiptHTML(order);
+  const printArea = document.getElementById('printArea');
+  if (!printArea) { console.error('No #printArea'); return; }
+  printArea.innerHTML = buildReceiptHTML(order);
 
-  // Reuse single hidden iframe across calls
-  let frame = document.getElementById('hiddenPrintFrame');
-  if (frame) frame.remove(); // fresh each time to avoid stale content
-  frame = document.createElement('iframe');
-  frame.id = 'hiddenPrintFrame';
-  // Off-screen but rendered (visibility:hidden / width:0 prevents render on some browsers)
-  frame.style.cssText = 'position:fixed;left:-10000px;top:0;width:80mm;height:auto;min-height:200mm;border:0;opacity:0;pointer-events:none';
-  document.body.appendChild(frame);
-
-  const doc = frame.contentDocument || frame.contentWindow.document;
-  doc.open();
-  doc.write(`<!DOCTYPE html><html lang="th"><head>
-    <meta charset="UTF-8">
-    <title>ใบเสร็จ</title>
-    <style>${RECEIPT_CSS}</style>
-  </head><body>${html}</body></html>`);
-  doc.close();
-
-  // Wait for images (logo + 2 QRs) before triggering print
+  const imgs = printArea.querySelectorAll('img');
   let printed = false;
-  const fire = () => {
+  const doPrint = () => {
     if (printed) return;
     printed = true;
-    try {
-      // .focus() helps some Android browsers
-      frame.contentWindow.focus();
-      frame.contentWindow.print();
-    } catch (e) {
-      console.error('[Print]', e);
-      // Last-resort fallback: print main window
-      try { window.print(); } catch (e2) { toast('⚠️ พิมพ์ไม่ได้: ' + (e2.message || e.message), true); }
+    setTimeout(() => {
+      try { window.print(); }
+      catch (e) { console.error('[Print]', e); toast('⚠️ พิมพ์ไม่ได้: ' + e.message, true); }
+    }, 300);
+  };
+
+  if (imgs.length === 0) { doPrint(); return; }
+
+  let loaded = 0;
+  const checkAll = () => { if (++loaded >= imgs.length) doPrint(); };
+  imgs.forEach(img => {
+    if (img.complete && img.naturalHeight > 0) checkAll();
+    else {
+      img.addEventListener('load', checkAll, { once: true });
+      img.addEventListener('error', checkAll, { once: true });
     }
-  };
-
-  // Wait for iframe to load + all images inside it
-  const startWait = () => {
-    const imgs = doc.querySelectorAll('img');
-    if (imgs.length === 0) { setTimeout(fire, 200); return; }
-    let loaded = 0;
-    const checkAll = () => { if (++loaded >= imgs.length) setTimeout(fire, 250); };
-    imgs.forEach(img => {
-      if (img.complete && img.naturalHeight > 0) checkAll();
-      else {
-        img.addEventListener('load', checkAll, { once: true });
-        img.addEventListener('error', checkAll, { once: true });
-      }
-    });
-    // Failsafe
-    setTimeout(() => { if (!printed) { console.warn('[Print] timeout, printing anyway'); fire(); } }, 5000);
-  };
-
-  // iframe might already be ready; otherwise wait for load
-  if (frame.contentDocument && frame.contentDocument.readyState === 'complete') {
-    startWait();
-  } else {
-    frame.addEventListener('load', startWait, { once: true });
-    setTimeout(startWait, 800); // failsafe in case load doesn't fire
-  }
+  });
+  // Failsafe — print after 4s even if some images haven't loaded
+  setTimeout(() => { if (!printed) doPrint(); }, 4000);
 }
 
 // ========== Web Bluetooth Thermal Printer ==========
