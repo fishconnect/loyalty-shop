@@ -1200,9 +1200,9 @@ function openPrintWindow(order) {
     .rc-free { color: #000; font-weight: 700; }
     .rc-qr-wrap { text-align: center; margin: 2mm 0; page-break-inside: avoid; break-inside: avoid; }
     .rc-qr-title { font-size: 10pt; font-weight: 800; margin-bottom: 1mm; }
-    /* QR images: 50% smaller (was 26mm → 13mm) */
-    .rc-qr-small { width: 13mm; height: 13mm; margin: 0 auto; display: block; image-rendering: pixelated; }
-    .rc-qr { width: 13mm; height: 13mm; margin: 0 auto; display: block; image-rendering: pixelated; }
+    /* QR images: 13mm + 30% = 17mm */
+    .rc-qr-small { width: 17mm; height: 17mm; margin: 0 auto; display: block; image-rendering: pixelated; }
+    .rc-qr { width: 17mm; height: 17mm; margin: 0 auto; display: block; image-rendering: pixelated; }
     .rc-qr-url { font-size: 7pt; margin-top: 1px; opacity: .8; }
     @media print { body { padding: 2mm; } }
     /* On-screen indicator (hidden when printing) */
@@ -1546,10 +1546,14 @@ async function renderReceiptCanvas(order) {
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, W, canvas.height);
   ctx.fillStyle = '#000';
-  ctx.imageSmoothingEnabled = false;
+  // Anti-aliased text renders sharper than pixel-aligned fonts when later
+  // thresholded to monochrome — gives crisper Thai glyphs on thermal paper.
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.textRendering = 'geometricPrecision';
 
-  const includeQR = localStorage.getItem('btPrintQR') !== '0'; // default on
-  const QR_SIZE = 80; // 50% of previous 160px — both menu QR (top) and payment QR (bottom)
+  const includeQR = localStorage.getItem('btPrintQR') !== '0';
+  const QR_SIZE = 104; // 80px → 104px (+30% per user request — for better scannability)
 
   let y = 14;
   const FONT = '"Sarabun", "Tahoma", "Noto Sans Thai", sans-serif';
@@ -1580,25 +1584,25 @@ async function renderReceiptCanvas(order) {
   };
   const divider = () => { y += 3; ctx.fillRect(14, y, W - 28, 2); y += 6; };
 
-  // Header: shop name (+20% bigger: 36 → 44), then small menu QR right below
-  center('ครัวผู้ใหญ่ปอง', 44, true);
+  // Header: shop name + small menu QR — using bigger / bolder fonts for sharper print
+  center('ครัวผู้ใหญ่ปอง', 50, true);   // +14% for clarity
   if (includeQR) {
-    const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=2&data=' +
+    const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=2&data=' +
                   encodeURIComponent('https://loyalty.fishconnect.co/menu.html');
     const qrMenu = await loadImageForPrint(qrUrl);
     if (qrMenu) {
       ctx.drawImage(qrMenu, (W - QR_SIZE) / 2, y, QR_SIZE, QR_SIZE);
-      y += QR_SIZE + 2;
-      center('สแกนสั่งอาหาร', 14);
+      y += QR_SIZE + 4;
+      center('สแกนสั่งอาหาร', 18, true);
     }
   }
-  center('Tel: 061-962-3696', 20);
+  center('Tel: 061-962-3696', 24, true);
   divider();
 
-  row('Order:', '#' + order.id.slice(-6), 20, true);
-  row('Time:', fmtReceiptDate(order.date), 20);
-  row('Cust:', order.customer_name || '-', 20);
-  if (order.customer_phone) row('Phone:', maskPhone(order.customer_phone), 20);
+  row('Order:', '#' + order.id.slice(-6), 24, true);
+  row('Time:', fmtReceiptDate(order.date), 22, true);
+  row('Cust:', order.customer_name || '-', 22, true);
+  if (order.customer_phone) row('Phone:', maskPhone(order.customer_phone), 22, true);
   divider();
 
   for (const it of order.items) {
@@ -1607,37 +1611,36 @@ async function renderReceiptCanvas(order) {
     const lineTotal = it.price * paid;
     const rightStr = (free > 0 && paid === 0) ? 'FREE' : '฿' + lineTotal;
     const mainNm = it.mainName || it.name;
-    row(it.qty + '× ' + mainNm, rightStr, 24, true);
+    row(it.qty + '× ' + mainNm, rightStr, 28, true);
     if (it.options && it.options.length) {
       for (const o of it.options) {
         const prefix = o.price > 0 ? '   + ' : '   - ';
         const px = o.price > 0 ? ` (+${o.price})` : '';
-        leftLine(prefix + o.choice + px, 18);
+        leftLine(prefix + o.choice + px, 22, true);
       }
     }
-    if (it.note) leftLine('   note: ' + it.note, 18);
+    if (it.note) leftLine('   note: ' + it.note, 22, true);
   }
   divider();
 
   if (order.discount) {
     const orig = order.original_total || (order.total + order.discount);
-    row('Subtotal', '฿' + orig, 20);
-    row('Discount', '-฿' + order.discount, 20);
+    row('Subtotal', '฿' + orig, 24, true);
+    row('Discount', '-฿' + order.discount, 24, true);
   }
-  setFont(36, true);
+  setFont(44, true);
   ctx.textAlign = 'right';
   ctx.textBaseline = 'top';
   ctx.fillText('TOTAL ฿' + order.total, W - 14, y);
-  y += 44;
+  y += 52;
   divider();
-  center('ขอบคุณที่อุดหนุน', 20);
-  y += 4;
+  center('ขอบคุณที่อุดหนุน', 22, true);
+  y += 6;
 
   // Footer: payment QR (PromptPay/Thai QR)
-  // Source priority: localStorage dataURL (uploaded via admin) → file 'payment-qr.jpg' → fallback message
   if (includeQR) {
-    center('สแกนเพื่อชำระเงิน', 18, true);
-    y += 2;
+    center('สแกนเพื่อชำระเงิน', 22, true);
+    y += 4;
     let paymentImg = null;
     const dataUrl = localStorage.getItem('paymentQrDataUrl');
     if (dataUrl) paymentImg = await loadImageForPrint(dataUrl);
@@ -1645,12 +1648,12 @@ async function renderReceiptCanvas(order) {
     if (paymentImg) {
       ctx.drawImage(paymentImg, (W - QR_SIZE) / 2, y, QR_SIZE, QR_SIZE);
       y += QR_SIZE + 4;
-      center('PromptPay · Thai QR Payment', 12);
+      center('PromptPay · Thai QR Payment', 14, true);
     } else {
-      center('(อัพโหลด QR ในหน้าตั้งค่า)', 12);
+      center('(อัพโหลด QR ในหน้าตั้งค่า)', 14, true);
     }
   }
-  y += 20;
+  y += 24;
 
   const final = document.createElement('canvas');
   final.width = W;
