@@ -178,15 +178,21 @@
   /* ========== Thermal Receipt Print ========== */
   #printArea { display: none; }
   @media print {
-    body * { visibility: hidden; }
-    #printArea, #printArea * { visibility: visible !important; }
+    /* Hide ALL body children except #printArea (display:none collapses space) */
+    html, body { background: #fff !important; margin: 0 !important; padding: 0 !important; }
+    body > *:not(#printArea) { display: none !important; }
     #printArea {
       display: block !important;
-      position: absolute; left: 0; top: 0; width: 80mm;
-      padding: 4mm; font-family: 'Sarabun', monospace;
-      color: #000 !important; background: #fff !important;
+      position: static !important;
+      width: 80mm;
+      max-width: 80mm;
+      padding: 4mm;
+      margin: 0 auto;
+      font-family: 'Sarabun', monospace;
+      color: #000 !important;
+      background: #fff !important;
     }
-    /* Force pure black & white for thermal print — no background colors */
+    /* Force pure black & white for thermal print */
     #printArea, #printArea * {
       color: #000 !important;
       background: #fff !important;
@@ -2172,15 +2178,29 @@ function testPrintReceipt() {
     </div>
   `;
   document.getElementById('printArea').innerHTML = html;
-  // Wait for images to load before print
+  // Wait for images (logo + QRs) to load before triggering print.
+  // Mobile-safe: failsafe timeout + load/error listeners.
   const imgs = document.querySelectorAll('#printArea img');
+  let printed = false;
+  const doPrint = () => {
+    if (printed) return;
+    printed = true;
+    setTimeout(() => {
+      try { window.print(); }
+      catch (e) { console.error('[Print]', e); toast('⚠️ พิมพ์ไม่ได้: ' + e.message); }
+    }, 350);
+  };
+  if (imgs.length === 0) { doPrint(); return; }
   let loaded = 0;
-  const tryPrint = () => { if (++loaded >= imgs.length) setTimeout(() => window.print(), 200); };
+  const checkAll = () => { if (++loaded >= imgs.length) doPrint(); };
   imgs.forEach(img => {
-    if (img.complete) tryPrint();
-    else { img.onload = tryPrint; img.onerror = tryPrint; }
+    if (img.complete && img.naturalHeight > 0) checkAll();
+    else {
+      img.addEventListener('load', checkAll, { once: true });
+      img.addEventListener('error', checkAll, { once: true });
+    }
   });
-  if (imgs.length === 0) setTimeout(() => window.print(), 100);
+  setTimeout(() => { if (!printed) { console.warn('[Print] timeout, printing anyway'); doPrint(); } }, 4000);
 }
 
 // Init toggle from localStorage on settings tab open
