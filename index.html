@@ -3609,16 +3609,22 @@ whenCloudReady(() => {
   });
   window.cloud.onOrders(orders => {
     db.pendingOrders = orders;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
-    updatePendingBadge();
-    // Re-render customer views since orders affect LTV / stock card
-    if (typeof renderCustomers === 'function') try { renderCustomers(); } catch(e){}
-    if (typeof renderCustomerDetail === 'function' && checkSelectedId) try { renderCustomerDetail(); } catch(e){}
-    if (typeof renderReports === 'function') try { renderReports(); } catch(e){}
-    // 🔔 Sound + visual alert when new order arrives
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); } catch(e){}
+    try { updatePendingBadge(); } catch(e){}
+
+    // 🔔 Sound + visual alert FIRST — must never be blocked by render errors
     if (window.OrderNotifier) {
-      window.OrderNotifier.check(orders, { getOrders: () => (db.pendingOrders || []) });
+      try { window.OrderNotifier.check(orders, { getOrders: () => (db.pendingOrders || []) }); }
+      catch(e) { console.warn('[OrderNotifier]', e); }
     }
+
+    // Re-render customer/report views (defer to next tick so sound has time to play
+    // even if a render is slow or throws synchronously)
+    setTimeout(() => {
+      if (typeof renderCustomers === 'function') try { renderCustomers(); } catch(e){ console.warn('[renderCustomers]', e); }
+      if (typeof renderCustomerDetail === 'function' && checkSelectedId) try { renderCustomerDetail(); } catch(e){ console.warn('[renderCustomerDetail]', e); }
+      if (typeof renderReports === 'function') try { renderReports(); } catch(e){ console.warn('[renderReports]', e); }
+    }, 0);
   });
 });
 
