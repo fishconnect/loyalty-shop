@@ -1028,11 +1028,16 @@ function maskPhone(phone) {
 }
 
 function getBTPrinter() {
-  // Local connection first
-  if (window.btPrinter?.chr) return window.btPrinter;
-  // Try parent window (when running in iframe)
+  // Verify connection is alive — gatt.connected must be true AND chr must exist
+  const isAlive = (bt) => !!(bt && bt.chr && bt.device?.gatt?.connected);
+
+  if (isAlive(window.btPrinter)) return window.btPrinter;
+
+  // Try parent window (when running in iframe inside index.html)
   try {
-    if (window.parent !== window && window.parent.btPrinter?.chr) return window.parent.btPrinter;
+    if (window.parent !== window && isAlive(window.parent.btPrinter)) {
+      return window.parent.btPrinter;
+    }
   } catch (e) {}
   return null;
 }
@@ -1044,10 +1049,24 @@ function printOrderReceipt(orderId) {
 
   const bt = getBTPrinter();
   if (bt) {
+    toast('🖨️ กำลังส่งไป Bluetooth printer...');
     printViaBluetooth(order, bt).then(r => {
-      if (r.success) toast('🖨️ ส่งไปเครื่องปริ้น Bluetooth');
-      else { toast('⚠️ BT failed → ใช้ browser print แทน'); browserPrint(order); }
+      if (r.success) toast('✅ ส่งไป Bluetooth printer แล้ว');
+      else {
+        const useBrowser = confirm(`⚠️ ส่ง Bluetooth ไม่สำเร็จ: ${r.error || ''}\n\nใช้ปริ้นเตอร์ทั่วไป (Canon/HP/PDF) แทนมั้ย?`);
+        if (useBrowser) browserPrint(order);
+      }
     });
+    return;
+  }
+
+  // BT not connected — ask user before falling back to browser print
+  const lastPrinter = localStorage.getItem('btPrinterName');
+  const msg = lastPrinter
+    ? `🔵 Bluetooth printer "${lastPrinter}" ยังไม่ได้เชื่อมต่อ\n\nOK = ใช้ปริ้นเตอร์ทั่วไป (Canon/HP/PDF)\nCancel = ยกเลิก ไปเชื่อมต่อ Bluetooth ก่อน`
+    : `🔵 ยังไม่ได้เชื่อมต่อ Bluetooth printer\n\nOK = ใช้ปริ้นเตอร์ทั่วไป (Canon/HP/PDF)\nCancel = ยกเลิก ไปเชื่อมต่อ Bluetooth ก่อน`;
+  if (!confirm(msg)) {
+    toast('💡 เปิด admin → ตั้งค่า → "🔵 เชื่อมต่อ" Bluetooth printer');
     return;
   }
   browserPrint(order);
@@ -1371,9 +1390,20 @@ function maybeAutoPrint(orders) {
   orders.forEach(o => {
     if (o.status === 'pending' && !printedOrderIds.has(o.id)) {
       printedOrderIds.add(o.id);
-      // Skip on first load (avoid printing all existing pending orders)
       if (firstOrderLoad) return;
-      printOrderReceipt(o.id);
+      // Silent auto-print: ONLY use BT, never pop dialogs / never fallback to browser
+      const bt = getBTPrinter();
+      if (!bt) {
+        console.warn('[AutoPrint] BT not connected, skipping order', o.id);
+        toast('🔇 Auto-print: BT ไม่เชื่อมต่อ — ข้าม', true);
+        return;
+      }
+      const orderSrc = cloudOrders !== null ? cloudOrders : (loadDB().pendingOrders || []);
+      const fullOrder = orderSrc.find(x => x.id === o.id);
+      if (!fullOrder) return;
+      printViaBluetooth(fullOrder, bt).then(r => {
+        if (r.success) toast('🖨️ Auto-print → ' + (fullOrder.customer_name || ''));
+      });
     }
   });
 }
