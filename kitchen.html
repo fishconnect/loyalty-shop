@@ -1139,7 +1139,7 @@ function buildReceiptHTML(order) {
     <div class="rc-foot">ขอบคุณที่อุดหนุน</div>
     <div class="rc-qr-wrap">
       <div class="rc-qr-title">💰 สแกนเพื่อชำระเงิน</div>
-      <img class="rc-qr-small" src="${paymentQrSrc}" alt="QR payment" onerror="this.style.display='none';this.nextElementSibling.textContent='(อัพโหลด QR ในหน้าตั้งค่า)'">
+      <img class="rc-qr-payment" src="${paymentQrSrc}" alt="QR payment" onerror="this.style.display='none';this.nextElementSibling.textContent='(อัพโหลด QR ในหน้าตั้งค่า)'">
       <div class="rc-qr-url">PromptPay · Thai QR Payment</div>
     </div>
   `;
@@ -1200,8 +1200,9 @@ function openPrintWindow(order) {
     .rc-free { color: #000; font-weight: 700; }
     .rc-qr-wrap { text-align: center; margin: 2mm 0; page-break-inside: avoid; break-inside: avoid; }
     .rc-qr-title { font-size: 10pt; font-weight: 800; margin-bottom: 1mm; }
-    /* QR images: 13mm + 30% = 17mm */
+    /* QR sizes: menu = 17mm; payment = 34mm (2x bigger for reliable scan) */
     .rc-qr-small { width: 17mm; height: 17mm; margin: 0 auto; display: block; image-rendering: pixelated; }
+    .rc-qr-payment { width: 34mm; height: 34mm; margin: 0 auto; display: block; image-rendering: pixelated; }
     .rc-qr { width: 17mm; height: 17mm; margin: 0 auto; display: block; image-rendering: pixelated; }
     .rc-qr-url { font-size: 7pt; margin-top: 1px; opacity: .8; }
     @media print { body { padding: 2mm; } }
@@ -1553,7 +1554,8 @@ async function renderReceiptCanvas(order) {
   ctx.textRendering = 'geometricPrecision';
 
   const includeQR = localStorage.getItem('btPrintQR') !== '0';
-  const QR_SIZE = 104; // 80px → 104px (+30% per user request — for better scannability)
+  const QR_MENU_SIZE = 104;     // menu QR — top of receipt
+  const QR_PAYMENT_SIZE = 208;  // payment QR — 2x bigger (must scan reliably with phone camera)
 
   let y = 14;
   const FONT = '"Sarabun", "Tahoma", "Noto Sans Thai", sans-serif';
@@ -1591,8 +1593,8 @@ async function renderReceiptCanvas(order) {
                   encodeURIComponent('https://loyalty.fishconnect.co/menu.html');
     const qrMenu = await loadImageForPrint(qrUrl);
     if (qrMenu) {
-      ctx.drawImage(qrMenu, (W - QR_SIZE) / 2, y, QR_SIZE, QR_SIZE);
-      y += QR_SIZE + 4;
+      ctx.drawImage(qrMenu, (W - QR_MENU_SIZE) / 2, y, QR_MENU_SIZE, QR_MENU_SIZE);
+      y += QR_MENU_SIZE + 4;
       center('สแกนสั่งอาหาร', 18, true);
     }
   }
@@ -1646,9 +1648,9 @@ async function renderReceiptCanvas(order) {
     if (dataUrl) paymentImg = await loadImageForPrint(dataUrl);
     if (!paymentImg)  paymentImg = await loadImageForPrint('payment-qr.jpg');
     if (paymentImg) {
-      ctx.drawImage(paymentImg, (W - QR_SIZE) / 2, y, QR_SIZE, QR_SIZE);
-      y += QR_SIZE + 4;
-      center('PromptPay · Thai QR Payment', 14, true);
+      ctx.drawImage(paymentImg, (W - QR_PAYMENT_SIZE) / 2, y, QR_PAYMENT_SIZE, QR_PAYMENT_SIZE);
+      y += QR_PAYMENT_SIZE + 4;
+      center('PromptPay · Thai QR Payment', 16, true);
     } else {
       center('(อัพโหลด QR ในหน้าตั้งค่า)', 14, true);
     }
