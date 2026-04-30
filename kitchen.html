@@ -1495,8 +1495,20 @@ function updateBTStatus() {
 async function printViaBluetooth(order, btRef) {
   const bt = btRef || window.btPrinter;
   if (!bt?.chr) return { error: 'ยังไม่ได้เชื่อมต่อ' };
+
+  // Print mode: 'bitmap' (default — works for any printer regardless of fonts)
+  // or 'text' (legacy — only works if printer has Thai font installed)
+  const mode = localStorage.getItem('btPrintMode') || 'bitmap';
+
   try {
-    const data = buildESCPOS(order);
+    let data;
+    if (mode === 'text') {
+      data = buildESCPOS(order);
+    } else {
+      // Render receipt to canvas with browser fonts (supports Thai), then send as bitmap
+      data = await buildBitmapESCPOS(order);
+    }
+
     const CHUNK = 200;
     for (let i = 0; i < data.length; i += CHUNK) {
       await bt.chr.writeValue(data.slice(i, i + CHUNK));
@@ -1507,6 +1519,192 @@ async function printViaBluetooth(order, btRef) {
     console.error('BT print error', e);
     return { error: e.message };
   }
+}
+
+// ===== Bitmap rendering for printers without Thai font =====
+function loadImageForPrint(src) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+
+async function renderReceiptCanvas(order) {
+  const W = 576; // 80mm thermal at 8 dots/mm
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = 4000; // generous; we'll trim later
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, W, canvas.height);
+  ctx.fillStyle = '#000';
+  ctx.imageSmoothingEnabled = false;
+
+  let y = 18;
+  const FONT = '"Sarabun", "Tahoma", "Noto Sans Thai", sans-serif';
+
+  const setFont = (size, bold = false) => { ctx.font = `${bold ? 'bold ' : ''}${size}px ${FONT}`; };
+  const center = (text, size, bold = false) => {
+    setFont(size, bold);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText(text, W / 2, y);
+    y += size + 4;
+  };
+  const leftLine = (text, size, bold = false) => {
+    setFont(size, bold);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(text, 16, y);
+    y += size + 4;
+  };
+  const row = (a, b, size, bold = false) => {
+    setFont(size, bold);
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'left';
+    ctx.fillText(a, 16, y);
+    ctx.textAlign = 'right';
+    ctx.fillText(b, W - 16, y);
+    y += size + 4;
+  };
+  const divider = () => {
+    y += 4;
+    ctx.fillRect(16, y, W - 32, 2);
+    y += 10;
+  };
+
+  // Logo
+  const logo = await loadImageForPrint('logo.jpg');
+  if (logo) {
+    const sz = 110;
+    ctx.drawImage(logo, (W - sz) / 2, y, sz, sz);
+    y += sz + 6;
+  }
+
+  center('ครัวผู้ใหญ่ปอง', 38, true);
+  center('Tel: 061-962-3696', 22);
+  divider();
+
+  row('Order:', '#' + order.id.slice(-6), 22, true);
+  row('Time:', fmtReceiptDate(order.date), 22);
+  row('Cust:', order.customer_name || '-', 22);
+  if (order.customer_phone) row('Phone:', maskPhone(order.customer_phone), 22);
+  divider();
+
+  // Items
+  for (const it of order.items) {
+    const free = it.freeQty || 0;
+    const paid = it.qty - free;
+    const lineTotal = it.price * paid;
+    const rightStr = (free > 0 && paid === 0) ? 'FREE' : '฿' + lineTotal;
+    const mainNm = it.mainName || it.name;
+    row(it.qty + '× ' + mainNm, rightStr, 26, true);
+    if (it.options && it.options.length) {
+      for (const o of it.options) {
+        const prefix = o.price > 0 ? '   + ' : '   - ';
+        const px = o.price > 0 ? ` (+${o.price})` : '';
+        leftLine(prefix + o.choice + px, 20);
+      }
+    }
+    if (it.note) leftLine('   note: ' + it.note, 20);
+  }
+  divider();
+
+  if (order.discount) {
+    const orig = order.original_total || (order.total + order.discount);
+    row('Subtotal', '฿' + orig, 22);
+    row('Discount', '-฿' + order.discount, 22);
+  }
+  // Total — large
+  setFont(40, true);
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'top';
+  ctx.fillText('TOTAL ฿' + order.total, W - 16, y);
+  y += 50;
+  divider();
+  center('ขอบคุณที่อุดหนุน', 22);
+  y += 8;
+
+  // QR codes
+  const qrMenu = await loadImageForPrint('https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=2&data=' + encodeURIComponent('https://loyalty.fishconnect.co/menu.html'));
+  if (qrMenu) {
+    center('SCAN สั่งอาหาร', 22, true);
+    const sz = 220;
+    ctx.drawImage(qrMenu, (W - sz) / 2, y, sz, sz);
+    y += sz + 8;
+  }
+  divider();
+  const qrPoints = await loadImageForPrint('https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=2&data=' + encodeURIComponent('https://loyalty.fishconnect.co/points.html'));
+  if (qrPoints) {
+    center('SCAN เช็คแต้ม', 22, true);
+    const sz = 220;
+    ctx.drawImage(qrPoints, (W - sz) / 2, y, sz, sz);
+    y += sz + 8;
+  }
+  y += 30; // bottom margin
+
+  // Trim to actual content
+  const final = document.createElement('canvas');
+  final.width = W;
+  final.height = y;
+  const fctx = final.getContext('2d');
+  fctx.fillStyle = '#fff';
+  fctx.fillRect(0, 0, W, y);
+  fctx.drawImage(canvas, 0, 0);
+  return final;
+}
+
+function canvasToMonochromeBytes(canvas) {
+  const ctx = canvas.getContext('2d');
+  const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const px = img.data;
+  const bytesPerRow = Math.ceil(canvas.width / 8);
+  const out = new Uint8Array(bytesPerRow * canvas.height);
+  for (let y = 0; y < canvas.height; y++) {
+    for (let x = 0; x < canvas.width; x++) {
+      const i = (y * canvas.width + x) * 4;
+      const brightness = (px[i] + px[i + 1] + px[i + 2]) / 3;
+      const isBlack = brightness < 128 && px[i + 3] > 128;
+      if (isBlack) {
+        const bi = y * bytesPerRow + (x >> 3);
+        out[bi] |= (1 << (7 - (x & 7)));
+      }
+    }
+  }
+  return out;
+}
+
+async function buildBitmapESCPOS(order) {
+  const canvas = await renderReceiptCanvas(order);
+  const W = canvas.width;
+  const H = canvas.height;
+  const raster = canvasToMonochromeBytes(canvas);
+  const bytesPerRow = Math.ceil(W / 8);
+
+  const out = [];
+  out.push(0x1B, 0x40);                 // init
+
+  // Send raster in chunks (some printers cap at ~256 rows per GS v 0 command)
+  const ROWS_PER_CHUNK = 200;
+  let row = 0;
+  while (row < H) {
+    const rowsThis = Math.min(ROWS_PER_CHUNK, H - row);
+    // GS v 0 m xL xH yL yH
+    out.push(0x1D, 0x76, 0x30, 0x00);
+    out.push(bytesPerRow & 0xFF, (bytesPerRow >> 8) & 0xFF);
+    out.push(rowsThis & 0xFF, (rowsThis >> 8) & 0xFF);
+    const start = row * bytesPerRow;
+    const end = (row + rowsThis) * bytesPerRow;
+    for (let i = start; i < end; i++) out.push(raster[i]);
+    row += rowsThis;
+  }
+
+  // Feed paper
+  out.push(0x0A, 0x0A, 0x0A, 0x0A);
+  return new Uint8Array(out);
 }
 
 function buildESCPOS(order) {
