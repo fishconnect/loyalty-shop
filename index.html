@@ -1735,7 +1735,9 @@ function toggleOrderDetail(orderRowId) {
 
 function renderCustomerDetail() {
   const box = document.getElementById('customerDetail');
+  if (!box) return;
   if (!checkSelectedId) { box.innerHTML = ''; return; }
+  try {
   const c = getCustomer(checkSelectedId);
   if (!c) { box.innerHTML = '<div class="empty">ไม่พบลูกค้า</div>'; return; }
 
@@ -1892,6 +1894,10 @@ function renderCustomerDetail() {
 
     <button class="btn-ghost" style="width:100%;margin-top:8px" onclick="editCustomer('${c.id}')">✏️ แก้ไขชื่อ/เบอร์ลูกค้า</button>
   `;
+  } catch (err) {
+    console.error('[renderCustomerDetail] failed', err);
+    box.innerHTML = `<div class="empty" style="color:#dc2626">⚠️ แสดงรายละเอียดไม่สำเร็จ<br><small>${(err.message||err)}</small></div>`;
+  }
 }
 
 // Backward compat
@@ -1997,81 +2003,104 @@ function deleteCustomer(id) {
 
 // ========== Customers List (with filter, sort, KPI bar) ==========
 function renderCustomers() {
-  const searchEl = document.getElementById('custSearch');
-  if (!searchEl) return;
-  const q = searchEl.value.toLowerCase().trim();
-  const sortEl = document.getElementById('custSort');
-  const sortBy = sortEl ? sortEl.value : 'boxes';
-  const goal = db.settings?.goal || 20;
-  const now = Date.now();
+  try {
+    const searchEl = document.getElementById('custSearch');
+    if (!searchEl) return;
+    const q = (searchEl.value || '').toLowerCase().trim();
+    const sortEl = document.getElementById('custSort');
+    const sortBy = sortEl ? sortEl.value : 'boxes';
+    const goal = (db.settings && db.settings.goal) || 20;
+    const now = Date.now();
 
-  const all = Object.values(db.customers);
+    const all = Object.values(db.customers || {}).filter(c => c && c.id);
 
-  // Pre-compute fields
-  const enriched = all.map(c => {
-    const r = rewardsAvailable(c);
-    const prog = progressToNext(c);
-    const ltv = customerLTV(c);
-    const last = customerLastOrderDate(c);
-    const daysSinceLast = last ? Math.floor((now - new Date(last).getTime()) / 86400000) : 999;
-    const joinedAge = c.joined ? (now - new Date(c.joined).getTime()) / 86400000 : 999;
-    return { c, r, prog, ltv, last, daysSinceLast, joinedAge };
-  });
+    // Pre-compute fields (each customer guarded so one bad row doesn't kill the page)
+    const enriched = all.map(c => {
+      try {
+        const safeC = {
+          ...c,
+          name: c.name || 'ไม่ระบุชื่อ',
+          phone: c.phone || '',
+          total_boxes: c.total_boxes || 0,
+          redeemed_count: c.redeemed_count || 0,
+          points: c.points || 0
+        };
+        const r = rewardsAvailable(safeC);
+        const prog = progressToNext(safeC);
+        let ltv = 0, last = null;
+        try { ltv = customerLTV(safeC); } catch(e) {}
+        try { last = customerLastOrderDate(safeC); } catch(e) {}
+        const daysSinceLast = last ? Math.floor((now - new Date(last).getTime()) / 86400000) : 999;
+        const joinedAge = safeC.joined ? (now - new Date(safeC.joined).getTime()) / 86400000 : 999;
+        return { c: safeC, r, prog, ltv, last, daysSinceLast, joinedAge };
+      } catch(e) {
+        console.warn('[renderCustomers] enrich failed', c, e);
+        return null;
+      }
+    }).filter(Boolean);
 
-  // KPI bar
-  const totalCust = enriched.length;
-  const withReward = enriched.filter(x => x.r > 0).length;
-  const nearReward = enriched.filter(x => x.prog.pct >= 80 && x.r === 0).length;
-  const dormant = enriched.filter(x => x.daysSinceLast >= 30 && x.last).length;
-  const kpiBar = document.getElementById('custKpiBar');
-  if (kpiBar) kpiBar.innerHTML = `
-    <div class="cust-mini-kpi"><div class="v">${totalCust}</div><div class="l">รวมทั้งหมด</div></div>
-    <div class="cust-mini-kpi" style="background:#dcfce7;border-color:#86efac"><div class="v" style="color:#16a34a">${withReward}</div><div class="l">มีสิทธิ์ฟรี</div></div>
-    <div class="cust-mini-kpi" style="background:#fff7ed;border-color:#fdba74"><div class="v" style="color:#ea580c">${nearReward}</div><div class="l">ใกล้ครบ</div></div>
-    <div class="cust-mini-kpi" style="background:#f3f4f6;border-color:#d1d5db"><div class="v" style="color:#6b7280">${dormant}</div><div class="l">หาย ≥30d</div></div>
-  `;
+    // KPI bar
+    const totalCust = enriched.length;
+    const withReward = enriched.filter(x => x.r > 0).length;
+    const nearReward = enriched.filter(x => x.prog.pct >= 80 && x.r === 0).length;
+    const dormant = enriched.filter(x => x.daysSinceLast >= 30 && x.last).length;
+    const kpiBar = document.getElementById('custKpiBar');
+    if (kpiBar) kpiBar.innerHTML = `
+      <div class="cust-mini-kpi"><div class="v">${totalCust}</div><div class="l">รวมทั้งหมด</div></div>
+      <div class="cust-mini-kpi" style="background:#dcfce7;border-color:#86efac"><div class="v" style="color:#16a34a">${withReward}</div><div class="l">มีสิทธิ์ฟรี</div></div>
+      <div class="cust-mini-kpi" style="background:#fff7ed;border-color:#fdba74"><div class="v" style="color:#ea580c">${nearReward}</div><div class="l">ใกล้ครบ</div></div>
+      <div class="cust-mini-kpi" style="background:#f3f4f6;border-color:#d1d5db"><div class="v" style="color:#6b7280">${dormant}</div><div class="l">หาย ≥30d</div></div>
+    `;
 
-  // Filter
-  let filtered = enriched.filter(x => {
-    if (q) {
-      const hit = x.c.name.toLowerCase().includes(q) || (x.c.phone && x.c.phone.includes(q));
-      if (!hit) return false;
-    }
-    if (custFilter === 'reward') return x.r > 0;
-    if (custFilter === 'near') return x.prog.pct >= 80 && x.r === 0;
-    if (custFilter === 'vip') return x.ltv >= 500 || x.c.total_boxes >= goal;
-    if (custFilter === 'new') return x.joinedAge <= 7;
-    if (custFilter === 'dormant') return x.daysSinceLast >= 30 && x.last;
-    return true;
-  });
+    // Filter
+    let filtered = enriched.filter(x => {
+      if (q) {
+        const hit = (x.c.name || '').toLowerCase().includes(q) || (x.c.phone && x.c.phone.includes(q));
+        if (!hit) return false;
+      }
+      if (custFilter === 'reward') return x.r > 0;
+      if (custFilter === 'near') return x.prog.pct >= 80 && x.r === 0;
+      if (custFilter === 'vip') return x.ltv >= 500 || x.c.total_boxes >= goal;
+      if (custFilter === 'new') return x.joinedAge <= 7;
+      if (custFilter === 'dormant') return x.daysSinceLast >= 30 && x.last;
+      return true;
+    });
 
-  // Sort
-  if (sortBy === 'boxes') filtered.sort((a,b) => b.c.total_boxes - a.c.total_boxes);
-  else if (sortBy === 'points') filtered.sort((a,b) => (b.c.points||0) - (a.c.points||0));
-  else if (sortBy === 'recent') filtered.sort((a,b) => (b.last ? new Date(b.last).getTime() : 0) - (a.last ? new Date(a.last).getTime() : 0));
-  else if (sortBy === 'ltv') filtered.sort((a,b) => b.ltv - a.ltv);
-  else if (sortBy === 'name') filtered.sort((a,b) => a.c.name.localeCompare(b.c.name, 'th'));
+    // Sort
+    if (sortBy === 'boxes') filtered.sort((a,b) => b.c.total_boxes - a.c.total_boxes);
+    else if (sortBy === 'points') filtered.sort((a,b) => (b.c.points||0) - (a.c.points||0));
+    else if (sortBy === 'recent') filtered.sort((a,b) => (b.last ? new Date(b.last).getTime() : 0) - (a.last ? new Date(a.last).getTime() : 0));
+    else if (sortBy === 'ltv') filtered.sort((a,b) => b.ltv - a.ltv);
+    else if (sortBy === 'name') filtered.sort((a,b) => (a.c.name||'').localeCompare(b.c.name||'', 'th'));
 
-  const box = document.getElementById('customersList');
-  if (!filtered.length) { box.innerHTML = '<div class="empty">— ไม่พบลูกค้าในเงื่อนไขนี้ —</div>'; return; }
-  box.innerHTML = filtered.map(x => {
-    const c = x.c;
-    const near = x.prog.pct >= 80 && x.r === 0;
-    const points = c.points || 0;
-    const lastStr = x.last ? (x.daysSinceLast === 0 ? 'วันนี้' : `${x.daysSinceLast}d`) : '—';
-    return `
-      <div class="customer-item" onclick="openCustomerDetail('${c.id}')" style="cursor:pointer">
-        <div class="info">
-          <div class="name">${c.name}
-            ${x.r > 0 ? `<span class="badge badge-reward">🎁 ฟรี ${x.r}</span>` : ''}
-            ${near ? '<span class="badge badge-near">ใกล้ครบ</span>' : ''}
-            ${points >= 15 ? '<span class="badge badge-reward" style="background:#fef3c7;color:#92400e">15pt</span>' : points >= 10 ? '<span class="badge badge-reward" style="background:#ebf0ff;color:#1652F0">10pt</span>' : ''}
+    const box = document.getElementById('customersList');
+    if (!box) return;
+    if (!enriched.length) { box.innerHTML = '<div class="empty">ยังไม่มีลูกค้า</div>'; return; }
+    if (!filtered.length) { box.innerHTML = '<div class="empty">— ไม่พบลูกค้าในเงื่อนไขนี้ —</div>'; return; }
+    box.innerHTML = filtered.map(x => {
+      const c = x.c;
+      const near = x.prog.pct >= 80 && x.r === 0;
+      const points = c.points || 0;
+      const lastStr = x.last ? (x.daysSinceLast === 0 ? 'วันนี้' : `${x.daysSinceLast}d`) : '—';
+      const idEsc = String(c.id).replace(/'/g, "\\'");
+      return `
+        <div class="customer-item" onclick="openCustomerDetail('${idEsc}')" style="cursor:pointer">
+          <div class="info">
+            <div class="name">${c.name}
+              ${x.r > 0 ? `<span class="badge badge-reward">🎁 ฟรี ${x.r}</span>` : ''}
+              ${near ? '<span class="badge badge-near">ใกล้ครบ</span>' : ''}
+              ${points >= 15 ? '<span class="badge badge-reward" style="background:#fef3c7;color:#92400e">15pt</span>' : points >= 10 ? '<span class="badge badge-reward" style="background:#ebf0ff;color:#1652F0">10pt</span>' : ''}
+            </div>
+            ${c.phone ? `<div class="phone">${c.phone}</div>` : ''}
+            <div class="meta">📦 ${c.total_boxes} · 🎁 ${c.redeemed_count} · ⭐ ${points}pt · 💰 ${fmtBaht(x.ltv).replace('฿','')} · 🕐 ${lastStr}</div>
           </div>
-          ${c.phone ? `<div class="phone">${c.phone}</div>` : ''}
-          <div class="meta">📦 ${c.total_boxes} · 🎁 ${c.redeemed_count} · ⭐ ${points}pt · 💰 ${fmtBaht(x.ltv).replace('฿','')} · 🕐 ${lastStr}</div>
-        </div>
-      </div>`;
-  }).join('');
+        </div>`;
+    }).join('');
+  } catch (err) {
+    console.error('[renderCustomers] failed', err);
+    const box = document.getElementById('customersList');
+    if (box) box.innerHTML = `<div class="empty" style="color:#dc2626">⚠️ แสดงรายการไม่สำเร็จ — เปิด console ดู error<br><small>${(err.message||err)}</small></div>`;
+  }
 }
 
 function goToCheck(id) {
@@ -3573,12 +3602,17 @@ whenCloudReady(() => {
     });
     localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); // direct save (no cloud loop)
     if (typeof renderCustomers === 'function') try { renderCustomers(); } catch(e){}
+    if (typeof renderCustomerDetail === 'function' && checkSelectedId) try { renderCustomerDetail(); } catch(e){}
     if (typeof renderReports === 'function') try { renderReports(); } catch(e){}
   });
   window.cloud.onOrders(orders => {
     db.pendingOrders = orders;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
     updatePendingBadge();
+    // Re-render customer views since orders affect LTV / stock card
+    if (typeof renderCustomers === 'function') try { renderCustomers(); } catch(e){}
+    if (typeof renderCustomerDetail === 'function' && checkSelectedId) try { renderCustomerDetail(); } catch(e){}
+    if (typeof renderReports === 'function') try { renderReports(); } catch(e){}
     // 🔔 Sound + visual alert when new order arrives
     if (window.OrderNotifier) {
       window.OrderNotifier.check(orders, { getOrders: () => (db.pendingOrders || []) });
