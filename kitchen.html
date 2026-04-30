@@ -1513,18 +1513,15 @@ async function printViaBluetooth(order, btRef) {
   }
 }
 
-// Fast BLE write — uses writeValueWithoutResponse if supported (no ACK round-trip),
-// larger chunks, minimal delay. Falls back to writeValue if WWR not supported.
+// Reliable BLE write — uses writeValue (with response) so the printer's
+// internal buffer can keep up with bitmap data. WWR was faster but caused
+// data loss on N160II — bitmap commands got corrupted and printed as garbage.
 async function btSendBytes(chr, data) {
-  const useWWR = chr.properties.writeWithoutResponse && typeof chr.writeValueWithoutResponse === 'function';
-  // Larger chunks reduce overhead. Most BLE printers handle 400-512 fine.
-  const CHUNK = 400;
-  const DELAY = useWWR ? 8 : 20; // ms between writes
-
+  const CHUNK = 180;       // smaller chunks fit BLE MTU better
+  const DELAY = 25;        // give printer buffer time to drain
   for (let i = 0; i < data.length; i += CHUNK) {
     const slice = data.slice(i, i + CHUNK);
-    if (useWWR) await chr.writeValueWithoutResponse(slice);
-    else await chr.writeValue(slice);
+    await chr.writeValue(slice);
     if (DELAY > 0) await new Promise(r => setTimeout(r, DELAY));
   }
 }
@@ -1695,8 +1692,9 @@ async function buildBitmapESCPOS(order) {
   const out = [];
   out.push(0x1B, 0x40);                 // init
 
-  // Send raster in chunks (some printers cap at ~256 rows per GS v 0 command)
-  const ROWS_PER_CHUNK = 200;
+  // Send raster in chunks. Smaller chunks (50 rows ≈ 3.6KB data block) fit
+  // most printer buffers reliably. N160II had data drops at 200-row chunks.
+  const ROWS_PER_CHUNK = 48;
   let row = 0;
   while (row < H) {
     const rowsThis = Math.min(ROWS_PER_CHUNK, H - row);

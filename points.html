@@ -344,18 +344,85 @@ function renderCustomer(customer, allOrders) {
       </div>
     </div>
 
-    <div class="card">
-      <h3>📦 ออเดอร์ล่าสุด</h3>
-      ${myOrders.length === 0 ? '<div class="empty">ยังไม่มีออเดอร์</div>' :
-        myOrders.map(o => `
-          <div class="order-row">
-            <div class="left">
-              <div class="name">${o.items.map(i => `${i.qty}× ${i.mainName || i.name}`).join(', ').slice(0, 60)}${o.items.map(i=>i.name).join(',').length > 60 ? '...' : ''}</div>
-              <div class="meta">${fmtTime(o.date)} · <span class="badge ${o.status === 'pending' ? 'badge-pending' : 'badge-done'}">${o.status === 'pending' ? '⏳ กำลังทำ' : '✓ เสร็จแล้ว'}</span></div>
+    ${(() => {
+      // Active orders (not delivered/done/cancelled) get a prominent live-tracking card
+      const activeOrders = myOrders.filter(o => !['delivered','done','cancelled'].includes(o.status));
+      const STAGES = [
+        { key: 'pending',    label: 'รอยืนยัน',    icon: '⏳' },
+        { key: 'confirmed',  label: 'ยืนยันแล้ว',   icon: '📋' },
+        { key: 'cooking',    label: 'กำลังทำ',      icon: '👨‍🍳' },
+        { key: 'ready',      label: 'พร้อมส่ง',     icon: '📦' },
+        { key: 'delivering', label: 'กำลังจัดส่ง', icon: '🚚' },
+        { key: 'delivered',  label: 'ส่งสำเร็จ',    icon: '✅' },
+      ];
+      return activeOrders.map(o => {
+        const curIdx = Math.max(0, STAGES.findIndex(s => s.key === o.status));
+        const pctTrack = ((curIdx + 1) / STAGES.length) * 100;
+        return `
+          <div class="card" style="border:2px solid #1652F0;background:linear-gradient(135deg,#fff,#ebf0ff)">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <h3 style="margin:0;color:#1652F0">🍽 ออเดอร์ของคุณกำลังมา!</h3>
+              <span style="font-size:11px;color:#6b7280">#${o.id.slice(-6)}</span>
             </div>
-            <div class="price">฿${o.total}</div>
+            <div style="font-size:13px;color:#5c6982;margin-bottom:10px">
+              ${o.items.map(i => `${i.qty}× ${i.mainName || i.name}`).join(', ')}
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;margin-bottom:6px">
+              ${STAGES.map((s, i) => `
+                <div style="text-align:center;flex:1;${i === curIdx ? 'color:#1652F0' : i < curIdx ? 'color:#16a34a' : 'color:#cbd5e1'}">
+                  <div style="font-size:18px;${i === curIdx ? 'animation:pulse 1.2s ease-in-out infinite' : ''}">${i <= curIdx ? s.icon : '⚪'}</div>
+                  <div style="font-size:9px;margin-top:2px">${s.label}</div>
+                </div>
+              `).join('')}
+            </div>
+            <div style="background:#e2e7ef;height:8px;border-radius:99px;overflow:hidden;margin-bottom:8px">
+              <div style="background:linear-gradient(90deg,#1652F0,#4F7AFF);height:100%;width:${pctTrack}%;transition:width 0.4s"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:13px;color:#1f2a44">
+              <span>${fmtTime(o.date)}</span>
+              <span style="font-weight:800;color:#1652F0">฿${o.total}</span>
+            </div>
           </div>
-        `).join('')
+        `;
+      }).join('') + `
+        <style>
+          @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.2); } }
+        </style>
+      `;
+    })()}
+
+    <div class="card">
+      <h3>📦 ประวัติการสั่งซื้อ</h3>
+      ${myOrders.length === 0 ? '<div class="empty">ยังไม่มีออเดอร์</div>' :
+        myOrders.map(o => {
+          const isDone = ['delivered','done'].includes(o.status);
+          const isCancelled = o.status === 'cancelled';
+          const isActive = !isDone && !isCancelled;
+          const statusInfo = isCancelled ? { color: '#dc2626', icon: '❌', label: 'ยกเลิก' }
+                           : isDone      ? { color: '#16a34a', icon: '✅', label: 'ส่งสำเร็จ' }
+                           : o.status === 'pending'    ? { color: '#f59e0b', icon: '⏳', label: 'รอยืนยัน' }
+                           : o.status === 'confirmed'  ? { color: '#1652F0', icon: '📋', label: 'ยืนยันแล้ว' }
+                           : o.status === 'cooking'    ? { color: '#f97316', icon: '👨‍🍳', label: 'กำลังทำ' }
+                           : o.status === 'ready'      ? { color: '#16a34a', icon: '📦', label: 'พร้อมส่ง' }
+                           : o.status === 'delivering' ? { color: '#06b6d4', icon: '🚚', label: 'กำลังจัดส่ง' }
+                           : { color: '#6b7280', icon: '•', label: o.status };
+          // Calculate points for completed orders
+          const ptsEarned = isDone ? Math.floor((o.original_total || o.total) / 50) : 0;
+          return `
+            <div class="order-row">
+              <div class="left">
+                <div class="name">${o.items.map(i => `${i.qty}× ${i.mainName || i.name}`).join(', ').slice(0, 70)}</div>
+                <div class="meta">
+                  ${fmtTime(o.date)} ·
+                  <span style="background:${statusInfo.color};color:#fff;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700">${statusInfo.icon} ${statusInfo.label}</span>
+                  ${ptsEarned > 0 ? ` · <span style="color:#1652F0;font-weight:700">+${ptsEarned} แต้ม</span>` : ''}
+                  ${(o.redemptions && o.redemptions.length) ? ` · <span style="color:#dc2626;font-weight:700">🎁 ใช้ ${o.redemptions.reduce((s,r)=>s+r.points_used,0)} แต้ม</span>` : ''}
+                </div>
+              </div>
+              <div class="price">฿${o.total}</div>
+            </div>
+          `;
+        }).join('')
       }
     </div>
 

@@ -335,46 +335,74 @@ function shareLink() {
 
 function renderDone(order, db) {
   const customer = db.customers[order.customer_id];
-  const goal = db.settings.goal || 20;
-  let rewardBanner = '';
-  let progress = '';
+  const points = customer?.points || 0;
+  const lifetime = customer?.lifetime_points || 0;
+  const DRINK_PT = 10, DISCOUNT_PT = 15;
+  const canDrink = points >= DRINK_PT;
+  const canDiscount = points >= DISCOUNT_PT;
 
-  if (customer) {
-    const rewards = Math.floor(customer.total_boxes / goal) - customer.redeemed_count;
-    const inProgress = customer.total_boxes % goal;
-    progress = `
-      <div style="margin-top:16px;text-align:left">
-        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px;color:#374151">
-          <span><b>${customer.name}</b></span>
-          <span>${customer.total_boxes}/${goal} กล่อง</span>
+  // Recent orders (last 5)
+  const myOrders = (db.pendingOrders || [])
+    .filter(o => o.customer_id === order.customer_id || o.customer_phone === order.customer_phone)
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .slice(0, 5);
+
+  // Recent orders chips
+  const orderHistoryHTML = myOrders.map(o => {
+    const isDone = ['delivered','done'].includes(o.status);
+    const isCancelled = o.status === 'cancelled';
+    const statusInfo = isCancelled ? { color:'#dc2626', icon:'❌', label:'ยกเลิก' }
+                     : isDone      ? { color:'#16a34a', icon:'✅', label:'เสร็จ' }
+                     : o.status === 'pending'    ? { color:'#f59e0b', icon:'⏳', label:'รอยืนยัน' }
+                     : o.status === 'confirmed'  ? { color:'#1652F0', icon:'📋', label:'ยืนยันแล้ว' }
+                     : o.status === 'cooking'    ? { color:'#f97316', icon:'👨‍🍳', label:'กำลังทำ' }
+                     : o.status === 'ready'      ? { color:'#16a34a', icon:'📦', label:'พร้อมส่ง' }
+                     : o.status === 'delivering' ? { color:'#06b6d4', icon:'🚚', label:'กำลังจัดส่ง' }
+                     : { color:'#6b7280', icon:'•', label: o.status };
+    const items = o.items.map(i => `${i.qty}× ${i.mainName || i.name}`).join(', ').slice(0, 50);
+    return `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#f7f8fb;border-radius:10px;margin-bottom:6px;font-size:13px">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;color:#0a1530;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${items}</div>
+          <div style="font-size:11px;color:#5c6982;margin-top:2px">${fmtTime(o.date)} · <span style="background:${statusInfo.color};color:#fff;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:700">${statusInfo.icon} ${statusInfo.label}</span></div>
         </div>
-        <div class="progress">
-          <div class="progress-bar" style="width:${(inProgress/goal)*100}%"></div>
-          <div class="progress-text">${inProgress} / ${goal} กล่อง</div>
-        </div>
+        <div style="font-weight:800;color:#1652F0;margin-left:10px">฿${o.total}</div>
       </div>
     `;
-    if (rewards > 0) {
-      rewardBanner = `
-        <div class="reward-banner">
-          <div class="big">🎁 คุณได้สิทธิ์ฟรี ${rewards} กล่อง!</div>
-          <div style="font-size:13px;font-weight:500">แจ้งทางร้านเพื่อขอแลก</div>
-        </div>
-      `;
-    }
+  }).join('');
+
+  let rewardBanner = '';
+  if (canDiscount) {
+    rewardBanner = `<div class="reward-banner"><div class="big">🎁 ใช้ 15 แต้ม → ลด 50฿ ในคราวหน้า!</div><div style="font-size:13px;font-weight:500">หรือ 10 แต้ม → ฟรีเครื่องดื่ม</div></div>`;
+  } else if (canDrink) {
+    rewardBanner = `<div class="reward-banner"><div class="big">🥤 ใช้ 10 แต้ม → ฟรีเครื่องดื่ม!</div><div style="font-size:13px;font-weight:500">แจ้งทางร้านตอนสั่งคราวหน้า</div></div>`;
   }
 
   document.getElementById('content').innerHTML = `
     <div class="status-card">
       <div class="status-icon">✅</div>
       <div class="status-title">อาหารเสร็จแล้ว!</div>
-      <div class="status-sub">ขอบคุณที่อุดหนุนครัวผู้ใหญ่ปอง 🙏</div>
+      <div class="status-sub">ขอบคุณที่อุดหนุนครัวผู้ใหญ่ปอง</div>
 
       ${renderItemsHTML(order)}
-      ${progress}
+
+      ${customer ? `
+        <div style="margin-top:14px;padding:14px;background:linear-gradient(135deg,#1652F0,#0738C9);color:#fff;border-radius:14px;text-align:center">
+          <div style="font-size:13px;opacity:.9">${customer.name}</div>
+          <div style="font-size:36px;font-weight:900;margin:4px 0">${points} <span style="font-size:14px;opacity:.9">แต้ม</span></div>
+          <div style="font-size:11px;opacity:.85">รวมตลอดที่ใช้บริการ ${lifetime} แต้ม</div>
+        </div>
+      ` : ''}
       ${rewardBanner}
 
-      <a href="points.html?phone=${phone}" class="btn btn-success" style="margin-top:16px">⭐ ดูแต้มสะสม</a>
+      ${myOrders.length > 1 ? `
+        <div style="margin-top:14px;text-align:left">
+          <h3 style="font-size:14px;color:#0a1530;margin-bottom:8px">📦 ประวัติการสั่งซื้อ (5 รายการล่าสุด)</h3>
+          ${orderHistoryHTML}
+        </div>
+      ` : ''}
+
+      <a href="points.html?phone=${phone}" class="btn btn-success" style="margin-top:16px">⭐ ดูแต้มเต็ม + รางวัลที่แลกได้</a>
       <a href="menu.html" class="btn btn-ghost">สั่งเพิ่ม</a>
     </div>
   `;
