@@ -617,19 +617,32 @@
         <button onclick="disconnectBT()" style="padding:10px 14px;background:#fff;color:#dc2626;border:1.5px solid #dc2626;border-radius:8px;font-weight:700;cursor:pointer">ตัดการเชื่อมต่อ</button>
       </div>
 
-      <!-- Thai codepage selector — for printers that don't print Thai correctly -->
+      <!-- Payment QR uploader (PromptPay / Thai QR) -->
       <div style="margin-top:10px;padding:10px;background:rgba(255,255,255,.5);border-radius:8px">
-        <label style="font-size:12px;font-weight:700;color:#1652F0;display:block;margin-bottom:6px">🇹🇭 รหัสภาษาไทย (Thai Codepage)</label>
-        <select id="thaiCodepage" onchange="saveThaiCodepage()" style="width:100%;padding:8px;border:1.5px solid #d1ddff;border-radius:6px;font-size:13px;background:#fff;font-family:inherit">
-          <option value="21">21 — TIS-620 Thai Char Code 11 (แนะนำ default)</option>
-          <option value="20">20 — Thai Char Code 42</option>
-          <option value="30">30 — บางรุ่น</option>
-          <option value="70">70 — PC874 (Xprinter custom)</option>
-          <option value="255">255 — Thai (alt)</option>
-        </select>
-        <button onclick="bluetoothPrintThaiTest()" style="width:100%;margin-top:6px;padding:8px;background:#fff;color:#1652F0;border:1.5px solid #1652F0;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer">🇹🇭 ทดสอบพิมพ์ภาษาไทย (ลอง 5 รหัส)</button>
-        <div class="hint" style="font-size:11px;margin-top:4px">ถ้าภาษาไทยเพี้ยน → กด "ลอง 5 รหัส" → ดูใบที่ออกมา → เลือกตัวที่ชัดในตัวเลือกข้างบน</div>
+        <label style="font-size:12px;font-weight:700;color:#1652F0;display:block;margin-bottom:6px">💰 QR ชำระเงิน (PromptPay / Thai QR)</label>
+        <div id="paymentQrPreview" style="text-align:center;padding:8px;background:#fff;border:1.5px dashed #d1ddff;border-radius:6px;margin-bottom:6px;min-height:80px;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:11px">ยังไม่ได้ตั้ง</div>
+        <input type="file" id="paymentQrFile" accept="image/*" onchange="onPaymentQrSelected(event)" style="display:none">
+        <button onclick="document.getElementById('paymentQrFile').click()" style="width:100%;padding:8px;background:#1652F0;color:#fff;border:none;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer">📤 อัพโหลด QR ชำระเงิน</button>
+        <button onclick="clearPaymentQr()" style="width:100%;margin-top:4px;padding:6px;background:#fff;color:#dc2626;border:1.5px solid #dc2626;border-radius:6px;font-weight:700;font-size:11px;cursor:pointer">🗑 ลบ QR</button>
+        <div class="hint" style="font-size:11px;margin-top:4px">ภาพ QR จะปรากฏท้ายใบเสร็จ — แนะนำให้ตัดเฉพาะ QR ก่อนอัพโหลด</div>
       </div>
+
+      <!-- Thai codepage selector (advanced — only if printer has Thai font) -->
+      <details style="margin-top:10px">
+        <summary style="font-size:12px;color:#6b7280;cursor:pointer">⚙️ ตั้งค่าขั้นสูง (Codepage / Layout)</summary>
+        <div style="margin-top:8px;padding:10px;background:rgba(255,255,255,.5);border-radius:8px">
+          <label style="font-size:12px;font-weight:700;color:#1652F0;display:block;margin-bottom:6px">🇹🇭 รหัสภาษาไทย (Thai Codepage)</label>
+          <select id="thaiCodepage" onchange="saveThaiCodepage()" style="width:100%;padding:8px;border:1.5px solid #d1ddff;border-radius:6px;font-size:13px;background:#fff;font-family:inherit">
+            <option value="21">21 — TIS-620 Thai Char Code 11</option>
+            <option value="20">20 — Thai Char Code 42</option>
+            <option value="30">30 — บางรุ่น</option>
+            <option value="70">70 — PC874 (Xprinter custom)</option>
+            <option value="255">255 — Thai (alt)</option>
+          </select>
+          <button onclick="bluetoothPrintThaiTest()" style="width:100%;margin-top:6px;padding:8px;background:#fff;color:#1652F0;border:1.5px solid #1652F0;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer">🇹🇭 ทดสอบพิมพ์ภาษาไทย (ลอง 5 รหัส)</button>
+          <div class="hint" style="font-size:11px;margin-top:4px">ใช้เมื่อ printer มี font ไทย — ถ้า bitmap mode ภาษาไทยออกแล้ว ไม่ต้องตั้ง</div>
+        </div>
+      </details>
 
       <div class="hint" style="margin-top:8px;font-size:11.5px">
         💡 รองรับ Chrome บน Android/Mac/Windows · iOS Safari ไม่รองรับ Web Bluetooth (ใช้ AirPrint แทน)
@@ -2225,6 +2238,8 @@ function initPrinterToggle() {
   // Init Thai codepage selector
   const tcp = document.getElementById('thaiCodepage');
   if (tcp) tcp.value = localStorage.getItem('btThaiCodepage') || '21';
+  // Init payment QR preview
+  if (typeof refreshPaymentQrPreview === 'function') refreshPaymentQrPreview();
   updateBTStatus();
   if (typeof initNotifSettingsUI === 'function') initNotifSettingsUI();
 }
@@ -2234,6 +2249,81 @@ function saveThaiCodepage() {
   const v = document.getElementById('thaiCodepage').value;
   localStorage.setItem('btThaiCodepage', v);
   toast('✅ บันทึก codepage: ' + v + ' (ลองพิมพ์ใบเสร็จดู)');
+}
+
+// Payment QR upload — saves as base64 dataURL in localStorage + cloud
+async function onPaymentQrSelected(ev) {
+  const file = ev.target.files?.[0];
+  if (!file) return;
+  if (file.size > 800 * 1024) {
+    if (!confirm('ไฟล์ขนาด ' + (file.size / 1024).toFixed(0) + 'KB ใหญ่หน่อย — อัพโหลดต่อ?')) return;
+  }
+  // Compress to max 400×400 to keep storage small
+  const dataUrl = await compressImageToDataURL(file, 400);
+  localStorage.setItem('paymentQrDataUrl', dataUrl);
+  // Sync to cloud so other devices can see it too
+  if (window.cloud?.saveMenuConfig) {
+    try {
+      const cfg = JSON.parse(localStorage.getItem('menuConfig') || '{"overrides":{},"custom":[]}');
+      cfg.paymentQrDataUrl = dataUrl;
+      localStorage.setItem('menuConfig', JSON.stringify(cfg));
+      await window.cloud.saveMenuConfig(cfg);
+    } catch (e) { console.warn('cloud sync failed', e); }
+  }
+  refreshPaymentQrPreview();
+  toast('✅ บันทึก QR ชำระเงินแล้ว');
+}
+
+function clearPaymentQr() {
+  if (!confirm('ลบ QR ชำระเงิน?')) return;
+  localStorage.removeItem('paymentQrDataUrl');
+  if (window.cloud?.saveMenuConfig) {
+    try {
+      const cfg = JSON.parse(localStorage.getItem('menuConfig') || '{"overrides":{},"custom":[]}');
+      delete cfg.paymentQrDataUrl;
+      localStorage.setItem('menuConfig', JSON.stringify(cfg));
+      window.cloud.saveMenuConfig(cfg);
+    } catch (e) {}
+  }
+  refreshPaymentQrPreview();
+  toast('🗑 ลบ QR แล้ว');
+}
+
+function refreshPaymentQrPreview() {
+  const el = document.getElementById('paymentQrPreview');
+  if (!el) return;
+  const url = localStorage.getItem('paymentQrDataUrl');
+  if (url) {
+    el.innerHTML = `<img src="${url}" style="max-width:120px;max-height:120px;object-fit:contain">`;
+  } else {
+    el.innerHTML = 'ยังไม่ได้ตั้ง';
+  }
+}
+
+// Helper: compress image File → dataURL (longest side ≤ maxSide)
+function compressImageToDataURL(file, maxSide) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const r = Math.min(1, maxSide / Math.max(img.width, img.height));
+        const w = Math.round(img.width * r);
+        const h = Math.round(img.height * r);
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(c.toDataURL('image/jpeg', 0.9));
+      };
+      img.onerror = reject;
+      img.src = reader.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 // Run Thai codepage test print (delegates to kitchen iframe if running there)
@@ -2507,6 +2597,11 @@ whenCloudReady(() => {
   window.cloud.onMenuConfig(config => {
     menuConfig = config || { overrides: {}, custom: [] };
     localStorage.setItem('menuConfig', JSON.stringify(menuConfig));
+    // Sync payment QR if config has it (so other devices receive it)
+    if (config && config.paymentQrDataUrl) {
+      localStorage.setItem('paymentQrDataUrl', config.paymentQrDataUrl);
+      if (typeof refreshPaymentQrPreview === 'function') refreshPaymentQrPreview();
+    }
     if (document.querySelector('[data-page=settings]')?.classList.contains('active')) renderMenuManager();
   });
 });

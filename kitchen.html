@@ -1635,18 +1635,21 @@ async function renderReceiptCanvas(order) {
   center('ขอบคุณที่อุดหนุน', 20);
   y += 4;
 
-  // Footer: payment QR (PromptPay/Thai QR) — replaces the old points QR
+  // Footer: payment QR (PromptPay/Thai QR)
+  // Source priority: localStorage dataURL (uploaded via admin) → file 'payment-qr.jpg' → fallback message
   if (includeQR) {
     center('สแกนเพื่อชำระเงิน', 18, true);
     y += 2;
-    const paymentImg = await loadImageForPrint('payment-qr.jpg');
+    let paymentImg = null;
+    const dataUrl = localStorage.getItem('paymentQrDataUrl');
+    if (dataUrl) paymentImg = await loadImageForPrint(dataUrl);
+    if (!paymentImg)  paymentImg = await loadImageForPrint('payment-qr.jpg');
     if (paymentImg) {
       ctx.drawImage(paymentImg, (W - QR_SIZE) / 2, y, QR_SIZE, QR_SIZE);
       y += QR_SIZE + 4;
       center('PromptPay · Thai QR Payment', 12);
     } else {
-      // Fallback if file missing
-      center('(ตั้งค่าไฟล์ payment-qr.jpg)', 12);
+      center('(อัพโหลด QR ในหน้าตั้งค่า)', 12);
     }
   }
   y += 20;
@@ -1706,8 +1709,13 @@ async function buildBitmapESCPOS(order) {
     row += rowsThis;
   }
 
-  // Feed paper
+  // Feed paper to align with cutter, then auto-cut
   out.push(0x0A, 0x0A, 0x0A, 0x0A);
+  // GS V 1 — partial cut (stays attached at center)
+  // GS V 0 — full cut (fully separates)
+  // Many compact thermal printers (Xprinter N160II) only have GS V m
+  // Use full cut by default; if printer has no cutter, command is ignored.
+  out.push(0x1D, 0x56, 0x00); // GS V 0 — full cut
   return new Uint8Array(out);
 }
 
