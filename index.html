@@ -798,10 +798,14 @@
     <input type="range" id="notifVolume" min="0" max="100" value="100" oninput="onVolumeChange(this.value)" style="width:100%">
     <label style="margin-top:10px">⏱️ ความถี่ beep ซ้ำ <span id="notifRepeatLabel" style="float:right;color:#1652F0;font-weight:700">2 วิ</span></label>
     <input type="range" id="notifRepeat" min="1" max="10" step="1" value="2" oninput="onRepeatChange(this.value)" style="width:100%">
-    <button class="btn-secondary" onclick="testNotifSound()" style="width:100%;margin-top:10px">🔔 ทดสอบเสียงแจ้งเตือน</button>
+    <button class="btn-secondary" onclick="testNotifSound()" style="width:100%;margin-top:10px">🔔 ทดสอบเสียง · สั่น · OS Notification</button>
+    <button class="btn-primary" onclick="enableOSNotif()" style="width:100%;margin-top:8px;background:linear-gradient(135deg,#dc2626,#991b1b)">🔔 เปิด OS Notification (เด้งแม้หน้าจอดับ)</button>
+    <div id="osNotifStatus" style="margin-top:6px;font-size:12px;text-align:center;color:#5c6982"></div>
     <div class="hint" style="margin-top:10px;line-height:1.6;font-size:12px">
-      เมื่อมีออเดอร์ใหม่ ระบบจะดัง beep ซ้ำต่อเนื่องจนกว่าจะกด <b>ยืนยันรายการ</b> ทุกออเดอร์<br>
-      📱 บนมือถือ/แท็บเล็ตต้อง <b>กดที่หน้าจอ 1 ครั้ง</b> เพื่อปลดล็อคเสียง (browser policy)
+      เมื่อมีออเดอร์ใหม่ ระบบจะดัง beep + สั่น + เด้ง notification ต่อเนื่องจนกว่าจะกด <b>ยืนยันรายการ</b> ทุกออเดอร์<br>
+      📱 <b>บนมือถือ:</b> กด "เปิด OS Notification" ด้านบนแล้วอนุญาต — ระบบจะเด้งเตือนแม้หน้าจอดับ/ปิดแอป<br>
+      🔋 ขณะมีออเดอร์ค้าง — ระบบจะ <b>กันหน้าจอดับ</b> อัตโนมัติ (Wake Lock)<br>
+      ⚠️ บน iOS Safari: notification ทำงานเฉพาะตอนแอปยังเปิด (limit ของ Apple)
     </div>
   </div>
 
@@ -2925,6 +2929,35 @@ function onRepeatChange(v) {
 function testNotifSound() {
   if (!window.OrderNotifier) { toast('⚠️ ระบบเสียงยังไม่พร้อม'); return; }
   window.OrderNotifier.test();
+  setTimeout(updateOSNotifStatus, 800);
+}
+async function enableOSNotif() {
+  if (!window.OrderNotifier) { toast('⚠️ ระบบเสียงยังไม่พร้อม'); return; }
+  if (!('Notification' in window)) { toast('⚠️ Browser นี้ไม่รองรับ OS Notification'); return; }
+  if (Notification.permission === 'denied') {
+    alert('❌ คุณเคยปฏิเสธ notification ไปแล้ว\n\nวิธีเปิดใหม่:\n• Chrome/Android: แตะ ⓘ ที่แถบ URL → Notifications → Allow\n• iOS Safari: Settings → Safari → Notifications → loyalty.fishconnect.co\n\nแล้วรีเฟรชหน้านี้');
+    return;
+  }
+  const granted = await window.OrderNotifier.requestNotifPermission();
+  updateOSNotifStatus();
+  if (granted) {
+    toast('✅ เปิด OS Notification แล้ว — จะเด้งเตือนแม้หน้าจอดับ');
+    // Fire test notification
+    setTimeout(() => window.OrderNotifier.test(), 300);
+  } else {
+    toast('⚠️ ยังไม่ได้รับสิทธิ์ — ตรวจการตั้งค่า browser', true);
+  }
+}
+function updateOSNotifStatus() {
+  const el = document.getElementById('osNotifStatus');
+  if (!el) return;
+  if (!('Notification' in window)) {
+    el.innerHTML = '⚠️ Browser ไม่รองรับ OS Notification'; el.style.color = '#dc2626'; return;
+  }
+  const p = Notification.permission;
+  if (p === 'granted') { el.innerHTML = '✅ OS Notification เปิดอยู่ — พร้อมเตือนแม้หน้าจอดับ'; el.style.color = '#16a34a'; }
+  else if (p === 'denied') { el.innerHTML = '❌ ถูกปฏิเสธ — ต้องเปิดในตั้งค่า browser'; el.style.color = '#dc2626'; }
+  else { el.innerHTML = '⏳ ยังไม่ได้ขออนุญาต — กดปุ่มสีแดงด้านบน'; el.style.color = '#f59e0b'; }
 }
 // Init notification settings UI when settings page is loaded
 function initNotifSettingsUI() {
@@ -2943,6 +2976,7 @@ function initNotifSettingsUI() {
     r.value = sec;
     document.getElementById('notifRepeatLabel').textContent = sec + ' วิ';
   }
+  updateOSNotifStatus();
 }
 // Run init on DOM ready
 document.addEventListener('DOMContentLoaded', initNotifSettingsUI);

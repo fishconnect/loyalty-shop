@@ -918,11 +918,17 @@ function checkShopClosedOverlay() {
     overlay.id = 'shopClosedOverlay';
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.96);z-index:99998;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px;text-align:center;font-family:inherit;color:#fff';
     overlay.innerHTML = `
-      <div style="font-size:120px;margin-bottom:14px">🔴</div>
-      <div style="font-size:32px;font-weight:900;margin-bottom:8px">ร้านปิดอยู่</div>
-      <div style="font-size:18px;opacity:.85;margin-bottom:6px">ขออภัยในความไม่สะดวก</div>
-      <div style="font-size:14px;opacity:.7">กรุณากลับมาใหม่ในเวลาทำการ</div>
-      <a href="tel:0619623696" style="margin-top:24px;background:#fff;color:#0a1530;padding:14px 28px;border-radius:999px;font-weight:800;text-decoration:none;font-size:15px">📞 โทร 061-962-3696</a>
+      <div style="font-size:88px;margin-bottom:10px">🔴</div>
+      <div style="font-size:28px;font-weight:900;margin-bottom:6px">#ครัวผู้ใหญ่ปอง</div>
+      <div style="font-size:24px;font-weight:800;margin-bottom:14px">ร้านปิดอยู่</div>
+      <div style="background:rgba(255,255,255,.1);border:1.5px solid rgba(255,255,255,.25);border-radius:14px;padding:16px 20px;max-width:340px;margin-bottom:14px">
+        <div style="font-size:13px;opacity:.7;margin-bottom:4px;letter-spacing:.05em">⏰ เวลาทำการ</div>
+        <div style="font-size:20px;font-weight:800;margin-bottom:6px;color:#fbbf24">9:30 - 17:30 น.</div>
+        <div style="font-size:14px;opacity:.85">จันทร์ - เสาร์</div>
+        <div style="font-size:13px;opacity:.7;margin-top:6px;border-top:1px solid rgba(255,255,255,.2);padding-top:6px">หยุดทุกวันอาทิตย์</div>
+      </div>
+      <div style="font-size:13px;opacity:.7;margin-bottom:18px">ขออภัยในความไม่สะดวก กลับมาใหม่ในเวลาทำการนะคะ</div>
+      <a href="tel:0619623696" style="background:#fff;color:#0a1530;padding:14px 28px;border-radius:999px;font-weight:800;text-decoration:none;font-size:15px">📞 โทร 061-962-3696</a>
     `;
     document.body.appendChild(overlay);
   }
