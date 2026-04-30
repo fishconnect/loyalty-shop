@@ -924,6 +924,8 @@ const STORAGE_KEY = 'loyaltyShopV2';
 let db = loadDB();
 let selectedCustomerId = null;
 let checkSelectedId = null;
+let custFilter = 'all';
+let currentRange = 'today';
 
 function loadDB() {
   try {
@@ -1618,7 +1620,7 @@ function deleteOrder(orderId) {
 }
 
 // ========== Customer Detail (merged เช็ก + ลูกค้า) ==========
-let custFilter = 'all';
+// (custFilter is declared at top of script to avoid TDZ when render fires early via cloud sync)
 
 function setCustFilter(f) {
   custFilter = f;
@@ -2112,7 +2114,7 @@ function fmtBaht(n) { return '฿' + Math.round(n).toLocaleString('th-TH'); }
 function dayKey(iso) { return new Date(iso).toLocaleDateString('en-CA'); }
 function startOfDay(d) { d.setHours(0,0,0,0); return d; }
 
-let currentRange = 'today';
+// (currentRange declared at top of script to avoid TDZ)
 function setRange(r) {
   currentRange = r;
   document.querySelectorAll('.range-btn').forEach(b => b.classList.toggle('active', b.dataset.range === r));
