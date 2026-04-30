@@ -1094,14 +1094,14 @@ function printOrderReceipt(orderId) {
   browserPrint(order);
 }
 
-function browserPrint(order) {
+// Build receipt HTML (used by both hidden iframe approach and BT fallback)
+function buildReceiptHTML(order) {
   const itemsHTML = order.items.map(it => {
     const free = it.freeQty || 0;
     const paid = it.qty - free;
     const lineTotal = it.price * paid;
     const freeStr = free > 0 ? ` <span class="rc-free">[ฟรี ${free}]</span>` : '';
     const mainNm = it.mainName || it.name;
-    // Build option lines
     let optStr = '';
     if (it.options && it.options.length) {
       optStr = it.options.map(o => {
@@ -1119,13 +1119,11 @@ function browserPrint(order) {
     `;
   }).join('');
 
-  const menuURL = 'https://loyalty.fishconnect.co/menu.html';
-  const pointsURL = 'https://loyalty.fishconnect.co/points.html';
-  const qrMenu = 'https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=2&data=' + encodeURIComponent(menuURL);
-  const qrPoints = 'https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=2&data=' + encodeURIComponent(pointsURL);
+  const qrMenu   = 'https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=2&data=' + encodeURIComponent('https://loyalty.fishconnect.co/menu.html');
+  const qrPoints = 'https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=2&data=' + encodeURIComponent('https://loyalty.fishconnect.co/points.html');
 
-  const html = `
-    <img class="rc-logo" src="logo.jpg" alt="logo">
+  return `
+    <img class="rc-logo" src="https://loyalty.fishconnect.co/logo.jpg" alt="logo">
     <div class="rc-h1">ครัวผู้ใหญ่ปอง</div>
     <div class="rc-sub">📞 061-962-3696</div>
     <hr class="rc-divider">
@@ -1139,56 +1137,117 @@ function browserPrint(order) {
     <hr class="rc-divider">
     ${order.discount ? `
       <div class="rc-row"><span>ยอดเต็ม</span><span>฿${order.original_total || (order.total + order.discount)}</span></div>
-      <div class="rc-row"><span>🎁 ฟรี ${order.free_boxes_used} กล่อง</span><span>-฿${order.discount}</span></div>
+      <div class="rc-row"><span>🎁 ส่วนลด</span><span>-฿${order.discount}</span></div>
     ` : ''}
     <div class="rc-total">รวม ฿${order.total}</div>
     <hr class="rc-divider">
     <div class="rc-foot">ขอบคุณที่อุดหนุน 🙏</div>
-
     <div class="rc-qr-wrap">
       <div class="rc-qr-title">📱 SCAN สั่งอาหารผ่าน QR Code</div>
-      <img class="rc-qr" src="${qrMenu}" alt="QR menu" crossorigin="anonymous">
+      <img class="rc-qr" src="${qrMenu}" alt="QR menu">
       <div class="rc-qr-url">menu.html</div>
     </div>
-
     <div class="rc-qr-wrap" style="border-top:1px dashed #000;padding-top:3mm">
       <div class="rc-qr-title">⭐ SCAN เช็คแต้มสะสม</div>
       <div style="font-size:9pt;margin-bottom:2mm">(กรอกเบอร์โทรเพื่อดูแต้ม)</div>
-      <img class="rc-qr" src="${qrPoints}" alt="QR points" crossorigin="anonymous">
+      <img class="rc-qr" src="${qrPoints}" alt="QR points">
       <div class="rc-qr-url">points.html</div>
     </div>
   `;
-  document.getElementById('printArea').innerHTML = html;
-  // Wait for all images (logo + QR) to load before triggering print.
-  // Critical on mobile — Safari/Chrome may print before images render otherwise.
-  const imgs = document.querySelectorAll('#printArea img');
+}
+
+// Self-contained CSS for receipt (used inside print iframe)
+const RECEIPT_CSS = `
+  @page { size: 80mm auto; margin: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: #fff; color: #000; }
+  body {
+    width: 80mm; padding: 4mm;
+    font-family: 'Sarabun', -apple-system, sans-serif;
+    font-size: 11pt; line-height: 1.35;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .rc-logo { display: block; width: 30mm; height: 30mm; object-fit: contain; margin: 0 auto 2mm; }
+  .rc-h1 { text-align: center; font-size: 22pt; font-weight: 900; margin: 0 0 1mm; letter-spacing: -0.5px; }
+  .rc-sub { text-align: center; font-size: 11pt; margin: 0 0 2mm; font-weight: 600; }
+  .rc-divider { border: 0; border-top: 1px dashed #000; margin: 2mm 0; }
+  .rc-row { display: flex; justify-content: space-between; font-size: 11pt; margin: 1mm 0; }
+  .rc-item { display: flex; justify-content: space-between; align-items: flex-start; font-size: 12pt; margin: 1.5mm 0; }
+  .rc-item .name { flex: 1; padding-right: 4mm; }
+  .rc-item .price { font-weight: 700; white-space: nowrap; }
+  .rc-total { text-align: right; font-size: 14pt; font-weight: 900; margin: 2mm 0; }
+  .rc-foot { text-align: center; font-size: 9pt; margin: 3mm 0 0; }
+  .rc-free { color: #000; font-weight: 700; }
+  .rc-qr-wrap { text-align: center; margin: 4mm 0 2mm; }
+  .rc-qr-title { font-size: 12pt; font-weight: 800; margin-bottom: 2mm; }
+  .rc-qr { width: 30mm; height: 30mm; margin: 0 auto; display: block; }
+  .rc-qr-url { font-size: 8pt; margin-top: 1mm; word-break: break-all; }
+`;
+
+// Universal print via hidden iframe — works on desktop, iOS, Android,
+// and inside iframe-in-iframe contexts (kitchen iframe within index.html admin)
+function browserPrint(order) {
+  const html = buildReceiptHTML(order);
+
+  // Reuse single hidden iframe across calls
+  let frame = document.getElementById('hiddenPrintFrame');
+  if (frame) frame.remove(); // fresh each time to avoid stale content
+  frame = document.createElement('iframe');
+  frame.id = 'hiddenPrintFrame';
+  // Off-screen but rendered (visibility:hidden / width:0 prevents render on some browsers)
+  frame.style.cssText = 'position:fixed;left:-10000px;top:0;width:80mm;height:auto;min-height:200mm;border:0;opacity:0;pointer-events:none';
+  document.body.appendChild(frame);
+
+  const doc = frame.contentDocument || frame.contentWindow.document;
+  doc.open();
+  doc.write(`<!DOCTYPE html><html lang="th"><head>
+    <meta charset="UTF-8">
+    <title>ใบเสร็จ</title>
+    <style>${RECEIPT_CSS}</style>
+  </head><body>${html}</body></html>`);
+  doc.close();
+
+  // Wait for images (logo + 2 QRs) before triggering print
   let printed = false;
-  const doPrint = () => {
+  const fire = () => {
     if (printed) return;
     printed = true;
-    // Small delay for layout to settle (mobile especially)
-    setTimeout(() => {
-      try { window.print(); }
-      catch (e) { console.error('[Print]', e); toast('⚠️ พิมพ์ไม่ได้: ' + e.message, true); }
-    }, 350);
+    try {
+      // .focus() helps some Android browsers
+      frame.contentWindow.focus();
+      frame.contentWindow.print();
+    } catch (e) {
+      console.error('[Print]', e);
+      // Last-resort fallback: print main window
+      try { window.print(); } catch (e2) { toast('⚠️ พิมพ์ไม่ได้: ' + (e2.message || e.message), true); }
+    }
   };
 
-  if (imgs.length === 0) { doPrint(); return; }
+  // Wait for iframe to load + all images inside it
+  const startWait = () => {
+    const imgs = doc.querySelectorAll('img');
+    if (imgs.length === 0) { setTimeout(fire, 200); return; }
+    let loaded = 0;
+    const checkAll = () => { if (++loaded >= imgs.length) setTimeout(fire, 250); };
+    imgs.forEach(img => {
+      if (img.complete && img.naturalHeight > 0) checkAll();
+      else {
+        img.addEventListener('load', checkAll, { once: true });
+        img.addEventListener('error', checkAll, { once: true });
+      }
+    });
+    // Failsafe
+    setTimeout(() => { if (!printed) { console.warn('[Print] timeout, printing anyway'); fire(); } }, 5000);
+  };
 
-  let loaded = 0;
-  const checkAll = () => { if (++loaded >= imgs.length) doPrint(); };
-  imgs.forEach(img => {
-    if (img.complete && img.naturalHeight > 0) checkAll();
-    else {
-      img.addEventListener('load', checkAll, { once: true });
-      img.addEventListener('error', checkAll, { once: true });
-    }
-  });
-
-  // Failsafe — print after 4s even if some images haven't loaded
-  setTimeout(() => {
-    if (!printed) { console.warn('[Print] timeout waiting for images, printing anyway'); doPrint(); }
-  }, 4000);
+  // iframe might already be ready; otherwise wait for load
+  if (frame.contentDocument && frame.contentDocument.readyState === 'complete') {
+    startWait();
+  } else {
+    frame.addEventListener('load', startWait, { once: true });
+    setTimeout(startWait, 800); // failsafe in case load doesn't fire
+  }
 }
 
 // ========== Web Bluetooth Thermal Printer ==========
