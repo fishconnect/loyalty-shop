@@ -1336,31 +1336,34 @@ whenCloudReady(() => {
   }
 });
 
-// ========== Order: Autocomplete ==========
+// ========== Order: Autocomplete (legacy — kept for backward compat with old form) ==========
+// The manual-order form was replaced by an iframe; these elements may not exist.
 const orderLookup = document.getElementById('orderLookup');
 const orderAc = document.getElementById('orderAcList');
 
-orderLookup.addEventListener('input', () => {
-  const q = orderLookup.value.trim();
-  if (!q) { orderAc.style.display = 'none'; return; }
-  const matches = findCustomers(q).slice(0, 8);
-  let html = matches.map(c => {
-    const pts = c.points || 0;
-    const badge = pts >= LOYALTY.REWARD_DISCOUNT_POINTS ? `<span class="badge badge-reward">🎁 ลด 50฿</span>`
-                : pts >= LOYALTY.REWARD_DRINK_POINTS    ? `<span class="badge badge-reward">🥤 ฟรี</span>` : '';
-    return `<div class="ac-item" onclick="selectCustomer('${c.id}')">
-      <div class="n">${c.name} ${badge}</div>
-      <div class="p">🌟 ${pts} แต้ม${c.phone?` · ${c.phone}`:''}</div>
-    </div>`;
-  }).join('');
-  html += `<div class="ac-item ac-create" onclick="showNewCustomerForm()">+ เพิ่มลูกค้าใหม่: "${q}"</div>`;
-  orderAc.innerHTML = html;
-  orderAc.style.display = 'block';
-});
+if (orderLookup && orderAc) {
+  orderLookup.addEventListener('input', () => {
+    const q = orderLookup.value.trim();
+    if (!q) { orderAc.style.display = 'none'; return; }
+    const matches = findCustomers(q).slice(0, 8);
+    let html = matches.map(c => {
+      const pts = c.points || 0;
+      const badge = pts >= LOYALTY.REWARD_DISCOUNT_POINTS ? `<span class="badge badge-reward">🎁 ลด 50฿</span>`
+                  : pts >= LOYALTY.REWARD_DRINK_POINTS    ? `<span class="badge badge-reward">🥤 ฟรี</span>` : '';
+      return `<div class="ac-item" onclick="selectCustomer('${c.id}')">
+        <div class="n">${c.name} ${badge}</div>
+        <div class="p">🌟 ${pts} แต้ม${c.phone?` · ${c.phone}`:''}</div>
+      </div>`;
+    }).join('');
+    html += `<div class="ac-item ac-create" onclick="showNewCustomerForm()">+ เพิ่มลูกค้าใหม่: "${q}"</div>`;
+    orderAc.innerHTML = html;
+    orderAc.style.display = 'block';
+  });
 
-orderLookup.addEventListener('blur', () => {
-  setTimeout(() => orderAc.style.display = 'none', 200);
-});
+  orderLookup.addEventListener('blur', () => {
+    setTimeout(() => orderAc.style.display = 'none', 200);
+  });
+}
 
 function selectCustomer(id) {
   selectedCustomerId = id;
