@@ -1109,12 +1109,17 @@ function buildReceiptHTML(order) {
     `;
   }).join('');
 
-  const qrMenu   = 'https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=2&data=' + encodeURIComponent('https://loyalty.fishconnect.co/menu.html');
-  const qrPoints = 'https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=2&data=' + encodeURIComponent('https://loyalty.fishconnect.co/points.html');
+  const qrMenu = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=2&data=' + encodeURIComponent('https://loyalty.fishconnect.co/menu.html');
+  // Payment QR: prefer admin-uploaded dataURL, fallback to file
+  const paymentQrSrc = (typeof localStorage !== 'undefined' && localStorage.getItem('paymentQrDataUrl'))
+    || 'https://loyalty.fishconnect.co/payment-qr.jpg';
 
   return `
-    <img class="rc-logo" src="https://loyalty.fishconnect.co/logo.jpg" alt="logo">
     <div class="rc-h1">ครัวผู้ใหญ่ปอง</div>
+    <div style="text-align:center;margin:1mm 0">
+      <img class="rc-qr-small" src="${qrMenu}" alt="QR menu">
+      <div style="font-size:8pt;font-weight:700">สแกนสั่งอาหาร</div>
+    </div>
     <div class="rc-sub">📞 061-962-3696</div>
     <hr class="rc-divider">
     <div class="rc-row"><span>Order</span><span><b>#${order.id.slice(-6)}</b></span></div>
@@ -1131,17 +1136,11 @@ function buildReceiptHTML(order) {
     ` : ''}
     <div class="rc-total">รวม ฿${order.total}</div>
     <hr class="rc-divider">
-    <div class="rc-foot">ขอบคุณที่อุดหนุน 🙏</div>
+    <div class="rc-foot">ขอบคุณที่อุดหนุน</div>
     <div class="rc-qr-wrap">
-      <div class="rc-qr-title">📱 SCAN สั่งอาหารผ่าน QR Code</div>
-      <img class="rc-qr" src="${qrMenu}" alt="QR menu">
-      <div class="rc-qr-url">menu.html</div>
-    </div>
-    <div class="rc-qr-wrap" style="border-top:1px dashed #000;padding-top:3mm">
-      <div class="rc-qr-title">⭐ SCAN เช็คแต้มสะสม</div>
-      <div style="font-size:9pt;margin-bottom:2mm">(กรอกเบอร์โทรเพื่อดูแต้ม)</div>
-      <img class="rc-qr" src="${qrPoints}" alt="QR points">
-      <div class="rc-qr-url">points.html</div>
+      <div class="rc-qr-title">💰 สแกนเพื่อชำระเงิน</div>
+      <img class="rc-qr-small" src="${paymentQrSrc}" alt="QR payment" onerror="this.style.display='none';this.nextElementSibling.textContent='(อัพโหลด QR ในหน้าตั้งค่า)'">
+      <div class="rc-qr-url">PromptPay · Thai QR Payment</div>
     </div>
   `;
 }
@@ -1188,8 +1187,8 @@ function openPrintWindow(order) {
       font-family: 'Sarabun', -apple-system, "Segoe UI", sans-serif;
     }
     body { width: 80mm; padding: 4mm; font-size: 10pt; line-height: 1.3; }
-    .rc-logo { display: block; width: 26mm; height: 26mm; object-fit: contain; margin: 0 auto 1mm; }
-    .rc-h1 { text-align: center; font-size: 20pt; font-weight: 900; margin: 0 0 1mm; letter-spacing: -0.5px; }
+    /* Shop name +20% */
+    .rc-h1 { text-align: center; font-size: 24pt; font-weight: 900; margin: 0 0 1mm; letter-spacing: -0.5px; }
     .rc-sub { text-align: center; font-size: 10pt; margin: 0 0 1mm; font-weight: 600; }
     .rc-divider { border: 0; border-top: 1px dashed #000; margin: 1.5mm 0; }
     .rc-row { display: flex; justify-content: space-between; font-size: 10pt; margin: 0.5mm 0; }
@@ -1197,12 +1196,14 @@ function openPrintWindow(order) {
     .rc-item .name { flex: 1; padding-right: 3mm; }
     .rc-item .price { font-weight: 700; white-space: nowrap; }
     .rc-total { text-align: right; font-size: 13pt; font-weight: 900; margin: 1.5mm 0; }
-    .rc-foot { text-align: center; font-size: 9pt; margin: 2mm 0 0; }
+    .rc-foot { text-align: center; font-size: 9pt; margin: 2mm 0 1mm; }
     .rc-free { color: #000; font-weight: 700; }
     .rc-qr-wrap { text-align: center; margin: 2mm 0; page-break-inside: avoid; break-inside: avoid; }
     .rc-qr-title { font-size: 10pt; font-weight: 800; margin-bottom: 1mm; }
-    .rc-qr { width: 26mm; height: 26mm; margin: 0 auto; display: block; }
-    .rc-qr-url { display: none; }
+    /* QR images: 50% smaller (was 26mm → 13mm) */
+    .rc-qr-small { width: 13mm; height: 13mm; margin: 0 auto; display: block; image-rendering: pixelated; }
+    .rc-qr { width: 13mm; height: 13mm; margin: 0 auto; display: block; image-rendering: pixelated; }
+    .rc-qr-url { font-size: 7pt; margin-top: 1px; opacity: .8; }
     @media print { body { padding: 2mm; } }
     /* On-screen indicator (hidden when printing) */
     .pi-banner {
