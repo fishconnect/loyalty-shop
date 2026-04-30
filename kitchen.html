@@ -1050,9 +1050,8 @@ function getBTPrinter() {
 // Pre-load print images
 (function preloadPrintImages() {
   const urls = [
-    'logo.jpg',
-    'https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=2&data=' + encodeURIComponent('https://loyalty.fishconnect.co/menu.html'),
-    'https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=2&data=' + encodeURIComponent('https://loyalty.fishconnect.co/points.html')
+    'payment-qr.jpg', // PromptPay QR for payment (footer)
+    'https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=2&data=' + encodeURIComponent('https://loyalty.fishconnect.co/menu.html')
   ];
   urls.forEach(src => { const img = new Image(); img.src = src; });
 })();
@@ -1551,12 +1550,8 @@ async function renderReceiptCanvas(order) {
   ctx.fillStyle = '#000';
   ctx.imageSmoothingEnabled = false;
 
-  // 'compact' = no logo, smaller QR (fast, smaller bitmap = faster BLE transfer)
-  // 'full'    = logo + bigger QR
-  const layout = localStorage.getItem('btPrintLayout') || 'compact';
-  const includeLogo = layout === 'full';
-  const includeQR   = localStorage.getItem('btPrintQR') !== '0'; // default on
-  const qrSize = layout === 'full' ? 220 : 160;
+  const includeQR = localStorage.getItem('btPrintQR') !== '0'; // default on
+  const QR_SIZE = 80; // 50% of previous 160px — both menu QR (top) and payment QR (bottom)
 
   let y = 14;
   const FONT = '"Sarabun", "Tahoma", "Noto Sans Thai", sans-serif';
@@ -1587,16 +1582,18 @@ async function renderReceiptCanvas(order) {
   };
   const divider = () => { y += 3; ctx.fillRect(14, y, W - 28, 2); y += 6; };
 
-  if (includeLogo) {
-    const logo = await loadImageForPrint('logo.jpg');
-    if (logo) {
-      const sz = 90;
-      ctx.drawImage(logo, (W - sz) / 2, y, sz, sz);
-      y += sz + 4;
+  // Header: shop name (+20% bigger: 36 → 44), then small menu QR right below
+  center('ครัวผู้ใหญ่ปอง', 44, true);
+  if (includeQR) {
+    const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=2&data=' +
+                  encodeURIComponent('https://loyalty.fishconnect.co/menu.html');
+    const qrMenu = await loadImageForPrint(qrUrl);
+    if (qrMenu) {
+      ctx.drawImage(qrMenu, (W - QR_SIZE) / 2, y, QR_SIZE, QR_SIZE);
+      y += QR_SIZE + 2;
+      center('สแกนสั่งอาหาร', 14);
     }
   }
-
-  center('ครัวผู้ใหญ่ปอง', 36, true);
   center('Tel: 061-962-3696', 20);
   divider();
 
@@ -1638,23 +1635,18 @@ async function renderReceiptCanvas(order) {
   center('ขอบคุณที่อุดหนุน', 20);
   y += 4;
 
+  // Footer: payment QR (PromptPay/Thai QR) — replaces the old points QR
   if (includeQR) {
-    const qrPx = qrSize;
-    const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=' + qrPx + 'x' + qrPx + '&margin=2&data=';
-    const qrMenu = await loadImageForPrint(qrUrl + encodeURIComponent('https://loyalty.fishconnect.co/menu.html'));
-    if (qrMenu) {
-      center('SCAN สั่งอาหาร', 18, true);
-      ctx.drawImage(qrMenu, (W - qrPx) / 2, y, qrPx, qrPx);
-      y += qrPx + 6;
-    }
-    if (layout === 'full') {
-      divider();
-      const qrPoints = await loadImageForPrint(qrUrl + encodeURIComponent('https://loyalty.fishconnect.co/points.html'));
-      if (qrPoints) {
-        center('SCAN เช็คแต้ม', 18, true);
-        ctx.drawImage(qrPoints, (W - qrPx) / 2, y, qrPx, qrPx);
-        y += qrPx + 6;
-      }
+    center('สแกนเพื่อชำระเงิน', 18, true);
+    y += 2;
+    const paymentImg = await loadImageForPrint('payment-qr.jpg');
+    if (paymentImg) {
+      ctx.drawImage(paymentImg, (W - QR_SIZE) / 2, y, QR_SIZE, QR_SIZE);
+      y += QR_SIZE + 4;
+      center('PromptPay · Thai QR Payment', 12);
+    } else {
+      // Fallback if file missing
+      center('(ตั้งค่าไฟล์ payment-qr.jpg)', 12);
     }
   }
   y += 20;
