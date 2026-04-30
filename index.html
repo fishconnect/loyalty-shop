@@ -316,6 +316,79 @@
     background: linear-gradient(90deg, #4F7AFF, #1652F0);
     height: 100%; transition: width .5s ease;
   }
+
+  /* ========== Customer filter chips ========== */
+  .cust-filter-btn {
+    padding: 6px 12px; border-radius: 999px;
+    background: #f7f8fb; color: #5c6982; border: 1.5px solid #e2e7ef;
+    font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap;
+    font-family: inherit;
+  }
+  .cust-filter-btn.active {
+    background: linear-gradient(135deg, #4F7AFF, #1652F0); color: #fff;
+    border-color: #1652F0; box-shadow: 0 2px 6px rgba(22,82,240,.25);
+  }
+  .cust-mini-kpi {
+    background: #f7f8fb; border: 1px solid #e2e7ef;
+    border-radius: 10px; padding: 8px 10px;
+    text-align: center;
+  }
+  .cust-mini-kpi .v { font-size: 16px; font-weight: 800; color: #0a1530; line-height: 1; }
+  .cust-mini-kpi .l { font-size: 10px; color: #5c6982; margin-top: 4px; font-weight: 600; }
+
+  /* ========== Power BI–style drill modal ========== */
+  .drill-modal-bg {
+    position: fixed; inset: 0; background: rgba(10,21,48,.6);
+    z-index: 9000; display: none; align-items: flex-end; justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+  .drill-modal-bg.show { display: flex; }
+  @media (min-width: 700px) { .drill-modal-bg { align-items: center; } }
+  .drill-modal {
+    background: #fff; border-radius: 20px 20px 0 0; width: 100%; max-width: 720px;
+    max-height: 90vh; overflow-y: auto; padding: 16px;
+    animation: drillUp .25s ease-out;
+  }
+  @media (min-width: 700px) { .drill-modal { border-radius: 20px; } }
+  @keyframes drillUp { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  .drill-head {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1.5px solid #e5e7eb;
+  }
+  .drill-head h3 { margin: 0; font-size: 17px; color: #0a1530; }
+  .drill-close {
+    background: #f3f4f6; border: none; border-radius: 50%; width: 32px; height: 32px;
+    font-size: 18px; cursor: pointer; color: #6b7280; font-family: inherit;
+  }
+  .kpi-card.clickable { cursor: pointer; transition: transform .12s, box-shadow .12s; }
+  .kpi-card.clickable:hover { transform: translateY(-2px); box-shadow: 0 4px 14px rgba(22,82,240,.18); }
+  .kpi-card.clickable::after {
+    content: '🔍'; position: absolute; top: 8px; right: 10px;
+    font-size: 11px; opacity: .35;
+  }
+
+  /* Heatmap (day × hour) */
+  .heatmap-grid {
+    display: grid; grid-template-columns: 30px repeat(24, 1fr); gap: 1px;
+    font-size: 9px; color: #5c6982;
+  }
+  .heatmap-cell {
+    aspect-ratio: 1; border-radius: 2px;
+    display: grid; place-items: center;
+    font-size: 8px; font-weight: 700; color: #fff;
+    transition: transform .1s;
+  }
+  .heatmap-cell:hover { transform: scale(1.4); z-index: 5; }
+  .heatmap-row-label { font-weight: 700; color: #5c6982; padding-right: 4px; align-self: center; }
+
+  /* Pie chart */
+  .pie-legend { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 10px; font-size: 12px; }
+  .pie-legend .pie-li { display: flex; align-items: center; gap: 6px; }
+  .pie-legend .pie-dot { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+
+  /* Customer detail card */
+  .cust-detail-section { background: #fff; border: 1px solid #e5e7eb; border-radius: 14px; padding: 14px; margin-bottom: 10px; }
+  .cust-detail-section h4 { margin: 0 0 10px; font-size: 14px; color: #0a1530; display: flex; justify-content: space-between; align-items: center; }
 </style>
 </head>
 <body>
@@ -347,9 +420,8 @@
   <div class="tab" data-page="menu">🍽️ เมนู</div>
   <div class="tab" data-page="factory">🏭 โรงงาน</div>
   <div class="tab" data-page="kitchen">👨‍🍳 ครัว <span id="tabBadge" style="display:none;background:#dc2626;color:#fff;border-radius:999px;padding:0 5px;font-size:10px;margin-left:2px"></span></div>
-  <div class="tab" data-page="check">เช็ก</div>
-  <div class="tab" data-page="customers">ลูกค้า</div>
-  <div class="tab" data-page="reports">รายงาน</div>
+  <div class="tab" data-page="customers">👥 ลูกค้า</div>
+  <div class="tab" data-page="reports">📊 รายงาน</div>
   <div class="tab" data-page="settings">⚙️</div>
 </div>
 
@@ -415,25 +487,43 @@
   <iframe id="walkinFrame" src="about:blank" style="border:0;width:100%;height:calc(100vh - 200px);display:block" title="Walk-in / Phone order"></iframe>
 </div>
 
-<!-- ========== เช็ก/แลก ========== -->
-<div class="page" id="page-check">
-  <div class="card">
-    <h2>🎁 เช็กสิทธิ์ / แลกฟรี</h2>
-    <label>ค้นหาลูกค้า (ชื่อคนกิน)</label>
-    <div class="ac-wrap">
-      <input type="text" id="checkLookup" placeholder="พิมพ์ชื่อ..." autocomplete="off">
-      <div class="ac-list" id="checkAcList" style="display:none"></div>
-    </div>
-    <div id="checkResult"></div>
-  </div>
-</div>
-
-<!-- ========== ลูกค้า ========== -->
+<!-- ========== ลูกค้า (รวม เช็ก + ทะเบียน) ========== -->
 <div class="page" id="page-customers">
-  <div class="card">
-    <h2>👥 ทะเบียนลูกค้า</h2>
-    <input type="text" class="search-box" id="custSearch" placeholder="ค้นหาชื่อ..." oninput="renderCustomers()">
-    <div id="customersList"></div>
+  <!-- LIST VIEW -->
+  <div id="cust-list-view">
+    <div class="card">
+      <h2 style="margin-top:0">👥 ลูกค้า · สต๊อกการ์ด · สิทธิ์ฟรี</h2>
+      <input type="text" class="search-box" id="custSearch" placeholder="🔎 ค้นหาชื่อ / เบอร์..." oninput="renderCustomers()" autocomplete="off">
+      <!-- Quick KPI summary -->
+      <div id="custKpiBar" style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:10px 0;font-size:11px"></div>
+      <!-- Filter chips -->
+      <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;overflow-x:auto;padding-bottom:4px">
+        <button class="cust-filter-btn active" data-filter="all" onclick="setCustFilter('all')">ทั้งหมด</button>
+        <button class="cust-filter-btn" data-filter="reward" onclick="setCustFilter('reward')">🎁 มีสิทธิ์</button>
+        <button class="cust-filter-btn" data-filter="near" onclick="setCustFilter('near')">🔥 ใกล้ครบ</button>
+        <button class="cust-filter-btn" data-filter="vip" onclick="setCustFilter('vip')">⭐ VIP</button>
+        <button class="cust-filter-btn" data-filter="new" onclick="setCustFilter('new')">🌱 ใหม่ (7d)</button>
+        <button class="cust-filter-btn" data-filter="dormant" onclick="setCustFilter('dormant')">💤 หาย ≥30d</button>
+      </div>
+      <!-- Sort -->
+      <div style="display:flex;gap:6px;margin-bottom:8px;font-size:12px;color:#5c6982;align-items:center">
+        <span>เรียงโดย:</span>
+        <select id="custSort" onchange="renderCustomers()" style="padding:4px 6px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;font-family:inherit">
+          <option value="boxes">สะสมเยอะสุด</option>
+          <option value="points">แต้มเยอะสุด</option>
+          <option value="recent">มาล่าสุด</option>
+          <option value="ltv">ยอดซื้อรวม</option>
+          <option value="name">ชื่อ A-Z</option>
+        </select>
+      </div>
+      <div id="customersList"></div>
+    </div>
+  </div>
+
+  <!-- DETAIL VIEW (master-detail) -->
+  <div id="cust-detail-view" style="display:none">
+    <button class="btn-ghost" onclick="closeCustomerDetail()" style="margin:0 0 10px;display:inline-flex;align-items:center;gap:6px;width:auto;padding:8px 14px">← กลับรายการลูกค้า</button>
+    <div id="customerDetail"></div>
   </div>
 </div>
 
@@ -449,31 +539,47 @@
     </div>
   </div>
 
-  <!-- KPI Cards -->
+  <!-- KPI Cards (clickable for drill-down) -->
   <div class="kpi-grid">
-    <div class="kpi-card primary">
+    <div class="kpi-card primary clickable" onclick="drillDown('revenue')">
       <div class="kpi-icon">💰</div>
       <div class="kpi-value" id="kpiRevenue">฿0</div>
       <div class="kpi-label">ยอดขาย</div>
       <div class="kpi-sub" id="kpiRevenueSub">—</div>
     </div>
-    <div class="kpi-card">
+    <div class="kpi-card clickable" onclick="drillDown('boxes')">
       <div class="kpi-icon">🍱</div>
       <div class="kpi-value" id="kpiBoxes">0</div>
-      <div class="kpi-label">กล่องที่ขาย</div>
+      <div class="kpi-label">จานที่ขาย</div>
       <div class="kpi-sub" id="kpiBoxesSub">—</div>
     </div>
-    <div class="kpi-card">
+    <div class="kpi-card clickable" onclick="drillDown('orders')">
       <div class="kpi-icon">🛒</div>
       <div class="kpi-value" id="kpiOrders">0</div>
       <div class="kpi-label">ออเดอร์</div>
       <div class="kpi-sub" id="kpiAvgOrder">เฉลี่ย ฿0/ออเดอร์</div>
     </div>
-    <div class="kpi-card">
+    <div class="kpi-card clickable" onclick="drillDown('customers')">
       <div class="kpi-icon">👥</div>
       <div class="kpi-value" id="kpiCustomers">0</div>
       <div class="kpi-label">ลูกค้าทั้งหมด</div>
       <div class="kpi-sub" id="kpiNewCustomers">+0 ใหม่</div>
+    </div>
+  </div>
+
+  <!-- 2nd row of KPIs: loyalty/operational metrics -->
+  <div class="kpi-grid" style="grid-template-columns:repeat(2,1fr)">
+    <div class="kpi-card clickable" onclick="drillDown('loyalty')" style="background:linear-gradient(135deg,#dcfce7,#bbf7d0)">
+      <div class="kpi-icon">⭐</div>
+      <div class="kpi-value" id="kpiPoints" style="color:#16a34a">0</div>
+      <div class="kpi-label">แต้มออกในงวดนี้</div>
+      <div class="kpi-sub" id="kpiPointsSub">— แลกไป 0pt</div>
+    </div>
+    <div class="kpi-card clickable" onclick="drillDown('aov')" style="background:linear-gradient(135deg,#fef3c7,#fde68a)">
+      <div class="kpi-icon">💎</div>
+      <div class="kpi-value" id="kpiAOV" style="color:#92400e">฿0</div>
+      <div class="kpi-label">AOV (เฉลี่ยต่อออเดอร์)</div>
+      <div class="kpi-sub" id="kpiAOVSub">—</div>
     </div>
   </div>
 
@@ -488,28 +594,57 @@
     <div id="revenueTrend"></div>
   </div>
 
-  <!-- Two column: hourly + category -->
+  <!-- Order type / channel mix -->
+  <div class="card">
+    <h2>🚚 ช่องทางสั่งซื้อ <span style="font-size:11px;color:#9ca3af;font-weight:500">(แตะเพื่อดูรายละเอียด)</span></h2>
+    <div id="channelMix"></div>
+  </div>
+
+  <!-- Hourly chart -->
   <div class="card">
     <h2>🕐 ออเดอร์ตามช่วงเวลา</h2>
-    <div style="font-size:12px;color:#5c6982;margin-bottom:10px">เห็นว่า peak hour คือเวลาไหน</div>
+    <div style="font-size:12px;color:#5c6982;margin-bottom:10px">peak hour ของช่วงนี้</div>
     <div id="hourlyChart"></div>
   </div>
 
+  <!-- Day×Hour heatmap -->
   <div class="card">
-    <h2>🥇 เมนูขายดี Top 10</h2>
+    <h2>🔥 Heatmap ยอดขาย วัน × ชั่วโมง</h2>
+    <div style="font-size:12px;color:#5c6982;margin-bottom:10px">ดูช่วงที่ยุ่งสุดของแต่ละวัน</div>
+    <div id="dayHourHeatmap"></div>
+  </div>
+
+  <!-- Category breakdown -->
+  <div class="card">
+    <h2>🍽 ยอดขายแยกตามหมวด</h2>
+    <div id="categoryBreakdown"></div>
+  </div>
+
+  <!-- Top items -->
+  <div class="card">
+    <h2>🥇 เมนูขายดี Top 10 <span style="font-size:11px;color:#9ca3af;font-weight:500">(แตะเพื่อดูใครซื้อ)</span></h2>
     <div id="topItems"></div>
   </div>
 
+  <!-- Top customers -->
   <div class="card">
     <h2>🏆 ลูกค้า Top 10</h2>
     <div id="topList"></div>
   </div>
 
+  <!-- Loyalty operational stats -->
+  <div class="card">
+    <h2>🎁 สรุปการแลกแต้ม / สิทธิ์ฟรี</h2>
+    <div id="loyaltyOps"></div>
+  </div>
+
+  <!-- Near reward -->
   <div class="card">
     <h2>🔥 ใกล้ครบรางวัล (≥80%)</h2>
     <div id="nearList"></div>
   </div>
 
+  <!-- Recent orders -->
   <div class="card">
     <h2>📋 ออเดอร์ล่าสุด</h2>
     <div id="recentOrders"></div>
@@ -519,6 +654,17 @@
   <div style="display:none">
     <span id="statCustomers"></span><span id="statBoxes"></span><span id="statRedeemed"></span>
     <div id="salesReport"></div><div id="dailyChart"></div>
+  </div>
+</div>
+
+<!-- ========== Power BI-style Drill Modal ========== -->
+<div class="drill-modal-bg" id="drillModalBg" onclick="if(event.target===this)closeDrill()">
+  <div class="drill-modal" id="drillModalBody">
+    <div class="drill-head">
+      <h3 id="drillTitle">รายละเอียด</h3>
+      <button class="drill-close" onclick="closeDrill()">×</button>
+    </div>
+    <div id="drillContent"></div>
   </div>
 </div>
 
@@ -1471,35 +1617,31 @@ function deleteOrder(orderId) {
   if (checkSelectedId) renderCheck();
 }
 
-// ========== Check / Redeem ==========
-const checkLookup = document.getElementById('checkLookup');
-const checkAc = document.getElementById('checkAcList');
+// ========== Customer Detail (merged เช็ก + ลูกค้า) ==========
+let custFilter = 'all';
 
-checkLookup.addEventListener('input', () => {
-  const q = checkLookup.value.trim();
-  if (!q) { checkAc.style.display = 'none'; checkSelectedId = null; document.getElementById('checkResult').innerHTML = ''; return; }
-  const matches = findCustomers(q).slice(0, 8);
-  if (!matches.length) { checkAc.style.display = 'none'; document.getElementById('checkResult').innerHTML = '<div class="empty">ไม่พบลูกค้า</div>'; return; }
-  checkAc.innerHTML = matches.map(c => {
-    const r = rewardsAvailable(c);
-    return `<div class="ac-item" onclick="selectCheckCustomer('${c.id}')">
-      <div class="n">${c.name} ${r>0?`<span class="badge badge-reward">🎁 ${r}</span>`:''}</div>
-      <div class="p">สะสม ${c.total_boxes} กล่อง${c.phone?` · ${c.phone}`:''}</div>
-    </div>`;
-  }).join('');
-  checkAc.style.display = 'block';
-});
+function setCustFilter(f) {
+  custFilter = f;
+  document.querySelectorAll('.cust-filter-btn').forEach(b => b.classList.toggle('active', b.dataset.filter === f));
+  renderCustomers();
+}
 
-checkLookup.addEventListener('blur', () => {
-  setTimeout(() => checkAc.style.display = 'none', 200);
-});
-
-function selectCheckCustomer(id) {
+function openCustomerDetail(id) {
   checkSelectedId = id;
-  const c = getCustomer(id);
-  checkLookup.value = c.name + (c.phone ? ` (${c.phone})` : '');
-  checkAc.style.display = 'none';
-  renderCheck();
+  document.getElementById('cust-list-view').style.display = 'none';
+  document.getElementById('cust-detail-view').style.display = 'block';
+  renderCustomerDetail();
+  // Switch to ลูกค้า tab if not already there
+  const custTab = document.querySelector('[data-page=customers]');
+  if (!custTab.classList.contains('active')) custTab.click();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function closeCustomerDetail() {
+  checkSelectedId = null;
+  document.getElementById('cust-list-view').style.display = 'block';
+  document.getElementById('cust-detail-view').style.display = 'none';
+  renderCustomers();
 }
 
 function shortDate(iso) {
@@ -1508,12 +1650,50 @@ function shortDate(iso) {
          d.toLocaleTimeString('th-TH', { hour:'2-digit', minute:'2-digit' });
 }
 
+// Merge legacy db.orders + db.pendingOrders (status='done') without double-counting
+function getCompletedOrdersForCustomer(customerId) {
+  const out = [];
+  const seen = new Set();
+  // pendingOrders done → richer (has items, total, completed_at)
+  (db.pendingOrders || []).filter(o => o.customer_id === customerId && o.status === 'done').forEach(o => {
+    out.push({
+      _src: 'pending', id: o.id,
+      date: o.completed_at || o.date,
+      boxes: o.boxes || (window.countMainDishes ? window.countMainDishes(o.items || []) : (o.items?.length || 0)),
+      total: o.total || 0,
+      items: o.items || [],
+      points_earned: o.points_earned || 0,
+      points_used: o.points_used || 0,
+      reward_type: o.reward_type || null,
+      free_drink_used: !!o.free_drink_used,
+      delivery_type: o.delivery_type || null,
+      note: o.note || ''
+    });
+    seen.add(o.completed_at || o.date);
+  });
+  // legacy db.orders that aren't already in pendingOrders
+  (db.orders || []).filter(o => o.customer_id === customerId).forEach(o => {
+    const dateKey = o.completed_at || o.date;
+    if (seen.has(dateKey)) return;
+    out.push({
+      _src: 'legacy', id: o.id,
+      date: dateKey,
+      boxes: o.boxes || 0,
+      total: o.total != null ? o.total : (o.boxes || 0) * (o.price_per_box || db.settings.pricePerBox || 50),
+      items: o.items || [],
+      points_earned: 0, points_used: 0,
+      note: o.note || ''
+    });
+  });
+  return out.sort((a,b) => new Date(a.date) - new Date(b.date));
+}
+
 function buildLedger(customerId) {
   const events = [];
-  db.orders.filter(o => o.customer_id === customerId).forEach(o => {
-    events.push({ kind:'order', date:o.date, boxes:o.boxes, id:o.id, note:o.note });
+  getCompletedOrdersForCustomer(customerId).forEach(o => {
+    events.push({ kind:'order', date:o.date, boxes:o.boxes, id:o.id, note:o.note, total:o.total, items:o.items, points_earned:o.points_earned, points_used:o.points_used, reward_type:o.reward_type, free_drink_used:o.free_drink_used });
   });
-  db.redemptions.filter(r => r.customer_id === customerId).forEach(r => {
+  (db.redemptions || []).filter(r => r.customer_id === customerId).forEach(r => {
     events.push({ kind:'redeem', date:r.date, boxes:r.boxes_used || db.settings.goal, id:r.id });
   });
   events.sort((a,b) => new Date(a.date) - new Date(b.date));
@@ -1526,82 +1706,197 @@ function buildLedger(customerId) {
   return events;
 }
 
-function renderCheck() {
-  const box = document.getElementById('checkResult');
+function customerLTV(c) {
+  return getCompletedOrdersForCustomer(c.id).reduce((s,o) => s + (o.total || 0), 0);
+}
+
+function customerLastOrderDate(c) {
+  const orders = getCompletedOrdersForCustomer(c.id);
+  return orders.length ? orders[orders.length - 1].date : null;
+}
+
+function customerFavoriteItem(c) {
+  const counts = {};
+  getCompletedOrdersForCustomer(c.id).forEach(o => {
+    (o.items || []).forEach(it => {
+      const k = it.mainName || it.name || '';
+      if (!k) return;
+      counts[k] = (counts[k] || 0) + (it.qty || 1);
+    });
+  });
+  const top = Object.entries(counts).sort((a,b) => b[1]-a[1])[0];
+  return top ? { name: top[0], qty: top[1] } : null;
+}
+
+function toggleOrderDetail(orderRowId) {
+  const el = document.getElementById('orow-' + orderRowId);
+  if (el) el.style.display = el.style.display === 'none' ? 'table-row' : 'none';
+}
+
+function renderCustomerDetail() {
+  const box = document.getElementById('customerDetail');
   if (!checkSelectedId) { box.innerHTML = ''; return; }
   const c = getCustomer(checkSelectedId);
   if (!c) { box.innerHTML = '<div class="empty">ไม่พบลูกค้า</div>'; return; }
+
   const r = rewardsAvailable(c);
   const prog = progressToNext(c);
+  const ltv = customerLTV(c);
+  const orders = getCompletedOrdersForCustomer(c.id);
+  const fav = customerFavoriteItem(c);
+  const lastDate = customerLastOrderDate(c);
+  const daysSinceLast = lastDate ? Math.floor((Date.now() - new Date(lastDate).getTime()) / 86400000) : null;
+  const joinedStr = c.joined ? new Date(c.joined).toLocaleDateString('th-TH') : '—';
 
-  // Build ledger
+  // Points
+  const points = c.points || 0;
+  const lifetime = c.lifetime_points || 0;
+  const drinkRedeemed = c.drink_redeemed_count || 0;
+  const dishRedeemed = c.dish_redeemed_count || 0;
+  const drinkReady = points >= (window.LOYALTY?.REWARD_DRINK_POINTS || 10);
+  const discountReady = points >= (window.LOYALTY?.REWARD_DISCOUNT_POINTS || 15);
+
+  // Ledger
   const events = buildLedger(c.id);
   let totalIn = 0, totalOut = 0;
   const rows = events.length === 0
-    ? `<tr><td colspan="4" style="text-align:center;color:#9ca3af;padding:20px">— ยังไม่มีรายการ —</td></tr>`
-    : events.map(e => {
+    ? `<tr><td colspan="5" style="text-align:center;color:#9ca3af;padding:20px">— ยังไม่มีรายการ —</td></tr>`
+    : events.map((e, idx) => {
         if (e.kind === 'order') {
           totalIn += e.boxes;
-          return `<tr style="border-bottom:1px solid #f3f4f6;cursor:pointer" onclick="editOrder('${e.id}')">
-            <td style="padding:8px 4px">${shortDate(e.date)}${e.note?`<div style="font-size:11px;color:#9ca3af">${e.note}</div>`:''}</td>
-            <td style="padding:8px 4px;text-align:right;color:#1652F0;font-weight:600">+${e.boxes}</td>
-            <td style="padding:8px 4px;text-align:right;color:#d1d5db">—</td>
-            <td style="padding:8px 4px;text-align:right;font-weight:700">${e.balance}</td>
-          </tr>`;
+          const itemsList = (e.items || []).map(it => {
+            const opts = (it.options || []).filter(o => o.choice).map(o => o.choice).join(', ');
+            return `<div style="font-size:11.5px;color:#5c6982;padding:2px 0">• ${it.qty || 1}× <b>${it.mainName || it.name}</b>${opts?` <span style="color:#9ca3af">(${opts})</span>`:''}${it.price?` <span style="color:#1652F0">฿${it.price * (it.qty||1)}</span>`:''}${it.note?` <span style="color:#dc2626">📝${it.note}</span>`:''}</div>`;
+          }).join('');
+          const ptsBadge = e.points_earned ? ` <span style="color:#16a34a;font-weight:700;font-size:11px">+${e.points_earned}pt</span>` : '';
+          const usedBadge = e.points_used ? ` <span style="color:#dc2626;font-weight:700;font-size:11px">-${e.points_used}pt</span>` : '';
+          const rewardBadge = e.reward_type === 'drink' ? ' 🥤' : e.reward_type === 'discount' ? ' 🎁' : '';
+          return `<tr style="border-bottom:1px solid #f3f4f6;cursor:pointer" onclick="toggleOrderDetail('${idx}')">
+              <td style="padding:8px 4px">${shortDate(e.date)}${ptsBadge}${usedBadge}${rewardBadge}${e.note?`<div style="font-size:11px;color:#9ca3af">${e.note}</div>`:''}</td>
+              <td style="padding:8px 4px;text-align:right;color:#1652F0;font-weight:600">+${e.boxes}</td>
+              <td style="padding:8px 4px;text-align:right;color:#d1d5db">—</td>
+              <td style="padding:8px 4px;text-align:right;color:#0a1530;font-weight:700">${fmtBaht(e.total||0).replace('฿','')}</td>
+              <td style="padding:8px 4px;text-align:right;font-weight:700">${e.balance}</td>
+            </tr>
+            <tr id="orow-${idx}" style="display:none;background:#fafbfd"><td colspan="5" style="padding:8px 12px;border-bottom:1px solid #f3f4f6">
+              <div style="font-size:11px;color:#9ca3af;margin-bottom:4px">รายการ:</div>
+              ${itemsList || '<div style="color:#9ca3af;font-size:12px">— ไม่มีข้อมูลเมนู —</div>'}
+              <div style="margin-top:6px;display:flex;gap:8px">
+                <button class="btn-ghost" style="font-size:11px;padding:4px 10px;width:auto" onclick="event.stopPropagation();editOrder('${e.id}')">✏️ แก้ไข</button>
+              </div>
+            </td></tr>`;
         } else {
           totalOut += e.boxes;
           return `<tr style="border-bottom:1px solid #f3f4f6;background:#ebf0ff;cursor:pointer" onclick="confirmDeleteRedemption('${e.id}')">
             <td style="padding:8px 4px">${shortDate(e.date)} <span style="color:#0a1530">🎁 แลกฟรี</span></td>
             <td style="padding:8px 4px;text-align:right;color:#d1d5db">—</td>
             <td style="padding:8px 4px;text-align:right;color:#dc2626;font-weight:600">-${e.boxes}</td>
+            <td style="padding:8px 4px;text-align:right;color:#d1d5db">—</td>
             <td style="padding:8px 4px;text-align:right;font-weight:700">${e.balance}</td>
           </tr>`;
         }
       }).join('');
 
   box.innerHTML = `
-    <div style="text-align:center;padding:8px 0">
-      <div style="font-size:18px;font-weight:700">${c.name}</div>
-      ${c.phone?`<div style="color:#6b7280;font-size:13px">${c.phone}</div>`:''}
+    <!-- Header -->
+    <div class="cust-detail-section" style="background:linear-gradient(135deg,#1652F0,#0738C9);color:#fff;border:none">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-size:22px;font-weight:800">${c.name}</div>
+          ${c.phone?`<div style="opacity:.85;font-size:13px;margin-top:2px">📞 ${c.phone}</div>`:'<div style="opacity:.7;font-size:12px;margin-top:2px">— ไม่มีเบอร์ —</div>'}
+          <div style="opacity:.7;font-size:11px;margin-top:6px">เริ่มสมาชิก ${joinedStr}${daysSinceLast!=null?` · ครั้งล่าสุด ${daysSinceLast===0?'วันนี้':daysSinceLast+' วันก่อน'}`:''}</div>
+        </div>
+        <button class="btn-ghost" onclick="editCustomer('${c.id}')" style="background:rgba(255,255,255,.18);color:#fff;border-color:rgba(255,255,255,.3);padding:6px 12px;width:auto;font-size:12px">✏️ แก้ไข</button>
+      </div>
     </div>
-    <div class="progress">
-      <div class="progress-bar" style="width:${prog.pct}%"></div>
-      <div class="progress-text">${prog.current} / ${prog.goal} กล่อง</div>
-    </div>
-    <div class="stat" style="margin-top:12px">
-      <div class="stat-box"><div class="num">${c.total_boxes}</div><div class="lbl">สะสมรวม</div></div>
-      <div class="stat-box"><div class="num">${c.redeemed_count}</div><div class="lbl">แลกไป</div></div>
-      <div class="stat-box"><div class="num" style="color:${r>0?'#16a34a':'#1652F0'}">${r}</div><div class="lbl">สิทธิ์ฟรี</div></div>
-    </div>
-    ${r > 0 ? `<button class="btn-success" style="width:100%;margin-top:8px" onclick="redeem('${c.id}')">🎁 แลกข้าวฟรี 1 กล่อง</button>` : ''}
 
-    <h3 style="margin:16px 0 8px">📒 บัตรสะสม (สต๊อกการ์ด)</h3>
-    <div style="overflow-x:auto">
-    <table style="width:100%;border-collapse:collapse;font-size:13px">
-      <thead>
-        <tr style="border-bottom:2px solid #1652F0;color:#1652F0">
-          <th style="text-align:left;padding:8px 4px">วันที่</th>
-          <th style="text-align:right;padding:8px 4px">ซื้อ</th>
-          <th style="text-align:right;padding:8px 4px">แลก</th>
-          <th style="text-align:right;padding:8px 4px">คงเหลือ</th>
-        </tr>
-      </thead>
-      <tbody>${rows}</tbody>
-      ${events.length ? `<tfoot>
-        <tr style="border-top:2px solid #1652F0;font-weight:700;background:#ebf0ff">
-          <td style="padding:10px 4px">รวม</td>
-          <td style="text-align:right;padding:10px 4px;color:#1652F0">+${totalIn}</td>
-          <td style="text-align:right;padding:10px 4px;color:#dc2626">-${totalOut}</td>
-          <td style="text-align:right;padding:10px 4px;font-size:15px">${totalIn - totalOut}</td>
-        </tr>
-      </tfoot>` : ''}
-    </table>
+    <!-- KPI grid -->
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:10px">
+      <div class="cust-mini-kpi" style="background:#ebf0ff;border-color:#c5d3ff"><div class="v" style="color:#1652F0">${points}</div><div class="l">แต้มคงเหลือ</div></div>
+      <div class="cust-mini-kpi"><div class="v">${lifetime}</div><div class="l">แต้มสะสมทั้งหมด</div></div>
+      <div class="cust-mini-kpi"><div class="v">${orders.length}</div><div class="l">ออเดอร์ทั้งหมด</div></div>
+      <div class="cust-mini-kpi" style="background:#dcfce7;border-color:#86efac"><div class="v" style="color:#16a34a">${fmtBaht(ltv).replace('฿','')}</div><div class="l">฿ยอดซื้อรวม</div></div>
     </div>
-    <div class="hint" style="margin-top:6px">💡 กดที่แถวเพื่อแก้ไข/ลบ · แถวสีเหลือง = การแลกฟรี</div>
+
+    <!-- Loyalty progress -->
+    <div class="cust-detail-section">
+      <h4>🎯 ความคืบหน้า · สิทธิ์ฟรี</h4>
+      <div class="progress">
+        <div class="progress-bar" style="width:${prog.pct}%"></div>
+        <div class="progress-text">${prog.current} / ${prog.goal} กล่อง</div>
+      </div>
+      <div class="stat" style="margin-top:10px">
+        <div class="stat-box"><div class="num">${c.total_boxes}</div><div class="lbl">สะสมรวม</div></div>
+        <div class="stat-box"><div class="num">${c.redeemed_count}</div><div class="lbl">แลกไป</div></div>
+        <div class="stat-box"><div class="num" style="color:${r>0?'#16a34a':'#1652F0'}">${r}</div><div class="lbl">สิทธิ์ฟรี</div></div>
+      </div>
+      ${r > 0 ? `<button class="btn-success" style="width:100%;margin-top:8px" onclick="redeem('${c.id}')">🎁 แลกข้าวฟรี 1 กล่อง</button>` : ''}
+      ${(drinkReady || discountReady) ? `
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+          ${drinkReady ? `<span class="badge badge-reward">🥤 พร้อมแลกเครื่องดื่มฟรี (10pt)</span>` : ''}
+          ${discountReady ? `<span class="badge badge-reward">🎁 พร้อมแลกส่วนลด 50฿ (15pt)</span>` : ''}
+        </div>` : ''}
+    </div>
+
+    <!-- Loyalty stats -->
+    <div class="cust-detail-section">
+      <h4>📊 สรุปการแลกแต้ม</h4>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;font-size:12px">
+        <div style="padding:8px;background:#f7f8fb;border-radius:8px">
+          <div style="color:#5c6982">🥤 เครื่องดื่มฟรี (10pt/แก้ว)</div>
+          <div style="font-size:18px;font-weight:800;color:#0a1530">${drinkRedeemed} <span style="font-size:11px;color:#9ca3af">ครั้ง</span></div>
+        </div>
+        <div style="padding:8px;background:#f7f8fb;border-radius:8px">
+          <div style="color:#5c6982">🎁 ส่วนลด 50฿ (15pt/ครั้ง)</div>
+          <div style="font-size:18px;font-weight:800;color:#0a1530">${dishRedeemed} <span style="font-size:11px;color:#9ca3af">ครั้ง</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Favorite item -->
+    ${fav ? `
+    <div class="cust-detail-section">
+      <h4>❤️ เมนูที่สั่งบ่อยสุด</h4>
+      <div style="font-size:15px;font-weight:700;color:#0a1530">${fav.name}</div>
+      <div style="font-size:12px;color:#5c6982;margin-top:2px">สั่งไป ${fav.qty} จาน</div>
+    </div>` : ''}
+
+    <!-- Stock card / ledger -->
+    <div class="cust-detail-section">
+      <h4>📒 บัตรสะสม (สต๊อกการ์ด) <span style="font-size:11px;color:#9ca3af;font-weight:500">${events.length} รายการ</span></h4>
+      <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="border-bottom:2px solid #1652F0;color:#1652F0">
+            <th style="text-align:left;padding:8px 4px">วันที่</th>
+            <th style="text-align:right;padding:8px 4px">ซื้อ</th>
+            <th style="text-align:right;padding:8px 4px">แลก</th>
+            <th style="text-align:right;padding:8px 4px">฿</th>
+            <th style="text-align:right;padding:8px 4px">คงเหลือ</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+        ${events.length ? `<tfoot>
+          <tr style="border-top:2px solid #1652F0;font-weight:700;background:#ebf0ff">
+            <td style="padding:10px 4px">รวม</td>
+            <td style="text-align:right;padding:10px 4px;color:#1652F0">+${totalIn}</td>
+            <td style="text-align:right;padding:10px 4px;color:#dc2626">-${totalOut}</td>
+            <td style="text-align:right;padding:10px 4px;color:#16a34a">${fmtBaht(ltv).replace('฿','')}</td>
+            <td style="text-align:right;padding:10px 4px;font-size:15px">${totalIn - totalOut}</td>
+          </tr>
+        </tfoot>` : ''}
+      </table>
+      </div>
+      <div class="hint" style="margin-top:6px">💡 แตะแถวเพื่อดูรายการเมนู · แถวสีน้ำเงินอ่อน = การแลกฟรี · แตะอีกครั้งเพื่อปิด</div>
+    </div>
 
     <button class="btn-ghost" style="width:100%;margin-top:8px" onclick="editCustomer('${c.id}')">✏️ แก้ไขชื่อ/เบอร์ลูกค้า</button>
   `;
 }
+
+// Backward compat
+function renderCheck() { renderCustomerDetail(); }
+function selectCheckCustomer(id) { openCustomerDetail(id); }
 
 function confirmDeleteRedemption(redemptionId) {
   const r = db.redemptions.find(x => x.id === redemptionId);
@@ -1686,7 +1981,7 @@ function saveEdit(id) {
   saveDB();
   closeModal();
   toast('✅ แก้ไขแล้ว');
-  if (checkSelectedId === id) renderCheck();
+  if (checkSelectedId === id) renderCustomerDetail();
   renderCustomers();
 }
 
@@ -1696,46 +1991,91 @@ function deleteCustomer(id) {
   saveDB();
   closeModal();
   toast('🗑️ ลบแล้ว');
-  if (checkSelectedId === id) {
-    checkSelectedId = null;
-    document.getElementById('checkLookup').value = '';
-    document.getElementById('checkResult').innerHTML = '';
-  }
+  if (checkSelectedId === id) closeCustomerDetail();
   renderCustomers();
 }
 
-// ========== Customers List ==========
+// ========== Customers List (with filter, sort, KPI bar) ==========
 function renderCustomers() {
-  const q = document.getElementById('custSearch').value.toLowerCase();
-  const list = Object.values(db.customers)
-    .filter(c => !q || c.name.toLowerCase().includes(q) || (c.phone && c.phone.includes(q)))
-    .sort((a, b) => b.total_boxes - a.total_boxes);
-  const box = document.getElementById('customersList');
-  if (!list.length) { box.innerHTML = '<div class="empty">ยังไม่มีลูกค้า</div>'; return; }
-  box.innerHTML = list.map(c => {
+  const searchEl = document.getElementById('custSearch');
+  if (!searchEl) return;
+  const q = searchEl.value.toLowerCase().trim();
+  const sortEl = document.getElementById('custSort');
+  const sortBy = sortEl ? sortEl.value : 'boxes';
+  const goal = db.settings?.goal || 20;
+  const now = Date.now();
+
+  const all = Object.values(db.customers);
+
+  // Pre-compute fields
+  const enriched = all.map(c => {
     const r = rewardsAvailable(c);
     const prog = progressToNext(c);
-    const near = prog.pct >= 80 && r === 0;
+    const ltv = customerLTV(c);
+    const last = customerLastOrderDate(c);
+    const daysSinceLast = last ? Math.floor((now - new Date(last).getTime()) / 86400000) : 999;
+    const joinedAge = c.joined ? (now - new Date(c.joined).getTime()) / 86400000 : 999;
+    return { c, r, prog, ltv, last, daysSinceLast, joinedAge };
+  });
+
+  // KPI bar
+  const totalCust = enriched.length;
+  const withReward = enriched.filter(x => x.r > 0).length;
+  const nearReward = enriched.filter(x => x.prog.pct >= 80 && x.r === 0).length;
+  const dormant = enriched.filter(x => x.daysSinceLast >= 30 && x.last).length;
+  const kpiBar = document.getElementById('custKpiBar');
+  if (kpiBar) kpiBar.innerHTML = `
+    <div class="cust-mini-kpi"><div class="v">${totalCust}</div><div class="l">รวมทั้งหมด</div></div>
+    <div class="cust-mini-kpi" style="background:#dcfce7;border-color:#86efac"><div class="v" style="color:#16a34a">${withReward}</div><div class="l">มีสิทธิ์ฟรี</div></div>
+    <div class="cust-mini-kpi" style="background:#fff7ed;border-color:#fdba74"><div class="v" style="color:#ea580c">${nearReward}</div><div class="l">ใกล้ครบ</div></div>
+    <div class="cust-mini-kpi" style="background:#f3f4f6;border-color:#d1d5db"><div class="v" style="color:#6b7280">${dormant}</div><div class="l">หาย ≥30d</div></div>
+  `;
+
+  // Filter
+  let filtered = enriched.filter(x => {
+    if (q) {
+      const hit = x.c.name.toLowerCase().includes(q) || (x.c.phone && x.c.phone.includes(q));
+      if (!hit) return false;
+    }
+    if (custFilter === 'reward') return x.r > 0;
+    if (custFilter === 'near') return x.prog.pct >= 80 && x.r === 0;
+    if (custFilter === 'vip') return x.ltv >= 500 || x.c.total_boxes >= goal;
+    if (custFilter === 'new') return x.joinedAge <= 7;
+    if (custFilter === 'dormant') return x.daysSinceLast >= 30 && x.last;
+    return true;
+  });
+
+  // Sort
+  if (sortBy === 'boxes') filtered.sort((a,b) => b.c.total_boxes - a.c.total_boxes);
+  else if (sortBy === 'points') filtered.sort((a,b) => (b.c.points||0) - (a.c.points||0));
+  else if (sortBy === 'recent') filtered.sort((a,b) => (b.last ? new Date(b.last).getTime() : 0) - (a.last ? new Date(a.last).getTime() : 0));
+  else if (sortBy === 'ltv') filtered.sort((a,b) => b.ltv - a.ltv);
+  else if (sortBy === 'name') filtered.sort((a,b) => a.c.name.localeCompare(b.c.name, 'th'));
+
+  const box = document.getElementById('customersList');
+  if (!filtered.length) { box.innerHTML = '<div class="empty">— ไม่พบลูกค้าในเงื่อนไขนี้ —</div>'; return; }
+  box.innerHTML = filtered.map(x => {
+    const c = x.c;
+    const near = x.prog.pct >= 80 && x.r === 0;
+    const points = c.points || 0;
+    const lastStr = x.last ? (x.daysSinceLast === 0 ? 'วันนี้' : `${x.daysSinceLast}d`) : '—';
     return `
-      <div class="customer-item" onclick="goToCheck('${c.id}')">
+      <div class="customer-item" onclick="openCustomerDetail('${c.id}')" style="cursor:pointer">
         <div class="info">
           <div class="name">${c.name}
-            ${r > 0 ? `<span class="badge badge-reward">🎁 ฟรี ${r}</span>` : ''}
+            ${x.r > 0 ? `<span class="badge badge-reward">🎁 ฟรี ${x.r}</span>` : ''}
             ${near ? '<span class="badge badge-near">ใกล้ครบ</span>' : ''}
+            ${points >= 15 ? '<span class="badge badge-reward" style="background:#fef3c7;color:#92400e">15pt</span>' : points >= 10 ? '<span class="badge badge-reward" style="background:#ebf0ff;color:#1652F0">10pt</span>' : ''}
           </div>
           ${c.phone ? `<div class="phone">${c.phone}</div>` : ''}
-          <div class="meta">สะสมรวม ${c.total_boxes} · แลกไป ${c.redeemed_count} · ความคืบหน้า ${prog.current}/${prog.goal}</div>
+          <div class="meta">📦 ${c.total_boxes} · 🎁 ${c.redeemed_count} · ⭐ ${points}pt · 💰 ${fmtBaht(x.ltv).replace('฿','')} · 🕐 ${lastStr}</div>
         </div>
       </div>`;
   }).join('');
 }
 
 function goToCheck(id) {
-  checkSelectedId = id;
-  const c = getCustomer(id);
-  document.querySelector('[data-page=check]').click();
-  document.getElementById('checkLookup').value = c.name + (c.phone ? ` (${c.phone})` : '');
-  renderCheck();
+  openCustomerDetail(id);
 }
 
 // ========== Reports / Dashboard ==========
@@ -1764,6 +2104,9 @@ function rangeBounds(range) {
   }
   return { start: new Date(0), label: 'ทั้งหมด' };
 }
+
+// Cache for drill-down (populated by renderReports)
+window._reportCache = null;
 
 function renderReports() {
   const price = db.settings.pricePerBox || 50;
@@ -1947,7 +2290,439 @@ function renderReports() {
         </div>`;
       }).join('')
     : '<div class="empty">— ยังไม่มี —</div>';
+
+  // ===== AOV KPI + comparison =====
+  const prevOrders = inPrev.length;
+  const prevAOV = prevOrders ? Math.round(sumRev(inPrev) / prevOrders) : 0;
+  const aovDiff = prevAOV > 0 ? Math.round(((avgOrder - prevAOV) / prevAOV) * 100) : null;
+  document.getElementById('kpiAOV').textContent = fmtBaht(avgOrder);
+  document.getElementById('kpiAOVSub').textContent = aovDiff === null
+    ? `${orderCount} ออเดอร์`
+    : (aovDiff >= 0 ? `↑ ${aovDiff}% vs ก่อนหน้า` : `↓ ${Math.abs(aovDiff)}% vs ก่อนหน้า`);
+
+  // ===== Loyalty KPI (points issued / redeemed) =====
+  const ptsIssued = inRange.reduce((s,o) => s + (o.points_earned || 0), 0);
+  const ptsUsed = inRange.reduce((s,o) => s + (o.points_used || 0), 0);
+  const drinkRedeems = inRange.filter(o => o.reward_type === 'drink' || o.free_drink_used).length;
+  const discountRedeems = inRange.filter(o => o.reward_type === 'discount').length;
+  const freeBoxes = inRange.reduce((s,o) => s + (o.free_boxes_used || 0), 0);
+  document.getElementById('kpiPoints').textContent = ptsIssued;
+  document.getElementById('kpiPointsSub').textContent = `แลกไป ${ptsUsed}pt · 🥤${drinkRedeems} · 🎁${discountRedeems}`;
+
+  // ===== Channel mix =====
+  const channels = { pickup: 0, delivery: 0, walkin: 0, phone: 0, online: 0, factory: 0 };
+  const channelRev = { pickup: 0, delivery: 0, walkin: 0, phone: 0, online: 0, factory: 0 };
+  inRange.forEach(o => {
+    let key;
+    if (o.is_factory || (typeof o.customer_id === 'string' && o.customer_id.startsWith('factory-'))) key = 'factory';
+    else if (typeof o.customer_id === 'string' && o.customer_id.startsWith('walkin-')) key = 'walkin';
+    else if (o.delivery_type === 'delivery') key = 'delivery';
+    else if (o.delivery_type === 'pickup') key = 'pickup';
+    else if (o.source === 'in-store-quick' || o.source === 'phone') key = 'phone';
+    else key = 'online';
+    channels[key] = (channels[key] || 0) + 1;
+    channelRev[key] = (channelRev[key] || 0) + ((o.total != null) ? o.total : (o.boxes || 0) * price);
+  });
+  document.getElementById('channelMix').innerHTML = renderChannelMix(channels, channelRev);
+
+  // ===== Day × Hour Heatmap =====
+  // Build matrix: 7 rows (Sun-Sat) × 24 cols
+  const heatData = Array.from({length: 7}, () => new Array(24).fill(0));
+  // For 'today' range, use last 30d so heatmap has data
+  const heatStart = currentRange === 'today' ? (() => { const d = startOfDay(new Date()); d.setDate(d.getDate() - 29); return d; })() : start;
+  const heatLabel = currentRange === 'today' ? '30 วันล่าสุด' : label;
+  allCompleted.filter(o => new Date(o._useDate) >= heatStart).forEach(o => {
+    const d = new Date(o.date || o._useDate);
+    heatData[d.getDay()][d.getHours()]++;
+  });
+  document.getElementById('dayHourHeatmap').innerHTML = renderHeatmap(heatData, heatLabel);
+
+  // ===== Category breakdown =====
+  const catCounts = {};
+  const allCats = window.MENU || [];
+  const itemToCat = {};
+  allCats.forEach(cat => {
+    cat.items.forEach(it => { itemToCat[it.name] = cat.cat; itemToCat[it.id] = cat.cat; });
+  });
+  inRange.forEach(o => {
+    (o.items || []).forEach(it => {
+      const cat = itemToCat[it.mainName] || itemToCat[it.name] || itemToCat[it.id] || 'อื่นๆ';
+      if (!catCounts[cat]) catCounts[cat] = { qty: 0, revenue: 0 };
+      const qty = it.qty || 1;
+      const free = it.freeQty || 0;
+      catCounts[cat].qty += qty;
+      catCounts[cat].revenue += (it.price || 0) * (qty - free);
+    });
+  });
+  const catList = Object.entries(catCounts).sort((a,b) => b[1].revenue - a[1].revenue);
+  const maxCatRev = catList[0]?.[1].revenue || 1;
+  document.getElementById('categoryBreakdown').innerHTML = catList.length
+    ? catList.map(([name, v]) => {
+        const pct = (v.revenue / maxCatRev) * 100;
+        return `<div class="bar-row" style="cursor:pointer" onclick="drillDown('category', ${JSON.stringify(name).replace(/"/g,'&quot;')})">
+          <div class="label-row">
+            <span class="name">${name}</span>
+            <span class="val">${v.qty} จาน · ${fmtBaht(v.revenue)}</span>
+          </div>
+          <div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div>
+        </div>`;
+      }).join('')
+    : '<div class="empty">— ยังไม่มี —</div>';
+
+  // ===== Loyalty ops summary =====
+  const totalPtsBank = customers.reduce((s,c) => s + (c.points || 0), 0);
+  const totalLifetime = customers.reduce((s,c) => s + (c.lifetime_points || 0), 0);
+  const totalDrinkRedeems = customers.reduce((s,c) => s + (c.drink_redeemed_count || 0), 0);
+  const totalDishRedeems = customers.reduce((s,c) => s + (c.dish_redeemed_count || 0), 0);
+  const totalFreeBoxes = customers.reduce((s,c) => s + (c.redeemed_count || 0), 0);
+  const customersWithRewards = customers.filter(c => rewardsAvailable(c) > 0).length;
+  document.getElementById('loyaltyOps').innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;font-size:12px">
+      <div style="padding:10px;background:#ebf0ff;border-radius:10px">
+        <div style="color:#5c6982;font-size:11px">⭐ แต้มในระบบ (รวมทุกคน)</div>
+        <div style="font-size:20px;font-weight:800;color:#1652F0">${totalPtsBank.toLocaleString()}</div>
+        <div style="font-size:11px;color:#9ca3af">สะสม Lifetime ${totalLifetime.toLocaleString()}pt</div>
+      </div>
+      <div style="padding:10px;background:#dcfce7;border-radius:10px">
+        <div style="color:#5c6982;font-size:11px">🎁 ลูกค้ามีสิทธิ์รออยู่</div>
+        <div style="font-size:20px;font-weight:800;color:#16a34a">${customersWithRewards}</div>
+        <div style="font-size:11px;color:#9ca3af">คน</div>
+      </div>
+      <div style="padding:10px;background:#fef3c7;border-radius:10px">
+        <div style="color:#5c6982;font-size:11px">🥤 เครื่องดื่มฟรี (Lifetime)</div>
+        <div style="font-size:20px;font-weight:800;color:#92400e">${totalDrinkRedeems}</div>
+        <div style="font-size:11px;color:#9ca3af">งวดนี้ ${drinkRedeems} แก้ว</div>
+      </div>
+      <div style="padding:10px;background:#fee2e2;border-radius:10px">
+        <div style="color:#5c6982;font-size:11px">💰 ส่วนลด 50฿ (Lifetime)</div>
+        <div style="font-size:20px;font-weight:800;color:#dc2626">${totalDishRedeems}</div>
+        <div style="font-size:11px;color:#9ca3af">งวดนี้ ${discountRedeems} ครั้ง</div>
+      </div>
+      <div style="padding:10px;background:#f3f4f6;border-radius:10px;grid-column:span 2">
+        <div style="color:#5c6982;font-size:11px">🍱 กล่องฟรี (สะสมครบ 20 → ฟรี 1 กล่อง)</div>
+        <div style="font-size:20px;font-weight:800;color:#0a1530">${totalFreeBoxes} กล่อง</div>
+      </div>
+    </div>`;
+
+  // ===== Make top items clickable for drill =====
+  document.querySelectorAll('#topItems .bar-row').forEach((el, idx) => {
+    if (topItems[idx]) {
+      el.style.cursor = 'pointer';
+      el.onclick = () => drillDown('item', topItems[idx].name);
+    }
+  });
+
+  // Cache for drill-down access
+  window._reportCache = {
+    inRange, allCompleted, dayData, hourCounts, itemCounts, channels, channelRev,
+    heatData, catCounts, customers, label, range: currentRange, price,
+    revenue, boxes, orderCount, avgOrder, newCustomers, prevRevenue,
+    ptsIssued, ptsUsed, drinkRedeems, discountRedeems, freeBoxes
+  };
 }
+
+// ========== Channel Mix Renderer ==========
+function renderChannelMix(channels, channelRev) {
+  const labels = {
+    pickup: { l: '🏪 รับเอง', c: '#1652F0' },
+    delivery: { l: '🚚 เดลิเวอรี่', c: '#16a34a' },
+    walkin: { l: '🪑 หน้าร้าน', c: '#f59e0b' },
+    phone: { l: '📞 โทรสั่ง', c: '#8b5cf6' },
+    online: { l: '🌐 ออนไลน์', c: '#06b6d4' },
+    factory: { l: '🏭 โรงงาน', c: '#64748b' }
+  };
+  const total = Object.values(channels).reduce((s,n) => s+n, 0);
+  if (total === 0) return '<div class="empty">— ยังไม่มี —</div>';
+  const sorted = Object.entries(channels).filter(([_,v]) => v > 0).sort((a,b) => b[1]-a[1]);
+  const max = sorted[0][1];
+  return sorted.map(([k, v]) => {
+    const meta = labels[k] || { l: k, c: '#9ca3af' };
+    const pct = (v / max) * 100;
+    const sharePct = total ? Math.round((v/total)*100) : 0;
+    return `<div class="bar-row" style="cursor:pointer" onclick="drillDown('channel', '${k}')">
+      <div class="label-row">
+        <span class="name">${meta.l} <span style="color:#9ca3af;font-size:11px">${sharePct}%</span></span>
+        <span class="val">${v} ออเดอร์ · ${fmtBaht(channelRev[k])}</span>
+      </div>
+      <div class="bar-bg"><div class="bar-fill" style="width:${pct}%;background:linear-gradient(90deg,${meta.c}80,${meta.c})"></div></div>
+    </div>`;
+  }).join('');
+}
+
+// ========== Day × Hour Heatmap ==========
+function renderHeatmap(data, rangeLabel) {
+  const dayLabels = ['อา','จ','อ','พ','พฤ','ศ','ส'];
+  const max = Math.max(...data.flat(), 1);
+  const total = data.flat().reduce((s,n)=>s+n, 0);
+  if (total === 0) return '<div class="empty">— ยังไม่มี —</div>';
+  // Build the grid
+  let html = '<div style="overflow-x:auto"><div style="min-width:480px">';
+  // Header row (hours)
+  html += '<div class="heatmap-grid" style="margin-bottom:2px"><span></span>';
+  for (let h = 0; h < 24; h++) {
+    html += `<span style="text-align:center;font-size:8px;color:#9ca3af">${h%3===0?h:''}</span>`;
+  }
+  html += '</div>';
+  // Body rows
+  for (let d = 0; d < 7; d++) {
+    html += `<div class="heatmap-grid" style="margin-bottom:2px"><span class="heatmap-row-label">${dayLabels[d]}</span>`;
+    for (let h = 0; h < 24; h++) {
+      const v = data[d][h];
+      const intensity = v / max; // 0–1
+      const bg = v === 0 ? '#f3f4f6' : `rgba(22, 82, 240, ${0.15 + intensity * 0.85})`;
+      const fg = intensity > 0.5 ? '#fff' : '#5c6982';
+      html += `<div class="heatmap-cell" style="background:${bg};color:${fg}" title="${dayLabels[d]} ${h}:00 — ${v} ออเดอร์">${v||''}</div>`;
+    }
+    html += '</div>';
+  }
+  html += '</div></div>';
+  html += `<div style="text-align:center;font-size:11px;color:#9ca3af;margin-top:6px">${rangeLabel} · รวม ${total} ออเดอร์</div>`;
+  return html;
+}
+
+// ========== Drill-Down Modal ==========
+function drillDown(type, param) {
+  const cache = window._reportCache;
+  if (!cache) return;
+  const titleEl = document.getElementById('drillTitle');
+  const contentEl = document.getElementById('drillContent');
+  let title = 'รายละเอียด';
+  let content = '';
+
+  if (type === 'revenue') {
+    title = `💰 ยอดขาย ${cache.label}`;
+    const dailyRev = [...cache.dayData].sort((a,b) => b.revenue - a.revenue);
+    content = `
+      <div style="margin-bottom:12px;padding:12px;background:#ebf0ff;border-radius:10px">
+        <div style="font-size:12px;color:#5c6982">รวมยอดขาย</div>
+        <div style="font-size:28px;font-weight:900;color:#1652F0">${fmtBaht(cache.revenue)}</div>
+        <div style="font-size:12px;color:#5c6982;margin-top:4px">จาก ${cache.orderCount} ออเดอร์ · ${cache.boxes} จาน · เฉลี่ย ${fmtBaht(cache.avgOrder)}/ออเดอร์</div>
+      </div>
+      <h4 style="margin:8px 0">📅 ยอดขายแยกตามวัน (เรียงเยอะสุด)</h4>
+      ${dailyRev.filter(d => d.revenue > 0).map(d => `
+        <div class="bar-row">
+          <div class="label-row"><span class="name">${d.label}</span><span class="val">${fmtBaht(d.revenue)} · ${d.boxes} จาน</span></div>
+          <div class="bar-bg"><div class="bar-fill" style="width:${(d.revenue/(dailyRev[0].revenue||1))*100}%"></div></div>
+        </div>`).join('') || '<div class="empty">— ยังไม่มี —</div>'}
+    `;
+  } else if (type === 'boxes') {
+    title = `🍱 จานที่ขาย ${cache.label}`;
+    const itemList = Object.values(cache.itemCounts).sort((a,b) => b.qty - a.qty);
+    const max = itemList[0]?.qty || 1;
+    content = `
+      <div style="margin-bottom:12px;padding:12px;background:#ebf0ff;border-radius:10px">
+        <div style="font-size:12px;color:#5c6982">รวมจานขาย</div>
+        <div style="font-size:28px;font-weight:900;color:#1652F0">${cache.boxes} จาน</div>
+        <div style="font-size:12px;color:#5c6982;margin-top:4px">เฉลี่ย ${cache.orderCount ? (cache.boxes/cache.orderCount).toFixed(1) : 0} จาน/ออเดอร์</div>
+      </div>
+      <h4 style="margin:8px 0">📋 รายเมนู (${itemList.length} ชนิด)</h4>
+      ${itemList.length ? itemList.map(it => `
+        <div class="bar-row" style="cursor:pointer" data-drill-item="${escapeAttr(it.name)}">
+          <div class="label-row"><span class="name">${it.name}</span><span class="val">${it.qty} · ${fmtBaht(it.revenue)}</span></div>
+          <div class="bar-bg"><div class="bar-fill" style="width:${(it.qty/max)*100}%"></div></div>
+        </div>`).join('') : '<div class="empty">— ยังไม่มี —</div>'}
+    `;
+  } else if (type === 'orders') {
+    title = `🛒 ออเดอร์ ${cache.label}`;
+    const ordersList = [...cache.inRange].sort((a,b) => new Date(b._useDate) - new Date(a._useDate));
+    content = `
+      <div style="margin-bottom:12px;padding:12px;background:#ebf0ff;border-radius:10px">
+        <div style="font-size:12px;color:#5c6982">รวมออเดอร์</div>
+        <div style="font-size:28px;font-weight:900;color:#1652F0">${cache.orderCount}</div>
+        <div style="font-size:12px;color:#5c6982;margin-top:4px">เฉลี่ย ${fmtBaht(cache.avgOrder)}/ออเดอร์</div>
+      </div>
+      <h4 style="margin:8px 0">📋 ออเดอร์ทั้งหมด</h4>
+      ${ordersList.map(o => {
+        const c = getCustomer(o.customer_id);
+        const name = c?.name || o.customer_name || '?';
+        const total = (o.total != null) ? o.total : (o.boxes || 0) * (o.price_per_box || cache.price);
+        const itemSum = (o.items || []).map(i => `${i.qty}× ${i.mainName || i.name}`).join(', ').slice(0, 60) || (o.note || '');
+        return `<div class="order-item" onclick="closeDrill();editOrder('${o.id}')">
+          <div style="flex:1">
+            <div><b>${name}</b> · ${o.boxes} จาน · <span style="color:#1652F0">${fmtBaht(total)}</span></div>
+            <div style="font-size:11px;color:#6b7280">${fmtDate(o._useDate)}${itemSum?` · ${itemSum}`:''}</div>
+          </div></div>`;
+      }).join('') || '<div class="empty">— ยังไม่มี —</div>'}
+    `;
+  } else if (type === 'customers') {
+    title = `👥 ลูกค้าทั้งหมด`;
+    const allC = [...cache.customers].sort((a,b) => b.total_boxes - a.total_boxes);
+    const newC = allC.filter(c => c.joined && new Date(c.joined) >= rangeBounds(cache.range).start);
+    content = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+        <div style="padding:10px;background:#ebf0ff;border-radius:10px"><div style="font-size:11px;color:#5c6982">ลูกค้าทั้งหมด</div><div style="font-size:22px;font-weight:800;color:#1652F0">${allC.length}</div></div>
+        <div style="padding:10px;background:#dcfce7;border-radius:10px"><div style="font-size:11px;color:#5c6982">ใหม่ใน${cache.label}</div><div style="font-size:22px;font-weight:800;color:#16a34a">+${newC.length}</div></div>
+      </div>
+      <h4 style="margin:8px 0">🏆 จัดอันดับสะสมเยอะสุด</h4>
+      ${allC.slice(0, 30).map((c, i) => {
+        const r = rewardsAvailable(c);
+        return `<div class="item-row" onclick="closeDrill();openCustomerDetail('${c.id}')" style="cursor:pointer">
+          <div class="rank ${i===0?'gold':i===1?'silver':i===2?'bronze':''}">${i+1}</div>
+          <div class="name" style="flex:1"><b>${c.name}</b><div class="meta">${c.phone||'—'} · ${c.points||0}pt${r>0?` · 🎁${r}`:''}</div></div>
+          <div class="val">${c.total_boxes}</div>
+        </div>`;
+      }).join('')}
+    `;
+  } else if (type === 'loyalty') {
+    title = `⭐ แต้ม ${cache.label}`;
+    content = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+        <div style="padding:12px;background:#dcfce7;border-radius:10px"><div style="font-size:11px;color:#5c6982">แต้มออกในงวดนี้</div><div style="font-size:24px;font-weight:800;color:#16a34a">+${cache.ptsIssued}</div></div>
+        <div style="padding:12px;background:#fee2e2;border-radius:10px"><div style="font-size:11px;color:#5c6982">แต้มที่แลก</div><div style="font-size:24px;font-weight:800;color:#dc2626">-${cache.ptsUsed}</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">
+        <div style="padding:10px;background:#fef3c7;border-radius:10px;text-align:center"><div style="font-size:20px;font-weight:800;color:#92400e">${cache.drinkRedeems}</div><div style="font-size:10px;color:#5c6982">🥤 ดื่มฟรี</div></div>
+        <div style="padding:10px;background:#fee2e2;border-radius:10px;text-align:center"><div style="font-size:20px;font-weight:800;color:#dc2626">${cache.discountRedeems}</div><div style="font-size:10px;color:#5c6982">🎁 ลด 50฿</div></div>
+        <div style="padding:10px;background:#dcfce7;border-radius:10px;text-align:center"><div style="font-size:20px;font-weight:800;color:#16a34a">${cache.freeBoxes}</div><div style="font-size:10px;color:#5c6982">🍱 กล่องฟรี</div></div>
+      </div>
+      <h4 style="margin:8px 0">🎯 ลูกค้าที่ได้แต้มในงวดนี้</h4>
+      ${(() => {
+        const earned = cache.inRange.filter(o => o.points_earned > 0).sort((a,b) => b.points_earned - a.points_earned);
+        return earned.length ? earned.map(o => {
+          const c = getCustomer(o.customer_id);
+          return `<div class="item-row"><div style="flex:1"><b>${c?.name||o.customer_name||'?'}</b><div class="meta">${fmtDate(o._useDate)} · ${fmtBaht(o.total||0)}</div></div><div class="val" style="color:#16a34a">+${o.points_earned}pt</div></div>`;
+        }).join('') : '<div class="empty">— ยังไม่มี —</div>';
+      })()}
+    `;
+  } else if (type === 'aov') {
+    title = `💎 AOV (ค่าเฉลี่ยต่อออเดอร์) ${cache.label}`;
+    const dist = { '0-50':0, '51-100':0, '101-200':0, '201-300':0, '300+':0 };
+    cache.inRange.forEach(o => {
+      const t = (o.total != null) ? o.total : (o.boxes || 0) * cache.price;
+      if (t <= 50) dist['0-50']++;
+      else if (t <= 100) dist['51-100']++;
+      else if (t <= 200) dist['101-200']++;
+      else if (t <= 300) dist['201-300']++;
+      else dist['300+']++;
+    });
+    const max = Math.max(...Object.values(dist), 1);
+    content = `
+      <div style="margin-bottom:12px;padding:12px;background:#fef3c7;border-radius:10px">
+        <div style="font-size:12px;color:#5c6982">เฉลี่ยต่อออเดอร์</div>
+        <div style="font-size:28px;font-weight:900;color:#92400e">${fmtBaht(cache.avgOrder)}</div>
+      </div>
+      <h4 style="margin:8px 0">📊 กระจายช่วงราคาออเดอร์</h4>
+      ${Object.entries(dist).map(([k, v]) => `
+        <div class="bar-row">
+          <div class="label-row"><span class="name">฿${k}</span><span class="val">${v} ออเดอร์</span></div>
+          <div class="bar-bg"><div class="bar-fill" style="width:${(v/max)*100}%;background:linear-gradient(90deg,#fbbf24,#f59e0b)"></div></div>
+        </div>`).join('')}
+    `;
+  } else if (type === 'channel') {
+    const labels = { pickup: '🏪 รับเอง', delivery: '🚚 เดลิเวอรี่', walkin: '🪑 หน้าร้าน', phone: '📞 โทรสั่ง', online: '🌐 ออนไลน์', factory: '🏭 โรงงาน' };
+    title = `${labels[param] || param} ${cache.label}`;
+    const filtered = cache.inRange.filter(o => {
+      let key;
+      if (o.is_factory || (typeof o.customer_id === 'string' && o.customer_id.startsWith('factory-'))) key = 'factory';
+      else if (typeof o.customer_id === 'string' && o.customer_id.startsWith('walkin-')) key = 'walkin';
+      else if (o.delivery_type === 'delivery') key = 'delivery';
+      else if (o.delivery_type === 'pickup') key = 'pickup';
+      else if (o.source === 'in-store-quick' || o.source === 'phone') key = 'phone';
+      else key = 'online';
+      return key === param;
+    });
+    const total = filtered.reduce((s,o) => s + ((o.total != null) ? o.total : 0), 0);
+    content = `
+      <div style="margin-bottom:12px;padding:12px;background:#ebf0ff;border-radius:10px">
+        <div style="font-size:12px;color:#5c6982">รวม</div>
+        <div style="font-size:24px;font-weight:800;color:#1652F0">${filtered.length} ออเดอร์ · ${fmtBaht(total)}</div>
+      </div>
+      ${filtered.sort((a,b) => new Date(b._useDate) - new Date(a._useDate)).map(o => {
+        const c = getCustomer(o.customer_id);
+        const name = c?.name || o.customer_name || '?';
+        const t = (o.total != null) ? o.total : (o.boxes || 0) * cache.price;
+        return `<div class="order-item" onclick="closeDrill();editOrder('${o.id}')">
+          <div style="flex:1"><b>${name}</b> · ${o.boxes} จาน · <span style="color:#1652F0">${fmtBaht(t)}</span><div style="font-size:11px;color:#6b7280">${fmtDate(o._useDate)}</div></div></div>`;
+      }).join('') || '<div class="empty">— ยังไม่มี —</div>'}
+    `;
+  } else if (type === 'item') {
+    title = `🍽 ${param} ${cache.label}`;
+    const matching = cache.inRange.filter(o => (o.items || []).some(it => (it.mainName || it.name) === param));
+    const totalQty = matching.reduce((s,o) => s + (o.items || []).filter(it => (it.mainName || it.name) === param).reduce((s2,it) => s2 + (it.qty||1), 0), 0);
+    const totalRev = matching.reduce((s,o) => s + (o.items || []).filter(it => (it.mainName || it.name) === param).reduce((s2,it) => s2 + (it.price||0)*(it.qty||1), 0), 0);
+    // Top buyers
+    const buyers = {};
+    matching.forEach(o => {
+      const id = o.customer_id;
+      const qty = (o.items || []).filter(it => (it.mainName || it.name) === param).reduce((s,it) => s + (it.qty||1), 0);
+      if (!buyers[id]) {
+        const c = getCustomer(id);
+        buyers[id] = { id, name: c?.name || o.customer_name || '?', qty: 0, count: 0 };
+      }
+      buyers[id].qty += qty;
+      buyers[id].count += 1;
+    });
+    const topBuyers = Object.values(buyers).sort((a,b) => b.qty - a.qty);
+    content = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+        <div style="padding:12px;background:#ebf0ff;border-radius:10px"><div style="font-size:11px;color:#5c6982">ขายไป</div><div style="font-size:24px;font-weight:800;color:#1652F0">${totalQty} จาน</div></div>
+        <div style="padding:12px;background:#dcfce7;border-radius:10px"><div style="font-size:11px;color:#5c6982">ยอดขาย</div><div style="font-size:24px;font-weight:800;color:#16a34a">${fmtBaht(totalRev)}</div></div>
+      </div>
+      <h4 style="margin:8px 0">👤 ลูกค้าที่ซื้อ ${param}</h4>
+      ${topBuyers.map((b, i) => `
+        <div class="item-row" onclick="closeDrill();openCustomerDetail('${b.id}')" style="cursor:pointer">
+          <div class="rank ${i===0?'gold':i===1?'silver':i===2?'bronze':''}">${i+1}</div>
+          <div class="name" style="flex:1"><b>${b.name}</b><div class="meta">${b.count} ออเดอร์</div></div>
+          <div class="val">${b.qty} จาน</div>
+        </div>`).join('') || '<div class="empty">— ยังไม่มี —</div>'}
+    `;
+  } else if (type === 'category') {
+    title = `🍽 หมวด: ${param} ${cache.label}`;
+    const allCats = window.MENU || [];
+    const catItems = (allCats.find(c => c.cat === param)?.items || []).map(i => i.name);
+    const matching = cache.inRange.filter(o => (o.items || []).some(it => catItems.includes(it.mainName) || catItems.includes(it.name)));
+    const sub = {};
+    matching.forEach(o => {
+      (o.items || []).forEach(it => {
+        const k = it.mainName || it.name || '';
+        if (!catItems.includes(k)) return;
+        if (!sub[k]) sub[k] = { qty:0, rev:0 };
+        sub[k].qty += it.qty || 1;
+        sub[k].rev += (it.price || 0) * (it.qty || 1);
+      });
+    });
+    const list = Object.entries(sub).sort((a,b) => b[1].qty - a[1].qty);
+    const max = list[0]?.[1].qty || 1;
+    const totalRev = list.reduce((s,[_,v]) => s + v.rev, 0);
+    const totalQty = list.reduce((s,[_,v]) => s + v.qty, 0);
+    content = `
+      <div style="margin-bottom:12px;padding:12px;background:#ebf0ff;border-radius:10px">
+        <div style="font-size:12px;color:#5c6982">รวม ${param}</div>
+        <div style="font-size:22px;font-weight:800;color:#1652F0">${totalQty} จาน · ${fmtBaht(totalRev)}</div>
+      </div>
+      ${list.map(([n, v]) => `
+        <div class="bar-row" style="cursor:pointer" data-drill-item="${escapeAttr(n)}">
+          <div class="label-row"><span class="name">${n}</span><span class="val">${v.qty} · ${fmtBaht(v.rev)}</span></div>
+          <div class="bar-bg"><div class="bar-fill" style="width:${(v.qty/max)*100}%"></div></div>
+        </div>`).join('') || '<div class="empty">— ยังไม่มี —</div>'}
+    `;
+  }
+
+  titleEl.textContent = title;
+  contentEl.innerHTML = content;
+  document.getElementById('drillModalBg').classList.add('show');
+}
+
+function closeDrill() {
+  document.getElementById('drillModalBg').classList.remove('show');
+}
+
+// HTML attribute escape — used for inline data-* values that may contain quotes/special chars
+function escapeAttr(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+// Delegated handler — items inside drill modal use data-drill-item to re-drill
+document.addEventListener('click', (ev) => {
+  const t = ev.target.closest('[data-drill-item]');
+  if (!t) return;
+  drillDown('item', t.getAttribute('data-drill-item'));
+});
 
 // SVG line chart for revenue trend
 function renderTrendChart(data) {
@@ -2811,18 +3586,14 @@ whenCloudReady(() => {
   });
 });
 
-// URL param: ?phone=xxx → auto-goto check page with that customer
+// URL param: ?phone=xxx → auto-goto customer detail
 const urlParams = new URLSearchParams(location.search);
 const phoneParam = urlParams.get('phone');
 if (phoneParam) {
   const c = db.customers[phoneParam];
   if (c) {
-    checkSelectedId = c.id;
-    document.querySelector('[data-page=check]').click();
-    setTimeout(() => {
-      document.getElementById('checkLookup').value = c.name + (c.phone ? ` (${c.phone})` : '');
-      renderCheck();
-    }, 100);
+    document.querySelector('[data-page=customers]').click();
+    setTimeout(() => openCustomerDetail(c.id), 100);
   }
 }
 </script>
