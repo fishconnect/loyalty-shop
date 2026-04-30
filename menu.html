@@ -895,9 +895,40 @@ whenCloudReady(() => {
       EFFECTIVE_MENU = window.applyMenuConfig(menuConfig);
       renderMenu();
       updateCartBar();
+      checkShopClosedOverlay();
     });
   }
 });
+
+// 🔴 Show overlay if shop is closed (admin can toggle in settings)
+function checkShopClosedOverlay() {
+  // Skip in shop walk-in mode (admin operating the device — they can still order)
+  // Show overlay only on customer-facing online mode
+  const cfg = JSON.parse(localStorage.getItem('menuConfig') || '{}');
+  const isOpen = cfg.shopOpen !== false; // default open
+  let overlay = document.getElementById('shopClosedOverlay');
+  if (isOpen) {
+    if (overlay) overlay.remove();
+    return;
+  }
+  // Don't block admin shop mode (the shop staff can still take walk-in orders)
+  if (new URLSearchParams(location.search).get('mode') === 'shop') return;
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'shopClosedOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.96);z-index:99998;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px;text-align:center;font-family:inherit;color:#fff';
+    overlay.innerHTML = `
+      <div style="font-size:120px;margin-bottom:14px">🔴</div>
+      <div style="font-size:32px;font-weight:900;margin-bottom:8px">ร้านปิดอยู่</div>
+      <div style="font-size:18px;opacity:.85;margin-bottom:6px">ขออภัยในความไม่สะดวก</div>
+      <div style="font-size:14px;opacity:.7">กรุณากลับมาใหม่ในเวลาทำการ</div>
+      <a href="tel:0619623696" style="margin-top:24px;background:#fff;color:#0a1530;padding:14px 28px;border-radius:999px;font-weight:800;text-decoration:none;font-size:15px">📞 โทร 061-962-3696</a>
+    `;
+    document.body.appendChild(overlay);
+  }
+}
+// Run on initial load (after page setup)
+window.addEventListener('load', () => setTimeout(checkShopClosedOverlay, 200));
 
 function scrollToCat(id) {
   const el = document.getElementById(id);
@@ -1213,6 +1244,28 @@ function renderCartLines() {
   // Show "เพิ่มรายการเอง" only in factory mode
   const btnCustom = document.getElementById('btnAddCustom');
   if (btnCustom) btnCustom.style.display = isFactoryMode ? 'block' : 'none';
+  // 🏪 Walk-in shop mode: hide phone/name fields and delivery fields entirely
+  const shopType = new URLSearchParams(location.search).get('type'); // 'walkin' or 'phone'
+  const isWalkin = (new URLSearchParams(location.search).get('mode') === 'shop') && shopType === 'walkin';
+  if (isWalkin) {
+    // Hide phone, name, rewards, delivery, found indicator
+    ['custPhone', 'custFullName', 'custFound', 'rewardsBox', 'deliveryFields'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.style.display = 'none';
+    });
+    // Hide labels for those (sibling labels above the inputs)
+    document.querySelectorAll('#customerForm > label').forEach(l => l.style.display = 'none');
+    // Hide order-type buttons (walk-in is always pickup)
+    document.querySelectorAll('.order-type-btn').forEach(b => b.style.display = 'none');
+    // Add a single info label
+    let info = document.getElementById('walkinInfoBadge');
+    if (!info) {
+      info = document.createElement('div');
+      info.id = 'walkinInfoBadge';
+      info.style.cssText = 'background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;padding:10px 14px;border-radius:10px;font-weight:800;text-align:center;margin:6px 0';
+      info.innerHTML = '🏪 ลูกค้าหน้าร้าน · ไม่ระบุเบอร์/ชื่อ';
+      document.getElementById('customerForm').insertBefore(info, document.getElementById('customerForm').firstChild);
+    }
+  }
   // Re-render rewards + breakdown when cart changes
   if (typeof renderRewardsBox === 'function') renderRewardsBox();
   if (typeof renderOrderBreakdown === 'function') renderOrderBreakdown();
@@ -1546,20 +1599,35 @@ function renderOrderBreakdown() {
 // ============ Submit Order ============
 async function submitOrder() {
   const isShopMode = new URLSearchParams(location.search).get('mode') === 'shop';
+  const shopType = new URLSearchParams(location.search).get('type'); // 'walkin' or 'phone' (only set in shop mode)
+  const isShopWalkin = isShopMode && shopType === 'walkin';
+  const isShopPhone  = isShopMode && shopType === 'phone';
   const phone = normPhone(document.getElementById('custPhone').value);
   const name = document.getElementById('custFullName').value.trim();
   if (!cart.length) return toast('⚠️ ตะกร้าว่าง', true);
 
-  // Shop mode: phone OR name required. Customer mode: phone required.
-  if (!isShopMode && (!phone || phone.length < 9)) return toast('⚠️ กรุณากรอกเบอร์โทร', true);
-  if (isShopMode && !phone && !name) return toast('⚠️ กรอกเบอร์ หรือชื่อ อย่างน้อยอย่างใดอย่างหนึ่ง', true);
+  // Validation per mode:
+  //   Walk-in shop: no phone/name needed (anonymous order)
+  //   Phone shop:   phone required (so shop can call back)
+  //   Factory:      no validation
+  //   Customer online: phone required
+  if (isShopWalkin) {
+    // skip — no fields required
+  } else if (isShopPhone) {
+    if (!phone || phone.length < 9) return toast('⚠️ กรุณากรอกเบอร์โทรของลูกค้า', true);
+  } else if (isShopMode) {
+    // legacy shop mode (no type param): phone OR name
+    if (!phone && !name) return toast('⚠️ กรอกเบอร์ หรือชื่อ อย่างน้อยอย่างใดอย่างหนึ่ง', true);
+  } else if (!isFactoryMode) {
+    if (!phone || phone.length < 9) return toast('⚠️ กรุณากรอกเบอร์โทร', true);
+  }
 
   const db = loadDB();
-  const customerId = phone || (isFactoryMode ? 'factory-' + Date.now() : 'walkin-' + Date.now());
+  const customerId = phone || (isFactoryMode ? 'factory-' + Date.now() : (isShopWalkin ? 'walkin-' + Date.now() : 'walkin-' + Date.now()));
   let customer = phone ? db.customers[phone] : null;
   let signupBonusGiven = false;
   if (!customer) {
-    const customerName = name || (phone ? 'ลูกค้า ' + phone.slice(-4) : (isFactoryMode ? 'โรงงาน' : 'ไม่ระบุชื่อ'));
+    const customerName = name || (phone ? 'ลูกค้า ' + phone.slice(-4) : (isFactoryMode ? 'โรงงาน' : (isShopWalkin ? 'ลูกค้าหน้าร้าน' : 'ไม่ระบุชื่อ')));
     customer = {
       id: customerId, name: customerName, phone: phone || '',
       // Loyalty fields — factory customers don't get signup bonus or earn points

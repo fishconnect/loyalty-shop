@@ -404,36 +404,19 @@
 </div>
 
 <!-- ========== บันทึกออเดอร์ ========== -->
-<div class="page active" id="page-order">
-  <div class="card">
-    <h2>📝 บันทึกออเดอร์ใหม่</h2>
-
-    <div id="selectedCustomerBox" style="display:none"></div>
-
-    <div id="newCustomerLookup">
-      <label>ค้นหาลูกค้า (ชื่อคนกิน)</label>
-      <div class="ac-wrap">
-        <input type="text" id="orderLookup" placeholder="พิมพ์ชื่อ..." autocomplete="off">
-        <div class="ac-list" id="orderAcList" style="display:none"></div>
-      </div>
-      <div class="hint">พิมพ์เพื่อค้นหา หรือพิมพ์ชื่อใหม่แล้วกด "เพิ่มลูกค้าใหม่"</div>
-    </div>
-
-    <div id="newCustomerFields" style="display:none">
-      <label>ชื่อคนกิน <span class="req">*</span></label>
-      <input type="text" id="newCustName" placeholder="คุณ...">
-      <input type="hidden" id="newCustPhone" value="">
-    </div>
-
-    <label>จำนวนกล่อง <span class="req">*</span></label>
-    <input type="number" id="orderBoxes" min="1" value="1" inputmode="numeric">
-
-    <label>เมนู / หมายเหตุ</label>
-    <input type="text" id="orderNote" placeholder="เช่น ข้าวผัดหมูสับ + ไข่ดาว">
-    <div class="hint" style="margin-top:-6px;color:#1652F0">📤 จะส่งไปครัวเป็นออเดอร์ — กดทำเสร็จเพื่อเพิ่มแต้ม</div>
-
-    <button class="btn-primary" onclick="saveOrder()">👨‍🍳 ส่งครัว + บันทึก</button>
+<div class="page active" id="page-order" style="padding:0">
+  <div style="padding:14px 14px 6px;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff">
+    <h2 style="font-size:18px;margin:0">📝 บันทึก Order หน้าร้าน / โทรสั่ง</h2>
+    <div style="font-size:12px;opacity:.9;margin-top:4px">เลือกประเภทลูกค้าด้านล่าง → กดเมนู → ใส่ในตะกร้า → ยืนยันสั่ง</div>
   </div>
+  <div style="padding:10px 14px;background:#f7f8fb;border-bottom:1px solid #e5e7eb;display:flex;gap:8px;align-items:center">
+    <label style="font-weight:700;color:#0a1530;font-size:13px;flex-shrink:0">ประเภทลูกค้า:</label>
+    <select id="walkinTypeSelect" onchange="reloadWalkinFrame()" style="flex:1;padding:8px;border:1.5px solid #d1d5db;border-radius:8px;font-size:14px;font-weight:700;font-family:inherit;background:#fff">
+      <option value="walkin">🏪 ลูกค้าหน้าร้าน (ไม่ระบุเบอร์/ชื่อ)</option>
+      <option value="phone">📞 โทรสั่ง (ระบุเบอร์)</option>
+    </select>
+  </div>
+  <iframe id="walkinFrame" src="about:blank" style="border:0;width:100%;height:calc(100vh - 200px);display:block" title="Walk-in / Phone order"></iframe>
 </div>
 
 <!-- ========== เช็ก/แลก ========== -->
@@ -680,6 +663,19 @@
     </div>
   </div>
 
+  <div class="card" id="shopStatusCard" style="border:2px solid #f59e0b">
+    <h2>🟢 / 🔴 สถานะร้าน</h2>
+    <div class="toggle-row" style="margin:8px 0">
+      <input type="checkbox" id="shopOpenToggle" checked onchange="saveShopOpen()">
+      <label for="shopOpenToggle" style="margin:0;font-weight:800;font-size:16px">🟢 เปิดรับ Order</label>
+    </div>
+    <div id="shopOpenStatus" style="font-size:13px;color:#16a34a;font-weight:700;margin-bottom:6px">✅ ร้านเปิดอยู่</div>
+    <div class="hint" style="font-size:12px">
+      ถ้าปิด: ลูกค้าจะเห็นข้อความ "ร้านปิดอยู่" และกดสั่งไม่ได้<br>
+      ใช้สำหรับช่วงพักร้าน, ของหมด, หรือนอกเวลาทำการ
+    </div>
+  </div>
+
   <div class="card">
     <h2>🔐 บัญชี Admin</h2>
     <label>รหัสผ่านปัจจุบัน</label>
@@ -896,6 +892,11 @@ document.querySelectorAll('.tab').forEach(t => {
     if (t.dataset.page === 'menu') {
       // Default to items view
       if (typeof renderRegularItemList === 'function') renderRegularItemList();
+    }
+    if (t.dataset.page === 'order') {
+      // Lazy-load the walk-in / phone-order iframe (uses menu.html?mode=shop)
+      const f = document.getElementById('walkinFrame');
+      if (f && !f.dataset.loaded) reloadWalkinFrame();
     }
     if (t.dataset.page === 'kitchen') {
       const f = document.getElementById('kitchenFrame');
@@ -2148,6 +2149,12 @@ function initNotifSettingsUI() {
 }
 // Run init on DOM ready
 document.addEventListener('DOMContentLoaded', initNotifSettingsUI);
+// Auto-load walk-in frame (since page-order is the default active tab)
+document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(() => {
+    if (typeof reloadWalkinFrame === 'function') reloadWalkinFrame();
+  }, 300);
+});
 
 function testPrintReceipt() {
   // If BT printer connected, send test via BT
@@ -2240,8 +2247,53 @@ function initPrinterToggle() {
   if (tcp) tcp.value = localStorage.getItem('btThaiCodepage') || '21';
   // Init payment QR preview
   if (typeof refreshPaymentQrPreview === 'function') refreshPaymentQrPreview();
+  // Init shop open/closed status
+  if (typeof refreshShopOpenStatus === 'function') refreshShopOpenStatus();
   updateBTStatus();
   if (typeof initNotifSettingsUI === 'function') initNotifSettingsUI();
+}
+
+// 🏪 Walk-in / 📞 Phone-order frame loader
+function reloadWalkinFrame() {
+  const f = document.getElementById('walkinFrame');
+  if (!f) return;
+  const t = document.getElementById('walkinTypeSelect')?.value || 'walkin';
+  // Pass walk-in type to menu.html so it shows/hides phone field appropriately.
+  // Add cache-bust so switching reloads cleanly.
+  f.src = 'menu.html?embed=1&mode=shop&type=' + t + '&t=' + Date.now();
+  f.dataset.loaded = '1';
+}
+
+// 🟢/🔴 Shop open/closed toggle
+async function saveShopOpen() {
+  const checked = document.getElementById('shopOpenToggle').checked;
+  const cfg = JSON.parse(localStorage.getItem('menuConfig') || '{"overrides":{},"custom":[]}');
+  cfg.shopOpen = checked;
+  localStorage.setItem('menuConfig', JSON.stringify(cfg));
+  if (window.cloud?.saveMenuConfig) {
+    try { await window.cloud.saveMenuConfig(cfg); } catch (e) {}
+  }
+  refreshShopOpenStatus();
+  toast(checked ? '🟢 ร้านเปิดรับ Order แล้ว' : '🔴 ร้านปิด — ลูกค้ากดสั่งไม่ได้');
+}
+
+function refreshShopOpenStatus() {
+  const t = document.getElementById('shopOpenToggle');
+  const s = document.getElementById('shopOpenStatus');
+  const c = document.getElementById('shopStatusCard');
+  if (!t || !s) return;
+  const cfg = JSON.parse(localStorage.getItem('menuConfig') || '{}');
+  const open = cfg.shopOpen !== false; // default open
+  t.checked = open;
+  if (open) {
+    s.innerHTML = '✅ ร้านเปิดอยู่';
+    s.style.color = '#16a34a';
+    if (c) c.style.borderColor = '#16a34a';
+  } else {
+    s.innerHTML = '🔴 ร้านปิดอยู่ · ลูกค้ากดสั่งไม่ได้';
+    s.style.color = '#dc2626';
+    if (c) c.style.borderColor = '#dc2626';
+  }
 }
 
 // Save selected Thai codepage
@@ -2629,6 +2681,8 @@ whenCloudReady(() => {
       localStorage.setItem('paymentQrDataUrl', config.paymentQrDataUrl);
       if (typeof refreshPaymentQrPreview === 'function') refreshPaymentQrPreview();
     }
+    // Sync shop open/closed status
+    if (typeof refreshShopOpenStatus === 'function') refreshShopOpenStatus();
     if (document.querySelector('[data-page=settings]')?.classList.contains('active')) renderMenuManager();
   });
 });
