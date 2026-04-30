@@ -1313,13 +1313,8 @@ async function connectBluetoothPrinter() {
 
     window.btPrinter = { device, server, chr };
     localStorage.setItem('btPrinterName', device.name || 'Unknown');
-
-    // Handle disconnect
-    device.addEventListener('gattserverdisconnected', () => {
-      window.btPrinter = null;
-      toast('🔴 เครื่องปริ้นหลุดการเชื่อมต่อ');
-      updateBTStatus();
-    });
+    localStorage.removeItem('btManuallyDisconnected'); // user wants this device, allow auto-reconnect
+    setupAutoReconnect(device);
 
     toast('✅ เชื่อมต่อ ' + device.name + ' สำเร็จ');
     updateBTStatus();
@@ -1328,12 +1323,87 @@ async function connectBluetoothPrinter() {
   }
 }
 
+// Set up automatic reconnection when GATT disconnects
+function setupAutoReconnect(device) {
+  device.addEventListener('gattserverdisconnected', async () => {
+    window.btPrinter = null;
+    updateBTStatus();
+    if (localStorage.getItem('btManuallyDisconnected') === '1') {
+      toast('🔴 ตัดการเชื่อมต่อแล้ว');
+      return;
+    }
+    toast('🔄 ปริ้นหลุด — กำลังเชื่อมใหม่...');
+    // Retry with backoff up to ~30s
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      await new Promise(r => setTimeout(r, attempt * 2000));
+      if (localStorage.getItem('btManuallyDisconnected') === '1') return;
+      try {
+        const server = await device.gatt.connect();
+        const chr = await findWritableCharacteristic(server);
+        if (chr) {
+          window.btPrinter = { device, server, chr };
+          updateBTStatus();
+          toast('✅ เชื่อมต่อใหม่สำเร็จ');
+          return;
+        }
+      } catch (e) {
+        console.warn('[BT] reconnect attempt', attempt, 'failed:', e.message);
+      }
+    }
+    toast('⚠️ เชื่อมต่อใหม่ไม่สำเร็จ — กรุณากดเชื่อมต่อในตั้งค่า', true);
+  });
+}
+
+// Helper to scan services for a writable characteristic
+async function findWritableCharacteristic(server) {
+  const services = await server.getPrimaryServices();
+  for (const svc of services) {
+    try {
+      const chars = await svc.getCharacteristics();
+      const writable = chars.find(c => c.properties.write || c.properties.writeWithoutResponse);
+      if (writable) return writable;
+    } catch (e) {}
+  }
+  return null;
+}
+
+// Auto-reconnect on page load (uses Permitted Devices API — Chrome 122+)
+async function autoReconnectBT() {
+  if (!('bluetooth' in navigator)) return;
+  if (typeof navigator.bluetooth.getDevices !== 'function') return; // older Chrome
+  if (localStorage.getItem('btManuallyDisconnected') === '1') return;
+  const lastName = localStorage.getItem('btPrinterName');
+  if (!lastName) return;
+
+  try {
+    const devices = await navigator.bluetooth.getDevices();
+    const device = devices.find(d => d.name === lastName);
+    if (!device) return;
+    console.log('[BT] auto-reconnect attempt for', device.name);
+    const server = await device.gatt.connect();
+    const chr = await findWritableCharacteristic(server);
+    if (chr) {
+      window.btPrinter = { device, server, chr };
+      setupAutoReconnect(device);
+      updateBTStatus();
+      toast('🔵 เชื่อมต่อ ' + device.name + ' อัตโนมัติ');
+    }
+  } catch (e) {
+    console.warn('[BT] auto-reconnect failed:', e.message);
+    // Common: device out of range or off — silent fail; user can manually connect
+  }
+}
+
+// Run auto-reconnect after page load
+window.addEventListener('load', () => setTimeout(autoReconnectBT, 800));
+
 function disconnectBT() {
   if (window.btPrinter?.device?.gatt?.connected) {
     window.btPrinter.device.gatt.disconnect();
   }
   window.btPrinter = null;
   localStorage.removeItem('btPrinterName');
+  localStorage.setItem('btManuallyDisconnected', '1'); // don't auto-reconnect
   updateBTStatus();
   toast('🔴 ตัดการเชื่อมต่อแล้ว');
 }
@@ -1403,8 +1473,14 @@ function buildESCPOS(order) {
 
   // Init
   out.push(ESC, 0x40);
-  // Codepage 70 = PC874 (Thai) — confirmed by N160II self-test print
+  // Critical for Xprinter / Goojprt printers that have "Chinese character: Yes":
+  // FS . — Cancel Kanji/Chinese character mode. Without this, the printer
+  // tries to interpret 0xA1-0xFE as Chinese GBK (= garbage for Thai).
+  out.push(0x1C, 0x2E);
+  // ESC t 70 — select codepage 70 = PC874 (Thai) per N160II self-test
   out.push(ESC, 0x74, 70);
+  // Some Xprinter firmware also accepts International char set via ESC R 0 (USA)
+  out.push(ESC, 0x52, 0x00);
 
   // Center + double size header
   out.push(ESC, 0x61, 0x01);
