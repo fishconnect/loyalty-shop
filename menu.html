@@ -858,7 +858,8 @@ function renderMenu() {
             return `
             <div class="item ${qtyInCart > 0 ? 'has-qty' : ''} ${isOut ? 'unavailable' : ''}" onclick="${isOut?'':`openCustomize('${it.id}')`}">
               <div class="img">
-                <img src="${it.image || SHOP_INFO.defaultImage}" alt="">
+                <img src="${it.image || SHOP_INFO.defaultImage}" alt=""
+                     onerror="this.onerror=null;this.src='${SHOP_INFO.defaultImage}';this.dataset.fallback='1';">
                 ${!it.image ? `<div class="overlay-emoji">${c.emoji}</div>` : ''}
                 ${qtyInCart > 0 ? `<div class="qty-badge">${qtyInCart}</div>` : ''}
                 ${isOut ? '<div class="out-badge">หมด</div>' : ''}
