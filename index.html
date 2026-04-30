@@ -616,6 +616,21 @@
         <button onclick="connectBluetoothPrinter()" style="flex:1;padding:10px;background:#1652F0;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer">🔵 เชื่อมต่อ Bluetooth</button>
         <button onclick="disconnectBT()" style="padding:10px 14px;background:#fff;color:#dc2626;border:1.5px solid #dc2626;border-radius:8px;font-weight:700;cursor:pointer">ตัดการเชื่อมต่อ</button>
       </div>
+
+      <!-- Thai codepage selector — for printers that don't print Thai correctly -->
+      <div style="margin-top:10px;padding:10px;background:rgba(255,255,255,.5);border-radius:8px">
+        <label style="font-size:12px;font-weight:700;color:#1652F0;display:block;margin-bottom:6px">🇹🇭 รหัสภาษาไทย (Thai Codepage)</label>
+        <select id="thaiCodepage" onchange="saveThaiCodepage()" style="width:100%;padding:8px;border:1.5px solid #d1ddff;border-radius:6px;font-size:13px;background:#fff;font-family:inherit">
+          <option value="21">21 — TIS-620 Thai Char Code 11 (แนะนำ default)</option>
+          <option value="20">20 — Thai Char Code 42</option>
+          <option value="30">30 — บางรุ่น</option>
+          <option value="70">70 — PC874 (Xprinter custom)</option>
+          <option value="255">255 — Thai (alt)</option>
+        </select>
+        <button onclick="bluetoothPrintThaiTest()" style="width:100%;margin-top:6px;padding:8px;background:#fff;color:#1652F0;border:1.5px solid #1652F0;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer">🇹🇭 ทดสอบพิมพ์ภาษาไทย (ลอง 5 รหัส)</button>
+        <div class="hint" style="font-size:11px;margin-top:4px">ถ้าภาษาไทยเพี้ยน → กด "ลอง 5 รหัส" → ดูใบที่ออกมา → เลือกตัวที่ชัดในตัวเลือกข้างบน</div>
+      </div>
+
       <div class="hint" style="margin-top:8px;font-size:11.5px">
         💡 รองรับ Chrome บน Android/Mac/Windows · iOS Safari ไม่รองรับ Web Bluetooth (ใช้ AirPrint แทน)
       </div>
@@ -2207,9 +2222,37 @@ function testPrintReceipt() {
 function initPrinterToggle() {
   const t = document.getElementById('autoPrintToggle');
   if (t) t.checked = localStorage.getItem('autoPrint') === '1';
+  // Init Thai codepage selector
+  const tcp = document.getElementById('thaiCodepage');
+  if (tcp) tcp.value = localStorage.getItem('btThaiCodepage') || '21';
   updateBTStatus();
-  // Also init notification settings UI when settings tab opens
   if (typeof initNotifSettingsUI === 'function') initNotifSettingsUI();
+}
+
+// Save selected Thai codepage
+function saveThaiCodepage() {
+  const v = document.getElementById('thaiCodepage').value;
+  localStorage.setItem('btThaiCodepage', v);
+  toast('✅ บันทึก codepage: ' + v + ' (ลองพิมพ์ใบเสร็จดู)');
+}
+
+// Run Thai codepage test print (delegates to kitchen iframe if running there)
+function bluetoothPrintThaiTest() {
+  if (typeof window.bluetoothPrintThaiTestImpl === 'function') {
+    window.bluetoothPrintThaiTestImpl();
+    return;
+  }
+  // Try to find function inside any iframe
+  const frames = document.querySelectorAll('iframe');
+  for (const f of frames) {
+    try {
+      if (typeof f.contentWindow.bluetoothPrintThaiTest === 'function') {
+        f.contentWindow.bluetoothPrintThaiTest();
+        return;
+      }
+    } catch (e) {}
+  }
+  alert('⚠️ กรุณาเข้า tab ครัว ก่อน (เพื่อโหลด BT printer module)');
 }
 
 // Build ESC/POS for BT test print

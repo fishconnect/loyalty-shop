@@ -1397,6 +1397,73 @@ async function autoReconnectBT() {
 // Run auto-reconnect after page load
 window.addEventListener('load', () => setTimeout(autoReconnectBT, 800));
 
+// 🇹🇭 Print a test ticket trying 5 different Thai codepages — user picks the
+// one that prints clearly and saves it as the default.
+async function bluetoothPrintThaiTest() {
+  const bt = window.btPrinter;
+  if (!bt?.chr) { alert('⚠️ กรุณาเชื่อม Bluetooth printer ก่อน'); return; }
+
+  const ESC = 0x1B, NL = 0x0A;
+  const codepages = [21, 20, 30, 70, 255];
+  const sample = 'สวัสดี กระเพรา หมูสับ ฿50';
+
+  const out = [];
+  // Init + cancel kanji
+  out.push(ESC, 0x40);
+  out.push(0x1C, 0x2E);
+  out.push(ESC, 0x61, 0x01); // center
+  out.push(ESC, 0x21, 0x10);
+  appendBytes(out, 'TEST THAI CODEPAGE');
+  out.push(NL);
+  out.push(ESC, 0x21, 0x00);
+  appendBytes(out, '--------------------------------');
+  out.push(NL);
+  out.push(ESC, 0x61, 0x00); // left
+
+  for (const cp of codepages) {
+    out.push(ESC, 0x74, cp);
+    appendBytes(out, '[' + cp + ']  ');
+    appendThaiBytes(out, sample);
+    out.push(NL);
+  }
+
+  appendBytes(out, '--------------------------------');
+  out.push(NL);
+  appendBytes(out, '<= Pick the legible row,');
+  out.push(NL);
+  appendBytes(out, '   set in admin > Settings.');
+  out.push(NL, NL, NL, NL);
+
+  // Send via BT
+  const data = new Uint8Array(out);
+  const CHUNK = 200;
+  try {
+    for (let i = 0; i < data.length; i += CHUNK) {
+      await bt.chr.writeValue(data.slice(i, i + CHUNK));
+      await new Promise(r => setTimeout(r, 30));
+    }
+  } catch (e) {
+    alert('❌ ส่งล้มเหลว: ' + e.message);
+  }
+}
+
+// Helper: ASCII-only bytes
+function appendBytes(out, s) {
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c <= 0x7F) out.push(c);
+    else if (c >= 0x0E01 && c <= 0x0E5B) out.push(c - 0x0E00 + 0xA0);
+  }
+}
+// Helper: Thai → TIS-620 byte
+function appendThaiBytes(out, s) {
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c <= 0x7F) out.push(c);
+    else if (c >= 0x0E01 && c <= 0x0E5B) out.push(c - 0x0E00 + 0xA0);
+  }
+}
+
 function disconnectBT() {
   if (window.btPrinter?.device?.gatt?.connected) {
     window.btPrinter.device.gatt.disconnect();
@@ -1473,14 +1540,17 @@ function buildESCPOS(order) {
 
   // Init
   out.push(ESC, 0x40);
-  // Critical for Xprinter / Goojprt printers that have "Chinese character: Yes":
-  // FS . — Cancel Kanji/Chinese character mode. Without this, the printer
-  // tries to interpret 0xA1-0xFE as Chinese GBK (= garbage for Thai).
+  // Cancel Kanji/Chinese mode (in case printer defaults to 2-byte char set)
   out.push(0x1C, 0x2E);
-  // ESC t 70 — select codepage 70 = PC874 (Thai) per N160II self-test
-  out.push(ESC, 0x74, 70);
-  // Some Xprinter firmware also accepts International char set via ESC R 0 (USA)
-  out.push(ESC, 0x52, 0x00);
+  // Select Thai codepage — admin can change this in settings if needed.
+  // Common values for Xprinter / Goojprt / generic ESC/POS Thai:
+  //   21 (0x15) — TIS-620 Thai Char Code 11 (most universal)
+  //   20 (0x14) — Thai Char Code 42
+  //   30 (0x1E) — some printers
+  //   70 (0x46) — PC874 (some Xprinter custom)
+  //   255 (0xFF) — Thai (some firmware)
+  const cp = parseInt(localStorage.getItem('btThaiCodepage') || '21', 10);
+  out.push(ESC, 0x74, cp & 0xFF);
 
   // Center + double size header
   out.push(ESC, 0x61, 0x01);
