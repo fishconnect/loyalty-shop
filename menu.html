@@ -1274,10 +1274,62 @@ let orderType = 'pickup';
 let deliveryLocation = null; // { lat, lng } from geolocation API
 
 function setOrderType(type) {
+  // Warn user about delivery distance limit when switching TO delivery
+  // (skip warning if already on delivery — re-applying via reset/init)
+  if (type === 'delivery' && orderType !== 'delivery') {
+    showDeliveryWarning();
+    // Don't switch yet — wait for user to confirm in the warning modal
+    return;
+  }
+  applyOrderType(type);
+}
+
+function applyOrderType(type) {
   orderType = type;
   document.getElementById('orderTypePickup').classList.toggle('active', type === 'pickup');
   document.getElementById('orderTypeDelivery').classList.toggle('active', type === 'delivery');
   document.getElementById('deliveryFields').style.display = type === 'delivery' ? 'block' : 'none';
+}
+
+function showDeliveryWarning() {
+  // If modal already exists, just open it
+  let modal = document.getElementById('deliveryWarnModal');
+  if (modal) { modal.classList.add('show'); return; }
+  modal = document.createElement('div');
+  modal.id = 'deliveryWarnModal';
+  modal.className = 'modal-bg';
+  modal.style.cssText = 'display:flex;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;align-items:center;justify-content:center;padding:20px';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:20px;padding:28px 22px;max-width:380px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+      <div style="font-size:56px;margin-bottom:8px">⚠️</div>
+      <h3 style="font-size:18px;font-weight:900;color:#0a1530;margin-bottom:6px">ข้อจำกัดการจัดส่ง</h3>
+      <p style="font-size:15px;color:#1f2a44;margin-bottom:12px;line-height:1.6">
+        ร้านส่งได้ในรัศมี<br>
+        <b style="color:#dc2626;font-size:22px">ไม่เกิน 5-7 กิโลเมตร</b><br>
+        จากร้านเท่านั้น
+      </p>
+      <div style="background:#fef3c7;color:#92400e;padding:10px 12px;border-radius:10px;font-size:12px;margin-bottom:14px;line-height:1.5">
+        ⚠️ หากที่อยู่อยู่ไกลกว่านี้<br>ทางร้านขอสงวนสิทธิ์ไม่จัดส่ง
+      </div>
+      <button onclick="confirmDeliveryWarn()" style="width:100%;padding:14px;background:linear-gradient(135deg,#1652F0,#0738C9);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit">
+        ✓ เข้าใจแล้ว — ดำเนินการต่อ
+      </button>
+      <button onclick="cancelDeliveryWarn()" style="width:100%;padding:12px;margin-top:8px;background:transparent;color:#6b7280;border:none;font-size:14px;cursor:pointer;font-family:inherit">
+        🏪 เปลี่ยนใจ — รับที่ร้าน
+      </button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+
+function confirmDeliveryWarn() {
+  document.getElementById('deliveryWarnModal')?.remove();
+  applyOrderType('delivery');
+}
+
+function cancelDeliveryWarn() {
+  document.getElementById('deliveryWarnModal')?.remove();
+  applyOrderType('pickup');
 }
 
 async function getMyLocation() {
