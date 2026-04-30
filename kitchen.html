@@ -1042,31 +1042,53 @@ function getBTPrinter() {
   return null;
 }
 
+// Detect mobile (iOS Safari, Android, iPad) — Web Bluetooth not available on iOS
+const _isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+const _hasWebBluetooth = ('bluetooth' in navigator);
+
 function printOrderReceipt(orderId) {
   const orderSrc = cloudOrders !== null ? cloudOrders : (loadDB().pendingOrders || []);
   const order = orderSrc.find(o => o.id === orderId);
   if (!order) return toast('⚠️ ไม่พบ order');
 
+  // Always show toast immediately so user knows click registered
+  toast('🖨️ กำลังเปิดหน้าพิมพ์...');
+
   const bt = getBTPrinter();
   if (bt) {
-    toast('🖨️ กำลังส่งไป Bluetooth printer...');
     printViaBluetooth(order, bt).then(r => {
       if (r.success) toast('✅ ส่งไป Bluetooth printer แล้ว');
       else {
-        const useBrowser = confirm(`⚠️ ส่ง Bluetooth ไม่สำเร็จ: ${r.error || ''}\n\nใช้ปริ้นเตอร์ทั่วไป (Canon/HP/PDF) แทนมั้ย?`);
-        if (useBrowser) browserPrint(order);
+        toast('⚠️ BT ไม่สำเร็จ → ใช้ browser print');
+        setTimeout(() => browserPrint(order), 600);
       }
     });
     return;
   }
 
-  // BT not connected — ask user before falling back to browser print
+  // ===== No BT connection =====
+  // Mobile (especially iOS) — skip confirm dialogs, go straight to browser print.
+  // Web Bluetooth isn't supported on iOS Safari at all, so no point asking.
+  if (_isMobile || !_hasWebBluetooth) {
+    // Browser print path with native print sheet
+    browserPrint(order);
+    return;
+  }
+
+  // Desktop with no BT connection — ask before falling back
   const lastPrinter = localStorage.getItem('btPrinterName');
-  const msg = lastPrinter
-    ? `🔵 Bluetooth printer "${lastPrinter}" ยังไม่ได้เชื่อมต่อ\n\nOK = ใช้ปริ้นเตอร์ทั่วไป (Canon/HP/PDF)\nCancel = ยกเลิก ไปเชื่อมต่อ Bluetooth ก่อน`
-    : `🔵 ยังไม่ได้เชื่อมต่อ Bluetooth printer\n\nOK = ใช้ปริ้นเตอร์ทั่วไป (Canon/HP/PDF)\nCancel = ยกเลิก ไปเชื่อมต่อ Bluetooth ก่อน`;
-  if (!confirm(msg)) {
-    toast('💡 เปิด admin → ตั้งค่า → "🔵 เชื่อมต่อ" Bluetooth printer');
+  let useBrowser = true;
+  try {
+    const msg = lastPrinter
+      ? `🔵 Bluetooth printer "${lastPrinter}" ยังไม่ได้เชื่อมต่อ\n\nOK = ใช้ปริ้นเตอร์ทั่วไป (Canon/HP/PDF)\nCancel = ไปเชื่อมต่อ Bluetooth ก่อน`
+      : `🔵 ยังไม่ได้เชื่อมต่อ Bluetooth printer\n\nOK = ใช้ปริ้นเตอร์ทั่วไป (Canon/HP/PDF)\nCancel = ไปเชื่อมต่อ Bluetooth ก่อน`;
+    useBrowser = confirm(msg);
+  } catch (e) {
+    // confirm() blocked — just go to browser print
+    useBrowser = true;
+  }
+  if (!useBrowser) {
+    toast('💡 admin → ตั้งค่า → "🔵 เชื่อมต่อ" Bluetooth');
     return;
   }
   browserPrint(order);
