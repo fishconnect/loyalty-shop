@@ -1496,8 +1496,6 @@ async function printViaBluetooth(order, btRef) {
   const bt = btRef || window.btPrinter;
   if (!bt?.chr) return { error: 'ยังไม่ได้เชื่อมต่อ' };
 
-  // Print mode: 'bitmap' (default — works for any printer regardless of fonts)
-  // or 'text' (legacy — only works if printer has Thai font installed)
   const mode = localStorage.getItem('btPrintMode') || 'bitmap';
 
   try {
@@ -1505,19 +1503,29 @@ async function printViaBluetooth(order, btRef) {
     if (mode === 'text') {
       data = buildESCPOS(order);
     } else {
-      // Render receipt to canvas with browser fonts (supports Thai), then send as bitmap
       data = await buildBitmapESCPOS(order);
     }
-
-    const CHUNK = 200;
-    for (let i = 0; i < data.length; i += CHUNK) {
-      await bt.chr.writeValue(data.slice(i, i + CHUNK));
-      await new Promise(r => setTimeout(r, 30));
-    }
+    await btSendBytes(bt.chr, data);
     return { success: true };
   } catch (e) {
     console.error('BT print error', e);
     return { error: e.message };
+  }
+}
+
+// Fast BLE write — uses writeValueWithoutResponse if supported (no ACK round-trip),
+// larger chunks, minimal delay. Falls back to writeValue if WWR not supported.
+async function btSendBytes(chr, data) {
+  const useWWR = chr.properties.writeWithoutResponse && typeof chr.writeValueWithoutResponse === 'function';
+  // Larger chunks reduce overhead. Most BLE printers handle 400-512 fine.
+  const CHUNK = 400;
+  const DELAY = useWWR ? 8 : 20; // ms between writes
+
+  for (let i = 0; i < data.length; i += CHUNK) {
+    const slice = data.slice(i, i + CHUNK);
+    if (useWWR) await chr.writeValueWithoutResponse(slice);
+    else await chr.writeValue(slice);
+    if (DELAY > 0) await new Promise(r => setTimeout(r, DELAY));
   }
 }
 
@@ -1536,14 +1544,21 @@ async function renderReceiptCanvas(order) {
   const W = 576; // 80mm thermal at 8 dots/mm
   const canvas = document.createElement('canvas');
   canvas.width = W;
-  canvas.height = 4000; // generous; we'll trim later
+  canvas.height = 3000;
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, W, canvas.height);
   ctx.fillStyle = '#000';
   ctx.imageSmoothingEnabled = false;
 
-  let y = 18;
+  // 'compact' = no logo, smaller QR (fast, smaller bitmap = faster BLE transfer)
+  // 'full'    = logo + bigger QR
+  const layout = localStorage.getItem('btPrintLayout') || 'compact';
+  const includeLogo = layout === 'full';
+  const includeQR   = localStorage.getItem('btPrintQR') !== '0'; // default on
+  const qrSize = layout === 'full' ? 220 : 160;
+
+  let y = 14;
   const FONT = '"Sarabun", "Tahoma", "Noto Sans Thai", sans-serif';
 
   const setFont = (size, bold = false) => { ctx.font = `${bold ? 'bold ' : ''}${size}px ${FONT}`; };
@@ -1552,101 +1567,98 @@ async function renderReceiptCanvas(order) {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     ctx.fillText(text, W / 2, y);
-    y += size + 4;
+    y += size + 2;
   };
   const leftLine = (text, size, bold = false) => {
     setFont(size, bold);
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
-    ctx.fillText(text, 16, y);
-    y += size + 4;
+    ctx.fillText(text, 14, y);
+    y += size + 2;
   };
   const row = (a, b, size, bold = false) => {
     setFont(size, bold);
     ctx.textBaseline = 'top';
     ctx.textAlign = 'left';
-    ctx.fillText(a, 16, y);
+    ctx.fillText(a, 14, y);
     ctx.textAlign = 'right';
-    ctx.fillText(b, W - 16, y);
-    y += size + 4;
+    ctx.fillText(b, W - 14, y);
+    y += size + 2;
   };
-  const divider = () => {
-    y += 4;
-    ctx.fillRect(16, y, W - 32, 2);
-    y += 10;
-  };
+  const divider = () => { y += 3; ctx.fillRect(14, y, W - 28, 2); y += 6; };
 
-  // Logo
-  const logo = await loadImageForPrint('logo.jpg');
-  if (logo) {
-    const sz = 110;
-    ctx.drawImage(logo, (W - sz) / 2, y, sz, sz);
-    y += sz + 6;
+  if (includeLogo) {
+    const logo = await loadImageForPrint('logo.jpg');
+    if (logo) {
+      const sz = 90;
+      ctx.drawImage(logo, (W - sz) / 2, y, sz, sz);
+      y += sz + 4;
+    }
   }
 
-  center('ครัวผู้ใหญ่ปอง', 38, true);
-  center('Tel: 061-962-3696', 22);
+  center('ครัวผู้ใหญ่ปอง', 36, true);
+  center('Tel: 061-962-3696', 20);
   divider();
 
-  row('Order:', '#' + order.id.slice(-6), 22, true);
-  row('Time:', fmtReceiptDate(order.date), 22);
-  row('Cust:', order.customer_name || '-', 22);
-  if (order.customer_phone) row('Phone:', maskPhone(order.customer_phone), 22);
+  row('Order:', '#' + order.id.slice(-6), 20, true);
+  row('Time:', fmtReceiptDate(order.date), 20);
+  row('Cust:', order.customer_name || '-', 20);
+  if (order.customer_phone) row('Phone:', maskPhone(order.customer_phone), 20);
   divider();
 
-  // Items
   for (const it of order.items) {
     const free = it.freeQty || 0;
     const paid = it.qty - free;
     const lineTotal = it.price * paid;
     const rightStr = (free > 0 && paid === 0) ? 'FREE' : '฿' + lineTotal;
     const mainNm = it.mainName || it.name;
-    row(it.qty + '× ' + mainNm, rightStr, 26, true);
+    row(it.qty + '× ' + mainNm, rightStr, 24, true);
     if (it.options && it.options.length) {
       for (const o of it.options) {
         const prefix = o.price > 0 ? '   + ' : '   - ';
         const px = o.price > 0 ? ` (+${o.price})` : '';
-        leftLine(prefix + o.choice + px, 20);
+        leftLine(prefix + o.choice + px, 18);
       }
     }
-    if (it.note) leftLine('   note: ' + it.note, 20);
+    if (it.note) leftLine('   note: ' + it.note, 18);
   }
   divider();
 
   if (order.discount) {
     const orig = order.original_total || (order.total + order.discount);
-    row('Subtotal', '฿' + orig, 22);
-    row('Discount', '-฿' + order.discount, 22);
+    row('Subtotal', '฿' + orig, 20);
+    row('Discount', '-฿' + order.discount, 20);
   }
-  // Total — large
-  setFont(40, true);
+  setFont(36, true);
   ctx.textAlign = 'right';
   ctx.textBaseline = 'top';
-  ctx.fillText('TOTAL ฿' + order.total, W - 16, y);
-  y += 50;
+  ctx.fillText('TOTAL ฿' + order.total, W - 14, y);
+  y += 44;
   divider();
-  center('ขอบคุณที่อุดหนุน', 22);
-  y += 8;
+  center('ขอบคุณที่อุดหนุน', 20);
+  y += 4;
 
-  // QR codes
-  const qrMenu = await loadImageForPrint('https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=2&data=' + encodeURIComponent('https://loyalty.fishconnect.co/menu.html'));
-  if (qrMenu) {
-    center('SCAN สั่งอาหาร', 22, true);
-    const sz = 220;
-    ctx.drawImage(qrMenu, (W - sz) / 2, y, sz, sz);
-    y += sz + 8;
+  if (includeQR) {
+    const qrPx = qrSize;
+    const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=' + qrPx + 'x' + qrPx + '&margin=2&data=';
+    const qrMenu = await loadImageForPrint(qrUrl + encodeURIComponent('https://loyalty.fishconnect.co/menu.html'));
+    if (qrMenu) {
+      center('SCAN สั่งอาหาร', 18, true);
+      ctx.drawImage(qrMenu, (W - qrPx) / 2, y, qrPx, qrPx);
+      y += qrPx + 6;
+    }
+    if (layout === 'full') {
+      divider();
+      const qrPoints = await loadImageForPrint(qrUrl + encodeURIComponent('https://loyalty.fishconnect.co/points.html'));
+      if (qrPoints) {
+        center('SCAN เช็คแต้ม', 18, true);
+        ctx.drawImage(qrPoints, (W - qrPx) / 2, y, qrPx, qrPx);
+        y += qrPx + 6;
+      }
+    }
   }
-  divider();
-  const qrPoints = await loadImageForPrint('https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=2&data=' + encodeURIComponent('https://loyalty.fishconnect.co/points.html'));
-  if (qrPoints) {
-    center('SCAN เช็คแต้ม', 22, true);
-    const sz = 220;
-    ctx.drawImage(qrPoints, (W - sz) / 2, y, sz, sz);
-    y += sz + 8;
-  }
-  y += 30; // bottom margin
+  y += 20;
 
-  // Trim to actual content
   const final = document.createElement('canvas');
   final.width = W;
   final.height = y;
