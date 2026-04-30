@@ -983,12 +983,13 @@ function renderOptionGroups() {
           ${g.choices.map(c => {
             const active = sel.includes(c);
             const disabled = !active && reachedMax && !isSingle;
+            const cprice = getChoicePrice(g, c);  // per-choice price
             return `
               <div class="og-chip ${active ? 'active' : ''}"
                    style="${disabled ? 'opacity:.4;pointer-events:none' : ''}"
                    onclick="toggleOption(${gi}, '${escAttr(c)}', ${isSingle}, ${g.max || 99})">
                 <span>${c}</span>
-                ${g.priceEach > 0 ? `<span class="og-price">+${g.priceEach}฿</span>` : ''}
+                ${cprice > 0 ? `<span class="og-price">+${cprice}฿</span>` : ''}
               </div>
             `;
           }).join('')}
@@ -1030,6 +1031,13 @@ function adjustCustQty(delta) {
   updateCustTotal();
 }
 
+// Get the price for a specific choice — uses per-choice prices map if defined,
+// otherwise falls back to the group's default priceEach.
+function getChoicePrice(group, choiceName) {
+  if (group.prices && group.prices[choiceName] != null) return group.prices[choiceName];
+  return group.priceEach || 0;
+}
+
 function calcLineTotal(line) {
   // Custom item line
   if (line.isCustom) {
@@ -1041,7 +1049,9 @@ function calcLineTotal(line) {
   if (main.optionGroups && line.options) {
     main.optionGroups.forEach((g, gi) => {
       const sel = line.options[gi] || [];
-      unit += (g.priceEach || 0) * sel.length;
+      sel.forEach(choiceName => {
+        unit += getChoicePrice(g, choiceName);
+      });
     });
   }
   return unit * (line.qty || 1);
@@ -1165,9 +1175,10 @@ function renderCartLines() {
       main.optionGroups.forEach((g, gi) => {
         const sel = line.options[gi] || [];
         sel.forEach(c => {
-          const cls = (g.priceEach === 0) ? 'req' : (g.priceEach === 10 ? 'add10' : 'add5');
-          const prefix = g.priceEach > 0 ? '+' : '';
-          chips.push(`<span class="opt-chip ${cls}">${prefix}${c}${g.priceEach > 0 ? ` (+${g.priceEach})` : ''}</span>`);
+          const cprice = getChoicePrice(g, c);  // per-choice price
+          const cls = (cprice === 0) ? 'req' : (cprice === 5 ? 'add5' : 'add10');
+          const prefix = cprice > 0 ? '+' : '';
+          chips.push(`<span class="opt-chip ${cls}">${prefix}${c}${cprice > 0 ? ` (+${cprice})` : ''}</span>`);
         });
       });
       if (chips.length) optChips = `<div class="opt-list">${chips.join('')}</div>`;
@@ -1602,8 +1613,9 @@ async function submitOrder() {
       main.optionGroups.forEach((g, gi) => {
         const sel = line.options[gi] || [];
         sel.forEach(c => {
-          optList.push({ group: g.label, choice: c, price: g.priceEach || 0 });
-          optPrice += g.priceEach || 0;
+          const cprice = getChoicePrice(g, c);  // per-choice price
+          optList.push({ group: g.label, choice: c, price: cprice });
+          optPrice += cprice;
         });
       });
     }
