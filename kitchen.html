@@ -1042,13 +1042,22 @@ function getBTPrinter() {
   return null;
 }
 
-// Simplest possible flow: click print → browser print dialog → user picks printer
-// No Bluetooth integration in the print path. (BT can still be configured separately
-// in admin settings if user wants ESC/POS mode, but the default is OS-level print.)
+// Pre-load images on page init so they're cached before any print is requested
+// (mobile browsers block print() if user gesture context is lost waiting for images)
+(function preloadPrintImages() {
+  const urls = [
+    'logo.jpg',
+    'https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=2&data=' + encodeURIComponent('https://loyalty.fishconnect.co/menu.html'),
+    'https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=2&data=' + encodeURIComponent('https://loyalty.fishconnect.co/points.html')
+  ];
+  urls.forEach(src => { const img = new Image(); img.src = src; });
+})();
+
+// Simplest reliable flow: click → fill receipt → window.print() in same gesture
 function printOrderReceipt(orderId) {
   const orderSrc = cloudOrders !== null ? cloudOrders : (loadDB().pendingOrders || []);
   const order = orderSrc.find(o => o.id === orderId);
-  if (!order) return toast('⚠️ ไม่พบ order');
+  if (!order) { alert('⚠️ ไม่พบ order'); return; }
   browserPrint(order);
 }
 
@@ -1143,37 +1152,24 @@ const RECEIPT_CSS = `
   .rc-qr-url { font-size: 8pt; margin-top: 1mm; word-break: break-all; }
 `;
 
-// Simple direct print — fills #printArea, calls window.print().
-// CSS @media print isolates #printArea (display:none on siblings → no blank pages).
+// Simplest direct print — fills #printArea, calls window.print() IMMEDIATELY in
+// the same user gesture so iOS Safari / Android Chrome don't block it.
+// Images are pre-cached on page load (see preloadPrintImages above).
 function browserPrint(order) {
   const printArea = document.getElementById('printArea');
-  if (!printArea) { console.error('No #printArea'); return; }
+  if (!printArea) {
+    alert('พิมพ์ไม่ได้: หาที่พิมพ์ไม่เจอ');
+    return;
+  }
   printArea.innerHTML = buildReceiptHTML(order);
-
-  const imgs = printArea.querySelectorAll('img');
-  let printed = false;
-  const doPrint = () => {
-    if (printed) return;
-    printed = true;
-    setTimeout(() => {
-      try { window.print(); }
-      catch (e) { console.error('[Print]', e); toast('⚠️ พิมพ์ไม่ได้: ' + e.message, true); }
-    }, 300);
-  };
-
-  if (imgs.length === 0) { doPrint(); return; }
-
-  let loaded = 0;
-  const checkAll = () => { if (++loaded >= imgs.length) doPrint(); };
-  imgs.forEach(img => {
-    if (img.complete && img.naturalHeight > 0) checkAll();
-    else {
-      img.addEventListener('load', checkAll, { once: true });
-      img.addEventListener('error', checkAll, { once: true });
-    }
-  });
-  // Failsafe — print after 4s even if some images haven't loaded
-  setTimeout(() => { if (!printed) doPrint(); }, 4000);
+  // Call print immediately — preserves user gesture context required by mobile browsers.
+  // CSS @media print isolates #printArea so only the receipt prints (1 sheet).
+  try {
+    window.print();
+  } catch (e) {
+    console.error('[Print]', e);
+    alert('พิมพ์ไม่ได้: ' + e.message);
+  }
 }
 
 // ========== Web Bluetooth Thermal Printer ==========
