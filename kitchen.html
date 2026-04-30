@@ -438,12 +438,28 @@ function render() {
     const isActive = !['delivered','done','cancelled'].includes(status);
     const hasRedemptionsApplied = (o.redemptions || []).length > 0;
     const isFactory = o.source === 'factory';
+    const isDelivery = o.order_type === 'delivery';
+    const orderTypeBanner = isDelivery
+      ? `<div style="background:linear-gradient(135deg,#f97316,#ea580c);color:#fff;padding:8px 14px;font-size:12px;font-weight:800;display:flex;align-items:center;gap:8px">
+          <span style="font-size:18px">🚚</span>
+          <span style="flex:1">DELIVERY · ส่งให้ลูกค้า</span>
+          ${o.delivery_location ? `<a href="https://www.google.com/maps/search/?api=1&query=${o.delivery_location.lat},${o.delivery_location.lng}" target="_blank" style="background:rgba(255,255,255,.25);color:#fff;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:800;text-decoration:none">📍 Maps</a>` : ''}
+        </div>`
+      : (isFactory ? '' : `<div style="background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;padding:6px 14px;font-size:12px;font-weight:800;display:flex;align-items:center;gap:8px">
+          <span style="font-size:14px">🏪</span>
+          <span>PICKUP · ลูกค้ามารับที่ร้าน</span>
+        </div>`);
     return `
       <div class="order ${status}">
         ${isFactory ? `
           <div style="background:linear-gradient(135deg,#1652F0,#0738C9);color:#fff;padding:6px 14px;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:space-between">
             <span>🏭 ORDER จากโรงงาน</span>
             <span style="background:#fbbf24;color:#78350f;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:800">ไม่ร่วมแต้ม</span>
+          </div>
+        ` : orderTypeBanner}
+        ${isDelivery && o.delivery_address ? `
+          <div style="background:#fff7ed;color:#9a3412;padding:8px 14px;font-size:13px;border-bottom:1px solid #fed7aa">
+            <b>📍 ที่อยู่:</b> ${o.delivery_address}
           </div>
         ` : ''}
         <div class="order-head" style="background:${status==='cancelled'?'#fee2e2':status==='delivered'||status==='done'?'#f3f4f6':'#f7f8fb'}">
@@ -1605,6 +1621,16 @@ async function renderReceiptCanvas(order) {
   row('Time:', fmtReceiptDate(order.date), 22, true);
   row('Cust:', order.customer_name || '-', 22, true);
   if (order.customer_phone) row('Phone:', maskPhone(order.customer_phone), 22, true);
+  // Order type — pickup or delivery (with address if delivery)
+  if (order.order_type === 'delivery') {
+    row('Type:', '🚚 จัดส่ง', 22, true);
+    if (order.delivery_address) {
+      leftLine('Addr: ' + order.delivery_address.slice(0, 50), 18, true);
+      if (order.delivery_address.length > 50) leftLine('   ' + order.delivery_address.slice(50, 100), 18, true);
+    }
+  } else {
+    row('Type:', '🏪 รับที่ร้าน', 22, true);
+  }
   divider();
 
   for (const it of order.items) {

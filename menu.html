@@ -545,6 +545,20 @@
   }
   .reward-summary b { font-weight: 900; }
 
+  /* Order type buttons (pickup vs delivery) */
+  .order-type-btn {
+    background: #fff; border: 2px solid #d1ddff;
+    border-radius: 12px; padding: 10px 8px; text-align: center;
+    cursor: pointer; transition: all .15s; user-select: none;
+  }
+  .order-type-btn:hover { border-color: #1652F0; }
+  .order-type-btn.active {
+    background: linear-gradient(135deg, #1652F0, #0738C9);
+    color: #fff; border-color: #1652F0;
+    box-shadow: 0 4px 12px rgba(22,82,240,.3);
+  }
+  .order-type-btn.active div { color: #fff; }
+
   /* Order breakdown */
   .breakdown-row {
     display: flex; justify-content: space-between;
@@ -670,6 +684,29 @@
 
         <label>👤 ชื่อ (เฉพาะลูกค้าใหม่)</label>
         <input type="text" class="cust-input" id="custFullName" placeholder="คุณ...">
+
+        <!-- 🚚 รับที่ร้าน / ส่งถึงที่ -->
+        <label style="margin-top:12px;font-weight:800;color:#0a1530">🚀 ต้องการรับอาหารแบบไหน?</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;margin-bottom:8px">
+          <div id="orderTypePickup" class="order-type-btn active" onclick="setOrderType('pickup')">
+            <div style="font-size:24px">🏪</div>
+            <div style="font-weight:800;font-size:14px">รับที่ร้าน</div>
+            <div style="font-size:11px;color:#5c6982">มาเอาเอง</div>
+          </div>
+          <div id="orderTypeDelivery" class="order-type-btn" onclick="setOrderType('delivery')">
+            <div style="font-size:24px">🚚</div>
+            <div style="font-weight:800;font-size:14px">ให้ไปส่ง</div>
+            <div style="font-size:11px;color:#5c6982">บอกที่อยู่</div>
+          </div>
+        </div>
+
+        <!-- Address fields — show only when delivery -->
+        <div id="deliveryFields" style="display:none">
+          <label>📍 ที่อยู่จัดส่ง <span style="color:#dc2626">*</span></label>
+          <textarea id="deliveryAddress" class="cust-input" rows="2" placeholder="เช่น บ้านเลขที่ 123 ซ.xxx ถ.xxx ใกล้ร้าน xxx" style="resize:vertical;min-height:55px"></textarea>
+          <button onclick="getMyLocation()" style="width:100%;margin-top:6px;padding:8px;background:#fff;color:#1652F0;border:1.5px dashed #1652F0;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer">📍 ใช้ตำแหน่งปัจจุบันของฉัน</button>
+          <div id="deliveryLocationStatus" style="font-size:12px;color:#5c6982;margin-top:6px"></div>
+        </div>
 
         <!-- 🎁 Rewards selection — visible only when customer has redemption-eligible points -->
         <div id="rewardsBox" style="display:none"></div>
@@ -1231,6 +1268,37 @@ let cartRewards = {
   useDrink: false,
   selectedDrinkId: null,
 };
+
+// Order type — pickup (default) or delivery
+let orderType = 'pickup';
+let deliveryLocation = null; // { lat, lng } from geolocation API
+
+function setOrderType(type) {
+  orderType = type;
+  document.getElementById('orderTypePickup').classList.toggle('active', type === 'pickup');
+  document.getElementById('orderTypeDelivery').classList.toggle('active', type === 'delivery');
+  document.getElementById('deliveryFields').style.display = type === 'delivery' ? 'block' : 'none';
+}
+
+async function getMyLocation() {
+  const status = document.getElementById('deliveryLocationStatus');
+  if (!navigator.geolocation) {
+    status.innerHTML = '⚠️ บราว์เซอร์ไม่รองรับ GPS';
+    return;
+  }
+  status.innerHTML = '⏳ กำลังหาตำแหน่ง...';
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      deliveryLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${deliveryLocation.lat},${deliveryLocation.lng}`;
+      status.innerHTML = `✅ ตำแหน่งของคุณบันทึกแล้ว · <a href="${mapsUrl}" target="_blank" style="color:#1652F0;font-weight:700">ดูใน Google Maps</a>`;
+    },
+    (err) => {
+      status.innerHTML = '⚠️ หาตำแหน่งไม่ได้: ' + (err.code === 1 ? 'กรุณาอนุญาต Location ใน browser' : err.message);
+    },
+    { enableHighAccuracy: true, timeout: 10000 }
+  );
+}
 function resetCartRewards() {
   cartRewards = { useDiscount: false, useDrink: false, selectedDrinkId: null };
 }
@@ -1554,6 +1622,16 @@ async function submitOrder() {
     db.customers[customerId] = customer;
   }
 
+  // Validate delivery requirements
+  if (orderType === 'delivery') {
+    const addr = document.getElementById('deliveryAddress')?.value.trim() || '';
+    if (!addr && !deliveryLocation) {
+      toast('⚠️ กรอกที่อยู่หรือกดปักหมุดตำแหน่ง', true);
+      return;
+    }
+  }
+  const deliveryAddress = document.getElementById('deliveryAddress')?.value.trim() || '';
+
   const orderId = 'PO' + Date.now();
   const orderRecord = {
     id: orderId,
@@ -1566,6 +1644,12 @@ async function submitOrder() {
     note: '',
     status: 'pending',
     source: isFactoryMode ? 'factory' : (isShopMode ? 'walk-in' : 'online'),
+    // 🚀 Delivery info
+    order_type: orderType,                              // 'pickup' | 'delivery'
+    ...(orderType === 'delivery' ? {
+      delivery_address: deliveryAddress,
+      ...(deliveryLocation ? { delivery_location: deliveryLocation } : {}),
+    } : {}),
   };
   // Preserve original for points calculation
   if (redemptions.length > 0) {
@@ -1606,6 +1690,12 @@ async function submitOrder() {
   cart = [];
   sessionStorage.removeItem('cartV2');
   resetCartRewards();
+  // Reset delivery state for next order
+  orderType = 'pickup';
+  deliveryLocation = null;
+  const _da = document.getElementById('deliveryAddress'); if (_da) _da.value = '';
+  const _dls = document.getElementById('deliveryLocationStatus'); if (_dls) _dls.innerHTML = '';
+  if (typeof setOrderType === 'function') setOrderType('pickup');
 
   if (isShopMode) {
     // Stay on menu, clear form, show toast
