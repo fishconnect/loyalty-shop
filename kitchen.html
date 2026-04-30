@@ -1200,9 +1200,9 @@ function openPrintWindow(order) {
     .rc-free { color: #000; font-weight: 700; }
     .rc-qr-wrap { text-align: center; margin: 2mm 0; page-break-inside: avoid; break-inside: avoid; }
     .rc-qr-title { font-size: 10pt; font-weight: 800; margin-bottom: 1mm; }
-    /* QR sizes: menu = 17mm; payment = 34mm (2x bigger for reliable scan) */
+    /* QR sizes: menu = 17mm; payment = 50mm (fills most of 80mm receipt width) */
     .rc-qr-small { width: 17mm; height: 17mm; margin: 0 auto; display: block; image-rendering: pixelated; }
-    .rc-qr-payment { width: 34mm; height: 34mm; margin: 0 auto; display: block; image-rendering: pixelated; }
+    .rc-qr-payment { width: 50mm; height: 50mm; margin: 0 auto; display: block; image-rendering: pixelated; }
     .rc-qr { width: 17mm; height: 17mm; margin: 0 auto; display: block; image-rendering: pixelated; }
     .rc-qr-url { font-size: 7pt; margin-top: 1px; opacity: .8; }
     @media print { body { padding: 2mm; } }
@@ -1555,7 +1555,7 @@ async function renderReceiptCanvas(order) {
 
   const includeQR = localStorage.getItem('btPrintQR') !== '0';
   const QR_MENU_SIZE = 104;     // menu QR — top of receipt
-  const QR_PAYMENT_SIZE = 208;  // payment QR — 2x bigger (must scan reliably with phone camera)
+  const QR_PAYMENT_SIZE = 320;  // payment QR — large enough to fill most of 80mm width (576px)
 
   let y = 14;
   const FONT = '"Sarabun", "Tahoma", "Noto Sans Thai", sans-serif';
