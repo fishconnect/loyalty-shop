@@ -809,7 +809,7 @@ async function applyDrinkReward(orderId, drinkId) {
   if (local) Object.assign(local, updates);
   saveDB(db);
 
-  // Deduct points from customer
+  // Deduct points from customer (local mirror for instant UI)
   customer.points = (customer.points || 0) - LOYALTY.REWARD_DRINK_POINTS;
   customer.drink_redeemed_count = (customer.drink_redeemed_count || 0) + 1;
   db.customers[customer.id] = customer;
@@ -817,7 +817,14 @@ async function applyDrinkReward(orderId, drinkId) {
 
   if (window.cloud) {
     await window.cloud.updateOrder(orderId, updates);
-    await window.cloud.saveCustomer(customer);
+    // 🔒 Atomic decrement — prevents lost updates from concurrent edits
+    if (window.cloud.incrementCustomerPoints) {
+      await window.cloud.incrementCustomerPoints(customer.id, -LOYALTY.REWARD_DRINK_POINTS, 0, {
+        drink_redeemed_count: customer.drink_redeemed_count
+      });
+    } else {
+      await window.cloud.saveCustomer(customer);
+    }
   }
 
   toast(`🥤 ใช้ 10 แต้ม → ฟรี ${drink.name}`);
@@ -926,7 +933,14 @@ async function applyDiscountReward(orderId) {
 
   if (window.cloud) {
     await window.cloud.updateOrder(orderId, updates);
-    await window.cloud.saveCustomer(customer);
+    // 🔒 Atomic decrement
+    if (window.cloud.incrementCustomerPoints) {
+      await window.cloud.incrementCustomerPoints(customer.id, -LOYALTY.REWARD_DISCOUNT_POINTS, 0, {
+        dish_redeemed_count: customer.dish_redeemed_count
+      });
+    } else {
+      await window.cloud.saveCustomer(customer);
+    }
   }
 
   toast(`💰 ใช้ 15 แต้ม → ลด ฿${discountValue}`);
@@ -975,7 +989,17 @@ async function removeRedemption(orderId, idx) {
     else customer.dish_redeemed_count = Math.max(0, (customer.dish_redeemed_count || 0) - 1);
     db.customers[customer.id] = customer;
     saveDB(db);
-    if (window.cloud) await window.cloud.saveCustomer(customer);
+    if (window.cloud) {
+      // 🔒 Atomic refund — increment back the points_used
+      if (window.cloud.incrementCustomerPoints) {
+        const extra = {};
+        if (removed.type === 'drink') extra.drink_redeemed_count = customer.drink_redeemed_count;
+        else extra.dish_redeemed_count = customer.dish_redeemed_count;
+        await window.cloud.incrementCustomerPoints(customer.id, removed.points_used, 0, extra);
+      } else {
+        await window.cloud.saveCustomer(customer);
+      }
+    }
   }
 
   if (window.cloud) await window.cloud.updateOrder(orderId, updates);
@@ -1016,6 +1040,7 @@ async function finalizeOrder(orderId) {
   let pointsToAward = 0;
   if (!isFactoryOrder && !order.points_awarded) {
     pointsToAward = window.calcPointsFromAmount(baseAmount);
+    // Local mirror — for instant UI feedback. Cloud truth is set via atomic increment below.
     customer.points = (customer.points || 0) + pointsToAward;
     customer.lifetime_points = (customer.lifetime_points || 0) + pointsToAward;
   }
@@ -1049,7 +1074,15 @@ async function finalizeOrder(orderId) {
 
   if (window.cloud) {
     await window.cloud.updateOrder(orderId, updates);
-    await window.cloud.saveCustomer(customer);
+    // 🔒 ATOMIC INCREMENT — prevents race condition where concurrent finalize ops or
+    // a stale onCustomers snapshot could overwrite each other and lose +N points.
+    // Falls back to setDoc-merge inside cloud helper if doc doesn't exist yet.
+    if (pointsToAward > 0 && window.cloud.incrementCustomerPoints) {
+      await window.cloud.incrementCustomerPoints(customer.id, pointsToAward, pointsToAward);
+    } else {
+      // Factory or zero-pt: just sync customer normally
+      await window.cloud.saveCustomer(customer);
+    }
   }
 
   render();

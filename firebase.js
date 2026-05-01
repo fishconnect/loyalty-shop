@@ -2,7 +2,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import {
   getFirestore, doc, collection, setDoc, getDoc, getDocs,
-  onSnapshot, query, orderBy, updateDoc, deleteDoc, where
+  onSnapshot, query, orderBy, updateDoc, deleteDoc, where,
+  increment
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -36,6 +37,28 @@ window.cloud = {
   async deleteCustomer(id) {
     try { await deleteDoc(doc(fdb, 'customers', String(id))); }
     catch (e) { console.warn('[cloud] deleteCustomer', e); }
+  },
+  // 🔒 Atomic point operations — server-side increment so concurrent writes don't lose updates
+  async incrementCustomerPoints(id, deltaPoints, deltaLifetime, extra) {
+    if (!id) return;
+    const updates = {};
+    if (typeof deltaPoints === 'number' && deltaPoints !== 0) updates.points = increment(deltaPoints);
+    if (typeof deltaLifetime === 'number' && deltaLifetime !== 0) updates.lifetime_points = increment(deltaLifetime);
+    if (extra && typeof extra === 'object') Object.assign(updates, extra);
+    if (!Object.keys(updates).length) return;
+    try {
+      await updateDoc(doc(fdb, 'customers', String(id)), updates);
+    } catch (e) {
+      // Doc might not exist yet — fall back to setDoc with merge (won't be atomic but works)
+      console.warn('[cloud] incrementCustomerPoints fallback', e);
+      try {
+        const flat = {};
+        if (typeof deltaPoints === 'number') flat.points = deltaPoints;
+        if (typeof deltaLifetime === 'number') flat.lifetime_points = deltaLifetime;
+        if (extra) Object.assign(flat, extra);
+        await setDoc(doc(fdb, 'customers', String(id)), flat, { merge: true });
+      } catch (e2) { console.warn('[cloud] incrementCustomerPoints fatal', e2); }
+    }
   },
   async getAllCustomers() {
     try {
