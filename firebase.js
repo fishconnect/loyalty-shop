@@ -122,6 +122,23 @@ window.cloud = {
     } catch (e) { return '1234'; }
   },
 
+  // Chat / contact button config (customer-facing chat link)
+  async saveContactConfig(cfg) {
+    try { await setDoc(doc(fdb, 'settings', 'contact'), cfg, { merge: true }); }
+    catch (e) { console.warn('[cloud] saveContactConfig', e); }
+  },
+  async getContactConfig() {
+    try {
+      const s = await getDoc(doc(fdb, 'settings', 'contact'));
+      return s.exists() ? s.data() : null;
+    } catch (e) { return null; }
+  },
+  onContactConfig(cb) {
+    return onSnapshot(doc(fdb, 'settings', 'contact'), snap => {
+      cb(snap.exists() ? snap.data() : null);
+    });
+  },
+
   // Telegram bot config (shared across devices)
   async saveTelegramConfig(cfg) {
     try { await setDoc(doc(fdb, 'settings', 'telegram'), cfg, { merge: true }); }

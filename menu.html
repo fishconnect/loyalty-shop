@@ -605,8 +605,8 @@
 <!-- Returning customer widget -->
 <div class="user-widget" id="userWidget"></div>
 
-<!-- 💬 Floating chat button -->
-<a id="chatFloat" href="tel:0619623696" style="position:fixed;bottom:90px;right:14px;z-index:80;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;width:54px;height:54px;border-radius:50%;display:grid;place-items:center;font-size:26px;box-shadow:0 6px 18px rgba(22,163,74,.45);text-decoration:none">💬</a>
+<!-- 💬 Floating chat button (URL set dynamically from settings/contact) -->
+<a id="chatFloat" href="tel:0619623696" target="_blank" rel="noopener" style="position:fixed;bottom:90px;right:14px;z-index:80;background:linear-gradient(135deg,#06c755,#04a648);color:#fff;width:54px;height:54px;border-radius:50%;display:grid;place-items:center;font-size:26px;box-shadow:0 6px 18px rgba(6,199,85,.45);text-decoration:none">💬</a>
 
 <script>
   // Embed/shop mode adjustments
@@ -775,17 +775,7 @@
         <!-- Order summary breakdown (totals + discount + points-to-earn) -->
         <div id="orderBreakdown" style="margin-top:14px;padding:12px 14px;background:#f7f8fb;border-radius:12px;font-size:14px"></div>
 
-        <!-- 💸 อัพโหลดสลิปโอนเงิน (PromptPay / โอนแล้ว) -->
-        <div id="slipUploadBox" style="margin-top:10px">
-          <label style="display:flex;align-items:center;gap:8px">
-            💸 สลิปโอนเงิน <span style="font-size:11px;color:#9ca3af;font-weight:500">(ถ้าโอนแล้ว · ครัวจะเห็นสลิป)</span>
-          </label>
-          <input type="file" id="paymentSlipInput" accept="image/*" style="display:none" onchange="onSlipSelected(event)">
-          <button type="button" onclick="document.getElementById('paymentSlipInput').click()" style="width:100%;padding:10px;background:#fff;color:#1652F0;border:1.5px dashed #1652F0;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer">
-            📷 แนบสลิป (เลือกรูป)
-          </button>
-          <div id="slipPreview" style="display:none;margin-top:8px;text-align:center"></div>
-        </div>
+        <!-- (สลิปโอนเงินย้ายไปหน้า status.html — ลูกค้าอัพโหลดได้หลังจากสั่งซื้อ ไม่บังคับ) -->
 
         <button class="btn btn-confirm" onclick="submitOrder()" style="margin-top:14px">
           ✅ ยืนยันสั่งอาหาร <span id="confirmTotal" style="font-weight:900"></span>
@@ -2109,8 +2099,6 @@ async function submitOrder() {
     } : {}),
     // ⏰ Scheduled time (null = ASAP, ISO = scheduled)
     ...(effectiveScheduledAt ? { scheduled_at: effectiveScheduledAt } : {}),
-    // 💸 Payment slip (base64 data URL)
-    ...(paymentSlipData ? { payment_slip: paymentSlipData } : {}),
     // 🎁 Bonuses applied
     ...(birthdayBonusGiven ? { birthday_bonus_given: true } : {}),
     ...(referrerCustomer ? { referred_by: referrerCustomer.id, referrer_bonus_given: true } : {}),
@@ -2349,6 +2337,40 @@ openCart = function() {
 renderMenu();
 updateCartBar();
 initReturningCustomer();
+
+// 💬 Chat button — load URL from cloud config (settings/contact) or localStorage
+function buildChatUrl(type, value) {
+  if (!value) return '';
+  const v = String(value).trim();
+  switch (type) {
+    case 'line':           return v.startsWith('http') ? v : `https://line.me/R/ti/p/@${v.replace(/^@/, '')}`;
+    case 'line_personal':  return v.startsWith('http') ? v : `https://line.me/ti/p/~${v.replace(/^@/, '')}`;
+    case 'messenger':      return v.startsWith('http') ? v : `https://m.me/${v}`;
+    case 'whatsapp':       return v.startsWith('http') ? v : `https://wa.me/${v.replace(/^\+/, '').replace(/[^\d]/g, '')}`;
+    case 'telegram':       return v.startsWith('http') ? v : `https://t.me/${v.replace(/^@/, '')}`;
+    case 'phone':          return `tel:${v.replace(/[^\d+]/g, '')}`;
+    case 'custom':         return v;
+    default:               return v;
+  }
+}
+function applyChatConfig(cfg) {
+  if (!cfg) return;
+  const url = cfg.url || buildChatUrl(cfg.type, cfg.value);
+  const btn = document.getElementById('chatFloat');
+  if (btn && url) btn.href = url;
+}
+// Try local first (instant), then cloud (authoritative)
+try { applyChatConfig(JSON.parse(localStorage.getItem('chatSettings') || 'null')); } catch(e) {}
+whenCloudReady(() => {
+  if (window.cloud?.onContactConfig) {
+    window.cloud.onContactConfig(cfg => {
+      if (cfg) {
+        localStorage.setItem('chatSettings', JSON.stringify(cfg));
+        applyChatConfig(cfg);
+      }
+    });
+  }
+});
 
 window.addEventListener('scroll', () => {
   const visibleCats = MENU.filter(c => !c.isAddOn);

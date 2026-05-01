@@ -846,6 +846,28 @@
     </details>
   </div>
 
+  <div class="card" style="border:2px solid #06c755">
+    <h2>💬 ปุ่ม Chat (ที่ลูกค้ากดบนหน้าเมนู)</h2>
+    <div class="hint" style="font-size:12px;margin-bottom:8px">
+      เลือกช่องทางที่อยากให้ลูกค้าแชทมา — กดปุ่มสีเขียวลอยมุมขวาล่างของหน้าเมนูแล้วเปิดแชทเลย
+    </div>
+    <label>ช่องทาง</label>
+    <select id="chatType" onchange="renderChatField()" style="font-family:inherit">
+      <option value="line">LINE Official (แนะนำ — ใช้ในไทย)</option>
+      <option value="line_personal">LINE ส่วนตัว (LINE ID)</option>
+      <option value="messenger">Facebook Messenger</option>
+      <option value="whatsapp">WhatsApp</option>
+      <option value="telegram">Telegram</option>
+      <option value="phone">เบอร์โทร (แค่กดโทร)</option>
+      <option value="custom">URL กำหนดเอง</option>
+    </select>
+    <div id="chatFieldBox"></div>
+    <div style="height:8px"></div>
+    <button class="btn-primary" onclick="saveChatSettings()">💾 บันทึก</button>
+    <button class="btn-secondary" onclick="testChatLink()" style="width:100%;margin-top:6px">🔗 ทดสอบเปิด link</button>
+    <div id="chatStatus" style="margin-top:6px;font-size:12px;text-align:center"></div>
+  </div>
+
   <div class="card" id="shopStatusCard" style="border:2px solid #f59e0b">
     <h2>🟢 / 🔴 สถานะร้าน</h2>
     <div class="toggle-row" style="margin:8px 0">
@@ -3024,6 +3046,69 @@ function initNotifSettingsUI() {
   const tgE = document.getElementById('tgEnabled');  if (tgE) tgE.checked = !!tg.enabled;
   updateTgStatus();
 }
+
+// ========== Chat button (customer-facing) settings ==========
+function getChatSettings() {
+  return JSON.parse(localStorage.getItem('chatSettings') || '{"type":"phone","value":"0619623696"}');
+}
+function buildChatUrl(type, value) {
+  if (!value) return '';
+  const v = value.trim();
+  switch (type) {
+    case 'line':           return v.startsWith('http') ? v : `https://line.me/R/ti/p/@${v.replace(/^@/, '')}`;
+    case 'line_personal':  return v.startsWith('http') ? v : `https://line.me/ti/p/~${v.replace(/^@/, '')}`;
+    case 'messenger':      return v.startsWith('http') ? v : `https://m.me/${v}`;
+    case 'whatsapp':       return v.startsWith('http') ? v : `https://wa.me/${v.replace(/^\+/, '').replace(/[^\d]/g, '')}`;
+    case 'telegram':       return v.startsWith('http') ? v : `https://t.me/${v.replace(/^@/, '')}`;
+    case 'phone':          return `tel:${v.replace(/[^\d+]/g, '')}`;
+    case 'custom':         return v;
+    default:               return v;
+  }
+}
+function renderChatField() {
+  const type = document.getElementById('chatType').value;
+  const box = document.getElementById('chatFieldBox');
+  const cur = getChatSettings();
+  const value = cur.type === type ? (cur.value || '') : '';
+  const labels = {
+    line: { l: 'LINE Official ID', ph: 'เช่น @khrua-pong (ตัด @ ก็ได้)' },
+    line_personal: { l: 'LINE ID ส่วนตัว', ph: 'เช่น phuyaipong' },
+    messenger: { l: 'Facebook username/ID', ph: 'เช่น KhruaPongRestaurant' },
+    whatsapp: { l: 'เบอร์ WhatsApp (ใส่รหัสประเทศ)', ph: 'เช่น 66819999999' },
+    telegram: { l: 'Telegram username', ph: 'เช่น phuyaipong (ไม่ต้องมี @)' },
+    phone: { l: 'เบอร์โทร', ph: 'เช่น 0619623696' },
+    custom: { l: 'URL เต็ม (https://...)', ph: 'https://lin.ee/xxx หรือ link อื่นๆ' }
+  };
+  const m = labels[type] || labels.line;
+  box.innerHTML = `
+    <label style="margin-top:8px">${m.l}</label>
+    <input type="text" id="chatValue" value="${value.replace(/"/g, '&quot;')}" placeholder="${m.ph}" style="font-family:monospace;font-size:13px">
+  `;
+}
+function saveChatSettings() {
+  const type = document.getElementById('chatType').value;
+  const value = (document.getElementById('chatValue')?.value || '').trim();
+  const cfg = { type, value, url: buildChatUrl(type, value) };
+  localStorage.setItem('chatSettings', JSON.stringify(cfg));
+  if (window.cloud?.saveContactConfig) window.cloud.saveContactConfig(cfg).catch(()=>{});
+  const st = document.getElementById('chatStatus');
+  if (st) { st.innerHTML = `✅ บันทึกแล้ว · URL: <a href="${cfg.url}" target="_blank" style="color:#1652F0">${cfg.url}</a>`; st.style.color = '#16a34a'; }
+}
+function testChatLink() {
+  const type = document.getElementById('chatType').value;
+  const value = (document.getElementById('chatValue')?.value || '').trim();
+  if (!value) { toast('⚠️ ใส่ค่าก่อน'); return; }
+  const url = buildChatUrl(type, value);
+  window.open(url, '_blank');
+}
+function initChatSettingsUI() {
+  const sel = document.getElementById('chatType');
+  if (!sel) return;
+  const cur = getChatSettings();
+  sel.value = cur.type || 'phone';
+  renderChatField();
+}
+document.addEventListener('DOMContentLoaded', initChatSettingsUI);
 
 // ========== Telegram Bot Notification ==========
 function getTelegramSettings() {
