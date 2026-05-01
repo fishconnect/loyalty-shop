@@ -910,6 +910,19 @@
     <button class="btn-secondary" onclick="logout()" style="width:100%">🚪 ออกจากระบบ</button>
   </div>
 
+  <div class="card" style="border:2px solid #06b6d4">
+    <h2>🔄 ซ่อมแต้มลูกค้า</h2>
+    <div class="hint" style="font-size:12px;margin-bottom:10px;line-height:1.6">
+      ถ้าตัวเลขแต้มของลูกค้า <b>ไม่ตรง</b> กับประวัติ order — กดปุ่มด้านล่าง<br>
+      ระบบจะคำนวณใหม่จาก source-of-truth: <b>signup +5 + (ยอดสะสม÷50) − แต้มที่แลก</b><br>
+      ✅ ปลอดภัย ไม่กระทบ order/ประวัติ — แค่ปรับยอดแต้มในตัวลูกค้า
+    </div>
+    <button class="btn-primary" onclick="recomputeAllPoints()" style="width:100%;background:linear-gradient(135deg,#06b6d4,#0891b2)">🔄 คำนวณแต้มใหม่ทุกลูกค้า</button>
+    <div class="hint" style="font-size:11px;margin-top:6px;color:#5c6982">
+      💡 หรือเปิดหน้า detail ของลูกค้าแต่ละคน (👥 ลูกค้า → กด detail) มีปุ่ม "🔄 คำนวณแต้มใหม่" สำหรับคนเดียว
+    </div>
+  </div>
+
   <div class="card">
     <h2>⚙️ ตั้งค่า</h2>
     <label>เป้าหมายสะสม (กล่อง/รางวัล)</label>
@@ -1980,6 +1993,7 @@ function renderCustomerDetail() {
       <div class="hint" style="margin-top:6px">💡 แตะแถวเพื่อดูรายการเมนู · แถวสีน้ำเงินอ่อน = การแลกฟรี · แตะอีกครั้งเพื่อปิด</div>
     </div>
 
+    <button class="btn-secondary" style="width:100%;margin-top:8px" onclick="recomputePoints('${c.id}')">🔄 คำนวณแต้มใหม่ (จากออเดอร์จริง)</button>
     <button class="btn-ghost" style="width:100%;margin-top:8px" onclick="editCustomer('${c.id}')">✏️ แก้ไขชื่อ/เบอร์ลูกค้า</button>
   `;
   } catch (err) {
@@ -1991,6 +2005,117 @@ function renderCustomerDetail() {
 // Backward compat
 function renderCheck() { renderCustomerDetail(); }
 function selectCheckCustomer(id) { openCustomerDetail(id); }
+
+// 🔄 Recompute points from source-of-truth orders.
+// Used to fix drift caused by missed advanceStatus, cloud-sync race, or partial finalizeOrder runs.
+//   correct.points          = signupBonus + earnedFromDoneOrders − pointsUsedInRedemptions
+//   correct.lifetime_points = signupBonus + earnedFromDoneOrders   (never decreases)
+async function recomputePoints(customerId, opts) {
+  const silent = opts && opts.silent;
+  const c = getCustomer(customerId);
+  if (!c) { if (!silent) toast('⚠️ ไม่พบลูกค้า', true); return null; }
+
+  // All orders attributed to this customer (legacy + pending)
+  const allOrders = [
+    ...((db.pendingOrders || []).filter(o => o.customer_id === customerId || (c.phone && o.customer_phone === c.phone))),
+    ...((db.orders || []).filter(o => o.customer_id === customerId || (c.phone && o.customer_phone === c.phone)))
+  ];
+  // Dedup by id
+  const seen = new Set();
+  const orders = allOrders.filter(o => o.id && !seen.has(o.id) && seen.add(o.id));
+
+  // Earned: only from completed (done/delivered), non-factory orders
+  const doneOrders = orders.filter(o => ['done','delivered'].includes(o.status) && o.source !== 'factory');
+  let earned = 0;
+  let recountedAwarded = []; // orders whose points_awarded we'll repair if drifted
+  doneOrders.forEach(o => {
+    const base = o.original_total || o.total || 0;
+    const correctPts = Math.floor(base / 50);
+    earned += correctPts;
+    // Repair denormalized field on the order itself if missing/wrong
+    if ((o.points_awarded || 0) !== correctPts) {
+      o.points_awarded = correctPts;
+      recountedAwarded.push(o);
+    }
+  });
+
+  // Used: sum of points_used in any completed order's redemptions
+  let used = 0;
+  doneOrders.forEach(o => {
+    (o.redemptions || []).forEach(r => { used += (r.points_used || 0); });
+  });
+
+  // Signup bonus — give if customer has any non-factory order in the system
+  // (matches the original submitOrder flow which awarded +5 on first non-factory order)
+  const hasAnyNonFactoryOrder = orders.some(o => o.source !== 'factory');
+  const signup = hasAnyNonFactoryOrder ? (window.LOYALTY?.SIGNUP_BONUS || 5) : 0;
+
+  const correctLifetime = signup + earned;
+  const correctPoints = Math.max(0, correctLifetime - used);
+
+  const oldPoints = c.points || 0;
+  const oldLifetime = c.lifetime_points || 0;
+  const ptsDiff = correctPoints - oldPoints;
+  const lifeDiff = correctLifetime - oldLifetime;
+
+  if (!silent) {
+    const breakdown =
+      `${c.name}\n\n` +
+      `📊 สูตรคำนวณ:\n` +
+      `• Signup bonus:   +${signup}\n` +
+      `• ได้จาก ${doneOrders.length} ออเดอร์: +${earned}\n` +
+      `• ใช้แลกไป:        −${used}\n` +
+      `─────────────────\n` +
+      `• คงเหลือควรเป็น:  ${correctPoints} แต้ม\n` +
+      `• Lifetime ควรเป็น: ${correctLifetime} แต้ม\n\n` +
+      `📌 ปัจจุบัน:\n` +
+      `• คงเหลือ: ${oldPoints}  (Δ ${ptsDiff >= 0 ? '+' : ''}${ptsDiff})\n` +
+      `• Lifetime: ${oldLifetime}  (Δ ${lifeDiff >= 0 ? '+' : ''}${lifeDiff})\n\n` +
+      (ptsDiff === 0 && lifeDiff === 0 ? '✅ ตรงอยู่แล้ว ไม่ต้องแก้' : '⚠️ ตัวเลขเพี้ยน — ยืนยันแก้?');
+    if (ptsDiff === 0 && lifeDiff === 0) { alert(breakdown); return { points: correctPoints, lifetime: correctLifetime, drift: 0 }; }
+    if (!confirm(breakdown)) return null;
+  }
+
+  // Apply fix locally
+  c.points = correctPoints;
+  c.lifetime_points = correctLifetime;
+  // Don't touch signup_bonus_received — we used the order presence as the source of truth
+  if (signup > 0) c.signup_bonus_received = true;
+  saveDB();
+
+  // Sync to cloud
+  if (window.cloud) {
+    try { await window.cloud.saveCustomer(c); } catch (e) { console.warn('[recompute] saveCustomer', e); }
+    for (const o of recountedAwarded) {
+      try { await window.cloud.saveOrder(o); } catch (e) { console.warn('[recompute] saveOrder', e); }
+    }
+  }
+
+  if (!silent) {
+    toast(`✅ ${c.name}: ${oldPoints} → ${correctPoints} pt (lifetime ${oldLifetime} → ${correctLifetime})`);
+    if (checkSelectedId === customerId) renderCustomerDetail();
+    renderCustomers();
+  }
+  return { points: correctPoints, lifetime: correctLifetime, drift: ptsDiff };
+}
+
+// 🔄 Recompute points for ALL customers — admin batch fix
+async function recomputeAllPoints() {
+  const customers = Object.values(db.customers);
+  if (!confirm(`คำนวณแต้มใหม่ทั้งระบบ ${customers.length} ลูกค้า?\n\n• แต้มที่ถูก สูตรจะคืนเงินใหม่จากประวัติ\n• ไม่กระทบ ออเดอร์/รางวัล\n• ใช้เวลาประมาณ ${Math.ceil(customers.length / 2)} วินาที`)) return;
+  toast(`⏳ กำลังคำนวณ ${customers.length} ลูกค้า...`);
+  let fixed = 0, ok = 0;
+  for (const c of customers) {
+    const result = await recomputePoints(c.id, { silent: true });
+    if (result) {
+      if (result.drift !== 0) fixed++;
+      else ok++;
+    }
+  }
+  alert(`✅ คำนวณเสร็จ\n\n• ตรงอยู่แล้ว: ${ok} ลูกค้า\n• แก้ไข: ${fixed} ลูกค้า\n\n(เปิด console ดู log ละเอียด)`);
+  renderCustomers();
+  if (checkSelectedId) renderCustomerDetail();
+}
 
 function confirmDeleteRedemption(redemptionId) {
   const r = db.redemptions.find(x => x.id === redemptionId);
