@@ -604,6 +604,11 @@ window.applyMenuConfig = function(config) {
   const custom = config.custom || [];
   const disabled = new Set(config.disabledChoices || []);
 
+  // Build base items (apply name/price/image/available overrides) but track
+  // 'moveTo' so we can relocate items between categories below.
+  const movedOut = new Set();   // ids that have been moved away from their original cat
+  const moveTargets = {};       // catName → [item, ...]
+
   let result = MENU.map(cat => ({
     ...cat,
     items: cat.items.map(it => {
@@ -617,9 +622,24 @@ window.applyMenuConfig = function(config) {
         ...(o.image ? { image: o.image } : {}),
         available: o.available !== false
       };
-      return _filterDisabledChoices(item, disabled);
-    })
+      item = _filterDisabledChoices(item, disabled);
+      // If admin moved this built-in item to a different category, schedule it for relocation
+      const moveTo = o && o.moveTo;
+      if (moveTo && moveTo !== cat.cat) {
+        movedOut.add(it.id);
+        (moveTargets[moveTo] = moveTargets[moveTo] || []).push(item);
+        return null; // remove from original cat
+      }
+      return item;
+    }).filter(Boolean)
   }));
+
+  // Drop in moved-out items at their target categories
+  Object.entries(moveTargets).forEach(([catName, items]) => {
+    const target = result.find(c => c.cat === catName);
+    if (target) target.items.push(...items);
+    else result.push({ cat: catName, emoji: '🍽️', items: [...items] });
+  });
 
   custom.forEach(c => {
     const item = _filterDisabledChoices({
