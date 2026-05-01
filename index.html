@@ -4513,19 +4513,30 @@ function changePassword() {
   toast('✅ เปลี่ยนรหัสผ่านแล้ว');
 }
 
-// Sync menu config from cloud
+// Sync menu config from cloud — but PRESERVE local images
+// Cloud strips images before save (Firestore 1MB doc limit). When the cloud
+// snapshot fires, it carries no image data — re-merge images from the
+// previous local copy so they don't get wiped.
 whenCloudReady(() => {
   window.cloud.onMenuConfig(config => {
-    menuConfig = config || { overrides: {}, custom: [] };
+    config = config || { overrides: {}, custom: [] };
+    const localCfg = JSON.parse(localStorage.getItem('menuConfig') || '{"overrides":{},"custom":[]}');
+
+    // Merge images from local back into incoming cloud config
+    Object.entries(config.overrides || {}).forEach(([id, ov]) => {
+      const localImg = localCfg.overrides?.[id]?.image;
+      if (localImg && ov && !ov.image) ov.image = localImg;
+    });
+    (config.custom || []).forEach(c => {
+      const localCustom = (localCfg.custom || []).find(lc => lc.id === c.id);
+      if (localCustom?.image && !c.image) c.image = localCustom.image;
+    });
+
+    menuConfig = config;
     localStorage.setItem('menuConfig', JSON.stringify(menuConfig));
-    // Sync payment QR if config has it (so other devices receive it)
-    if (config && config.paymentQrDataUrl) {
-      localStorage.setItem('paymentQrDataUrl', config.paymentQrDataUrl);
-      if (typeof refreshPaymentQrPreview === 'function') refreshPaymentQrPreview();
-    }
-    // Sync shop open/closed status
     if (typeof refreshShopOpenStatus === 'function') refreshShopOpenStatus();
     if (document.querySelector('[data-page=settings]')?.classList.contains('active')) renderMenuManager();
+    if (typeof renderRegularItemList === 'function') try { renderRegularItemList(); } catch(e){}
   });
 });
 

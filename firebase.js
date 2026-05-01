@@ -19,6 +19,32 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const fdb = getFirestore(app);
 
+// Image base64 strings are too big to sync via Firestore (1MB doc limit).
+// Strip image fields from the menu config before pushing to cloud — images
+// stay only in localStorage on the device that uploaded them.
+function _stripImagesFromMenuConfig(config) {
+  if (!config || typeof config !== 'object') return config || {};
+  const out = { ...config };
+  if (config.overrides) {
+    out.overrides = {};
+    Object.entries(config.overrides).forEach(([id, ov]) => {
+      if (!ov) return;
+      const { image, ...rest } = ov;          // drop image
+      out.overrides[id] = rest;
+    });
+  }
+  if (Array.isArray(config.custom)) {
+    out.custom = config.custom.map(c => {
+      if (!c) return c;
+      const { image, ...rest } = c;            // drop image
+      return rest;
+    });
+  }
+  // Drop the (separate) paymentQrDataUrl too — same reason
+  if (out.paymentQrDataUrl) delete out.paymentQrDataUrl;
+  return out;
+}
+
 window.cloud = {
   ready: true,
 
@@ -104,9 +130,17 @@ window.cloud = {
   },
 
   // Menu config (overrides + custom items)
+  // 🔧 Image base64 strings are heavy (~30-50KB each) and a Firestore doc
+  // can't exceed 1MB. With many menu items, the doc would silently reject
+  // every save → admin sees their image edit "not saving". Strip images
+  // before pushing — keep them in localStorage on the device that uploaded.
+  // (Per-device images is fine for a single-shop app; saves on Firestore
+  // bandwidth too.)
   async saveMenuConfig(config) {
-    try { await setDoc(doc(fdb, 'settings', 'menu'), config, { merge: true }); }
-    catch (e) { console.warn('[cloud] saveMenuConfig', e); }
+    try {
+      const stripped = _stripImagesFromMenuConfig(config);
+      await setDoc(doc(fdb, 'settings', 'menu'), stripped, { merge: true });
+    } catch (e) { console.warn('[cloud] saveMenuConfig', e); throw e; }
   },
   async getMenuConfig() {
     try {
