@@ -529,6 +529,14 @@
 
 <!-- ========== รายงาน ========== -->
 <div class="page" id="page-reports">
+  <!-- 🍽 ร้าน vs 🏭 โรงงาน mode toggle -->
+  <div class="card" style="padding:8px;margin-bottom:10px;background:#f7f8fb">
+    <div style="display:flex;gap:6px">
+      <button class="rep-mode-btn active" data-mode="shop" onclick="setReportMode('shop')" style="flex:1;padding:12px;border-radius:10px;font-weight:800;font-size:14px;font-family:inherit;cursor:pointer;border:1.5px solid transparent;background:linear-gradient(135deg,#1652F0,#0738C9);color:#fff">🍽 ร้าน (รับเงินจริง)</button>
+      <button class="rep-mode-btn" data-mode="factory" onclick="setReportMode('factory')" style="flex:1;padding:12px;border-radius:10px;font-weight:800;font-size:14px;font-family:inherit;cursor:pointer;border:1.5px solid #e2e7ef;background:#fff;color:#5c6982">🏭 โรงงาน (เครดิต 15 วัน)</button>
+    </div>
+  </div>
+
   <!-- Date range filter -->
   <div class="card" style="padding:12px;margin-bottom:12px">
     <div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -538,6 +546,58 @@
       <button class="range-btn" data-range="all" onclick="setRange('all')">ทั้งหมด</button>
     </div>
   </div>
+
+  <!-- 🏭 Factory dashboard (only shown when mode = factory) -->
+  <div id="factoryDashboard" style="display:none">
+    <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr)">
+      <div class="kpi-card clickable" onclick="drillDown('factory_unpaid')" style="background:linear-gradient(135deg,#fef3c7,#fde68a)">
+        <div class="kpi-icon">⏳</div>
+        <div class="kpi-value" id="kpiFactUnpaid" style="color:#92400e">฿0</div>
+        <div class="kpi-label">ค้างชำระ (ยังไม่ครบกำหนด)</div>
+        <div class="kpi-sub" id="kpiFactUnpaidSub">0 ออเดอร์</div>
+      </div>
+      <div class="kpi-card clickable" onclick="drillDown('factory_overdue')" style="background:linear-gradient(135deg,#fee2e2,#fecaca)">
+        <div class="kpi-icon">🔴</div>
+        <div class="kpi-value" id="kpiFactOverdue" style="color:#dc2626">฿0</div>
+        <div class="kpi-label">เลยกำหนด (>15 วัน)</div>
+        <div class="kpi-sub" id="kpiFactOverdueSub">0 ออเดอร์</div>
+      </div>
+      <div class="kpi-card clickable" onclick="drillDown('factory_paid')" style="background:linear-gradient(135deg,#dcfce7,#bbf7d0)">
+        <div class="kpi-icon">✅</div>
+        <div class="kpi-value" id="kpiFactPaid" style="color:#16a34a">฿0</div>
+        <div class="kpi-label">เก็บเงินแล้ว</div>
+        <div class="kpi-sub" id="kpiFactPaidSub">0 ออเดอร์</div>
+      </div>
+    </div>
+    <div class="kpi-grid" style="grid-template-columns:repeat(2,1fr)">
+      <div class="kpi-card primary">
+        <div class="kpi-icon">📦</div>
+        <div class="kpi-value" id="kpiFactTotal">฿0</div>
+        <div class="kpi-label">ยอดขายโรงงาน (งวดนี้)</div>
+        <div class="kpi-sub" id="kpiFactTotalSub">— ออเดอร์</div>
+      </div>
+      <div class="kpi-card" style="background:linear-gradient(135deg,#ebf0ff,#c5d3ff)">
+        <div class="kpi-icon">🍱</div>
+        <div class="kpi-value" id="kpiFactDishes" style="color:#1652F0">0</div>
+        <div class="kpi-label">จานที่ส่งให้โรงงาน</div>
+        <div class="kpi-sub" id="kpiFactDishesSub">เฉลี่ย 0 จาน/order</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>📋 รายการเครดิตค้างชำระ (เรียงตามวันครบกำหนด)</h2>
+      <div style="font-size:12px;color:#5c6982;margin-bottom:10px">เครดิต 15 วัน · กดปุ่ม "✓ เก็บเงินแล้ว" เมื่อโรงงานชำระเงินมา</div>
+      <div id="factoryCreditList"></div>
+    </div>
+
+    <div class="card">
+      <h2>📅 ยอดขายรายวัน · โรงงาน</h2>
+      <div id="factoryTrend"></div>
+    </div>
+  </div>
+
+  <!-- 🍽 Shop dashboard (default — original content) -->
+  <div id="shopDashboard">
 
   <!-- KPI Cards (clickable for drill-down) -->
   <div class="kpi-grid">
@@ -677,6 +737,7 @@
     <span id="statCustomers"></span><span id="statBoxes"></span><span id="statRedeemed"></span>
     <div id="salesReport"></div><div id="dailyChart"></div>
   </div>
+  </div><!-- /shopDashboard -->
 </div>
 
 <!-- ========== Power BI-style Drill Modal ========== -->
@@ -2510,6 +2571,24 @@ function dayKey(iso) { return new Date(iso).toLocaleDateString('en-CA'); }
 function startOfDay(d) { d.setHours(0,0,0,0); return d; }
 
 // (currentRange declared at top of script to avoid TDZ)
+// 🍽 ร้าน vs 🏭 โรงงาน — separate dashboards
+let reportMode = 'shop';
+function setReportMode(mode) {
+  reportMode = mode;
+  document.querySelectorAll('.rep-mode-btn').forEach(b => {
+    const active = b.dataset.mode === mode;
+    b.classList.toggle('active', active);
+    b.style.background = active
+      ? 'linear-gradient(135deg,#1652F0,#0738C9)'
+      : '#fff';
+    b.style.color = active ? '#fff' : '#5c6982';
+    b.style.borderColor = active ? 'transparent' : '#e2e7ef';
+  });
+  document.getElementById('shopDashboard').style.display    = mode === 'shop'    ? 'block' : 'none';
+  document.getElementById('factoryDashboard').style.display = mode === 'factory' ? 'block' : 'none';
+  renderReports();
+}
+
 function setRange(r) {
   currentRange = r;
   document.querySelectorAll('.range-btn').forEach(b => b.classList.toggle('active', b.dataset.range === r));
@@ -2535,25 +2614,29 @@ function rangeBounds(range) {
 window._reportCache = null;
 
 function renderReports() {
+  // 🏭 Factory mode → render the credit-based factory dashboard and bail
+  if (reportMode === 'factory') {
+    renderFactoryReports();
+    return;
+  }
+
   const price = db.settings.pricePerBox || 50;
   const customers = Object.values(db.customers);
   const { start, label } = rangeBounds(currentRange);
 
   // Source of truth: completed orders from pendingOrders (cloud-synced) + legacy db.orders
+  // ⛔ EXCLUDE factory orders — they have their own dashboard (credit, not paid revenue)
+  const isFact = o => o.source === 'factory' || o.is_factory === true ||
+    (typeof o.customer_id === 'string' && o.customer_id.startsWith('factory-'));
   const allCompleted = [
-    ...(db.pendingOrders || []).filter(o => o.status === 'done').map(o => ({
+    ...(db.pendingOrders || []).filter(o => o.status === 'done' && !isFact(o)).map(o => ({
       ...o,
-      // Normalize: dashboard uses completed_at as primary date, fallback to date
       _useDate: o.completed_at || o.date,
       boxes: o.boxes || (window.countMainDishes ? window.countMainDishes(o.items || []) : 0)
     })),
-    // Include legacy db.orders that aren't already in pendingOrders
-    ...((db.orders || []).filter(o => {
-      // Skip if already counted in pendingOrders (matched by date or content)
-      const id = o.id;
-      // Old db.orders had IDs like 'O...' — check if there's a matching done order with same date+customer
-      return !(db.pendingOrders || []).some(po => po.status === 'done' && po.customer_id === o.customer_id && po.completed_at === o.completed_at);
-    }).map(o => ({ ...o, _useDate: o.completed_at || o.date })))
+    ...((db.orders || []).filter(o => !isFact(o) && !(db.pendingOrders || []).some(po =>
+      po.status === 'done' && po.customer_id === o.customer_id && po.completed_at === o.completed_at
+    )).map(o => ({ ...o, _useDate: o.completed_at || o.date })))
   ];
 
   const inRange = allCompleted.filter(o => new Date(o._useDate) >= start);
@@ -3165,6 +3248,41 @@ function drillDown(type, param) {
           <div style="flex:1"><b>${name}</b> · <span style="color:${isCash?'#16a34a':'#1652F0'};font-weight:700">${fmtBaht(o.total)}</span><div style="font-size:11px;color:#6b7280">${fmtDate(o._useDate)}</div></div></div>`;
       }).join('') || '<div class="empty">— ยังไม่มี —</div>'}
     `;
+  } else if (type === 'factory_unpaid' || type === 'factory_overdue' || type === 'factory_paid') {
+    const fc = window._factoryReportCache || { allFact: [], allUnpaid: [] };
+    const now = Date.now();
+    const dueMs = FACTORY_CREDIT_DAYS * 86400000;
+    let list = [], heading = '', color = '#1652F0';
+    if (type === 'factory_unpaid') {
+      heading = '⏳ เครดิตค้างชำระ (ยังไม่ครบกำหนด)';
+      color = '#92400e';
+      list = fc.allUnpaid.filter(o => (now - new Date(o._useDate).getTime()) <= dueMs);
+    } else if (type === 'factory_overdue') {
+      heading = '🔴 เลยกำหนด (>15 วัน)';
+      color = '#dc2626';
+      list = fc.allUnpaid.filter(o => (now - new Date(o._useDate).getTime()) > dueMs);
+    } else {
+      heading = '✅ เก็บเงินเรียบร้อย';
+      color = '#16a34a';
+      list = fc.allFact.filter(o => o.factory_paid);
+    }
+    const sumAmt = list.reduce((s,o) => s + (o.total || 0), 0);
+    title = `${heading} ${fc.label || ''}`;
+    content = `
+      <div style="margin-bottom:12px;padding:12px;background:${type==='factory_paid'?'#dcfce7':type==='factory_overdue'?'#fee2e2':'#fef3c7'};border-radius:10px">
+        <div style="font-size:12px;color:#5c6982">รวม</div>
+        <div style="font-size:26px;font-weight:900;color:${color}">${fmtBaht(sumAmt)}</div>
+        <div style="font-size:12px;color:#5c6982;margin-top:4px">${list.length} ออเดอร์</div>
+      </div>
+      ${list.sort((a,b) => new Date(a._useDate) - new Date(b._useDate)).map(o => {
+        const d = new Date(o._useDate);
+        const dueDate = new Date(d.getTime() + dueMs);
+        return `<div class="order-item">
+          <div style="flex:1"><b>${o.customer_name || 'โรงงาน'}</b> · <span style="color:${color};font-weight:800">${fmtBaht(o.total)}</span>
+          <div style="font-size:11px;color:#6b7280">สั่ง ${d.toLocaleDateString('th-TH')} · ครบกำหนด ${dueDate.toLocaleDateString('th-TH')}${o.factory_paid_at?` · เก็บ ${new Date(o.factory_paid_at).toLocaleDateString('th-TH')}`:''}</div></div>
+        </div>`;
+      }).join('') || '<div class="empty">— ยังไม่มี —</div>'}
+    `;
   } else if (type === 'discounts') {
     title = `🎁 ส่วนลดที่ลูกค้าได้รับ ${cache.label}`;
     const discountedOrders = cache.inRange.filter(o => {
@@ -3237,6 +3355,129 @@ document.addEventListener('click', (ev) => {
   if (!t) return;
   drillDown('item', t.getAttribute('data-drill-item'));
 });
+
+// ========== 🏭 Factory Dashboard (credit-based · 15 days) ==========
+const FACTORY_CREDIT_DAYS = 15;
+
+function isFactoryOrder(o) {
+  return o.source === 'factory' || o.is_factory === true ||
+    (typeof o.customer_id === 'string' && o.customer_id.startsWith('factory-'));
+}
+
+function renderFactoryReports() {
+  const { start, label } = rangeBounds(currentRange);
+
+  // All factory orders that have been completed (status done/delivered)
+  const allFact = [
+    ...(db.pendingOrders || []).filter(o => isFactoryOrder(o) && ['done','delivered'].includes(o.status)).map(o => ({
+      ...o,
+      _useDate: o.completed_at || o.date,
+      boxes: o.boxes || (window.countMainDishes ? window.countMainDishes(o.items || []) : 0)
+    })),
+    ...((db.orders || []).filter(o => isFactoryOrder(o) && !(db.pendingOrders || []).some(po =>
+      isFactoryOrder(po) && po.status === 'done' && po.customer_id === o.customer_id && po.completed_at === o.completed_at
+    )).map(o => ({ ...o, _useDate: o.completed_at || o.date })))
+  ];
+
+  const inRange = allFact.filter(o => new Date(o._useDate) >= start);
+  const now = Date.now();
+  const dueMs = FACTORY_CREDIT_DAYS * 86400000;
+
+  // Categorize by payment status + age
+  let unpaidAmt = 0, unpaidCount = 0;
+  let overdueAmt = 0, overdueCount = 0;
+  let paidAmt = 0, paidCount = 0;
+  // For the credit list — show ALL unpaid (regardless of period filter), oldest-first
+  const allUnpaid = allFact.filter(o => !o.factory_paid);
+  // Period totals
+  const periodTotal = inRange.reduce((s,o) => s + (o.total || 0), 0);
+  const periodDishes = inRange.reduce((s,o) => s + (o.boxes || 0), 0);
+  inRange.forEach(o => {
+    if (o.factory_paid) { paidAmt += o.total || 0; paidCount++; }
+  });
+  // Unpaid status counts ignore range filter — invoices live until paid
+  allUnpaid.forEach(o => {
+    const ageMs = now - new Date(o._useDate).getTime();
+    if (ageMs > dueMs) { overdueAmt += o.total || 0; overdueCount++; }
+    else { unpaidAmt += o.total || 0; unpaidCount++; }
+  });
+
+  // KPI fills
+  document.getElementById('kpiFactUnpaid').textContent  = fmtBaht(unpaidAmt);
+  document.getElementById('kpiFactUnpaidSub').textContent = `${unpaidCount} ออเดอร์`;
+  document.getElementById('kpiFactOverdue').textContent = fmtBaht(overdueAmt);
+  document.getElementById('kpiFactOverdueSub').textContent = `${overdueCount} ออเดอร์`;
+  document.getElementById('kpiFactPaid').textContent    = fmtBaht(paidAmt);
+  document.getElementById('kpiFactPaidSub').textContent = `${paidCount} ออเดอร์ · ${label}`;
+  document.getElementById('kpiFactTotal').textContent   = fmtBaht(periodTotal);
+  document.getElementById('kpiFactTotalSub').textContent = `${inRange.length} ออเดอร์ · ${label}`;
+  document.getElementById('kpiFactDishes').textContent  = periodDishes.toLocaleString('th-TH');
+  document.getElementById('kpiFactDishesSub').textContent = `เฉลี่ย ${inRange.length ? (periodDishes/inRange.length).toFixed(1) : 0} จาน/order`;
+
+  // Credit list — sort by due date ascending (most overdue first)
+  const creditList = allUnpaid.sort((a,b) => new Date(a._useDate) - new Date(b._useDate));
+  document.getElementById('factoryCreditList').innerHTML = creditList.length
+    ? creditList.map(o => {
+        const orderDate = new Date(o._useDate);
+        const dueDate = new Date(orderDate.getTime() + dueMs);
+        const ageDays = Math.floor((now - orderDate.getTime()) / 86400000);
+        const overdueDays = Math.floor((now - dueDate.getTime()) / 86400000);
+        const isOverdue = overdueDays > 0;
+        const itemSummary = (o.items || []).map(i => `${i.qty}× ${i.mainName || i.name}`).join(', ').slice(0, 80);
+        return `
+          <div class="order-item" style="border-left:4px solid ${isOverdue ? '#dc2626' : '#f59e0b'};padding-left:10px">
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                <b>${o.customer_name || 'โรงงาน'}</b>
+                <span style="background:${isOverdue?'#fee2e2;color:#dc2626':'#fef3c7;color:#92400e'};padding:2px 9px;border-radius:999px;font-size:11px;font-weight:800">
+                  ${isOverdue ? `🔴 เลย ${overdueDays} วัน` : `⏳ อีก ${FACTORY_CREDIT_DAYS - ageDays} วัน`}
+                </span>
+                <span style="color:#1652F0;font-weight:800">${fmtBaht(o.total || 0)}</span>
+              </div>
+              <div style="font-size:11.5px;color:#5c6982;margin-top:3px">
+                สั่ง ${orderDate.toLocaleDateString('th-TH')} · ครบกำหนด ${dueDate.toLocaleDateString('th-TH')}${itemSummary?` · ${itemSummary}`:''}
+              </div>
+            </div>
+            <button onclick="markFactoryPaid('${o.id}')" style="background:#16a34a;color:#fff;border:none;padding:8px 14px;border-radius:8px;font-weight:800;font-size:12px;cursor:pointer;font-family:inherit;flex-shrink:0">✓ เก็บเงินแล้ว</button>
+          </div>
+        `;
+      }).join('')
+    : '<div class="empty">— ไม่มีเครดิตค้างชำระ —</div>';
+
+  // Trend (period only)
+  const days = currentRange === 'today' ? 1 : currentRange === '7d' ? 7 : currentRange === '30d' ? 30 : 30;
+  const dayData = [];
+  const today = new Date();
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(today); d.setDate(d.getDate() - i);
+    dayData.push({ key: dayKey(d), label: d.toLocaleDateString('th-TH', { weekday:'short', day:'numeric' }), boxes: 0, revenue: 0 });
+  }
+  allFact.forEach(o => {
+    const day = dayData.find(x => x.key === dayKey(o._useDate));
+    if (day) { day.boxes += o.boxes || 0; day.revenue += o.total || 0; }
+  });
+  document.getElementById('factoryTrend').innerHTML = renderTrendChart(dayData);
+
+  // Cache for drill-down
+  window._factoryReportCache = { allFact, allUnpaid, label };
+}
+
+async function markFactoryPaid(orderId) {
+  const order = (db.pendingOrders || []).find(o => o.id === orderId)
+              || (db.orders || []).find(o => o.id === orderId);
+  if (!order) return toast('⚠️ ไม่พบ order', true);
+  if (!confirm(`ยืนยัน: รับเงินจากโรงงานสำหรับ order นี้แล้ว?\n\n${order.customer_name || 'โรงงาน'}\n฿${order.total} · ${new Date(order.completed_at || order.date).toLocaleDateString('th-TH')}`)) return;
+  order.factory_paid = true;
+  order.factory_paid_at = new Date().toISOString();
+  saveDB();
+  if (window.cloud?.updateOrder && order.id?.startsWith('PO')) {
+    try {
+      await window.cloud.updateOrder(orderId, { factory_paid: true, factory_paid_at: order.factory_paid_at });
+    } catch(e) { console.warn('[markFactoryPaid] cloud', e); }
+  }
+  toast(`✅ เก็บเงินแล้ว · ${order.customer_name || 'โรงงาน'} · ฿${order.total}`);
+  renderFactoryReports();
+}
 
 // SVG line chart for revenue trend
 function renderTrendChart(data) {
