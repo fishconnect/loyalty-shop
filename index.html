@@ -4262,27 +4262,46 @@ function openItemEditor(itemId) {
     const it = c.items.find(i => i.id === itemId);
     if (it) { foundItem = it; foundCat = c; break; }
   }
-  if (!foundItem) return;
+  if (!foundItem) { toast('⚠️ ไม่พบเมนู'); return; }
 
   editingItemId = itemId;
   editingItemImage = foundItem.image || (menuConfig.overrides?.[itemId]?.image) || null;
   editingIsCustom = !!menuConfig.custom?.find(c => c.id === itemId);
-  const isAddOn = foundCat.isAddOn;
+  const isAddOn = !!foundCat.isAddOn;
 
-  // Build category list
-  const cats = (window.MENU || []).map(c => c.cat);
+  // Build category list (exclude add-on category from picker — addOn toggle handles that)
+  const cats = (window.MENU || []).filter(c => !c.isAddOn).map(c => c.cat);
 
+  // Title
   document.getElementById('editorTitle').textContent = `✏️ ${foundItem.name.slice(0, 30)}${foundItem.name.length > 30 ? '…' : ''}`;
-  document.getElementById('editorName').value = foundItem.name;
-  document.getElementById('editorPrice').value = foundItem.price;
+
+  // ✅ Force every editable field to be writable in case browser/css/old-state
+  // somehow flagged them readonly/disabled. Cheap insurance.
+  ['editorName', 'editorPrice'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.removeAttribute('readonly');
+    el.removeAttribute('disabled');
+    el.style.pointerEvents = 'auto';
+    el.style.opacity = '1';
+  });
+
+  // Populate values
+  document.getElementById('editorName').value = foundItem.name || '';
+  document.getElementById('editorPrice').value = foundItem.price ?? 50;
   document.getElementById('editorAvailable').checked = foundItem.available !== false;
-  document.getElementById('editorIsAddOn').checked = !!isAddOn;
+  document.getElementById('editorIsAddOn').checked = isAddOn;
   document.getElementById('editorCat').innerHTML = cats.map(c => `<option value="${c}" ${c===foundCat.cat?'selected':''}>${c}</option>`).join('');
-  document.getElementById('editorCat').disabled = false; // ✅ allow editing for all items
-  document.getElementById('editorIsAddOnRow').style.display = 'flex'; // ✅ allow toggling for all
+  document.getElementById('editorCat').disabled = false;
+  document.getElementById('editorIsAddOnRow').style.display = 'flex';
   document.getElementById('editorDeleteBtn').style.display = editingIsCustom ? 'block' : 'none';
   renderEditorImage();
   document.getElementById('itemEditorModal').classList.add('show');
+  // Auto-focus name field for quick editing
+  setTimeout(() => {
+    const name = document.getElementById('editorName');
+    if (name) { name.focus(); name.select(); }
+  }, 100);
 }
 
 function openNewItemEditor() {
@@ -4328,31 +4347,49 @@ function renderEditorImage() {
 }
 
 function pickImageForEditor() {
+  // 🔧 Some browsers (older Safari, embedded webviews) won't fire .click() on
+  // a detached <input>. Append to DOM, click, then remove after change.
   const input = document.createElement('input');
   input.type = 'file';
   input.accept = 'image/jpeg,image/jpg,image/png,image/webp,image/gif';
-  input.capture = 'environment';
+  // NOTE: removed capture='environment' — it forces the camera and prevents
+  // the user from picking from their photo library on some Android builds.
+  // Users who want camera can pick "ถ่ายรูป" from the system file picker.
+  input.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0';
+  document.body.appendChild(input);
+
+  let cleaned = false;
+  const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    try { input.remove(); } catch (e) {}
+  };
+
   input.onchange = async e => {
-    const file = e.target.files[0];
-    if (!file) return;
-    console.log('[image] file:', file.name, file.type, (file.size/1024).toFixed(1)+'KB');
-    // Detect unsupported formats early (HEIC from iPhone won't load in <img>)
-    const lname = (file.name || '').toLowerCase();
-    if (file.type === 'image/heic' || file.type === 'image/heif' || lname.endsWith('.heic') || lname.endsWith('.heif')) {
-      alert('⚠️ ไฟล์ HEIC ไม่รองรับ\n\nกรุณาแปลงเป็น JPG ก่อน:\nบน iPhone → Settings → Camera → Formats → Most Compatible\nหรือใช้แอป Photos → Share → Save as JPEG');
-      return;
-    }
-    toast('📸 กำลังประมวลผลภาพ...');
     try {
+      const file = e.target.files && e.target.files[0];
+      if (!file) { cleanup(); return; }
+      console.log('[image] file:', file.name, file.type, (file.size/1024).toFixed(1)+'KB');
+      const lname = (file.name || '').toLowerCase();
+      if (file.type === 'image/heic' || file.type === 'image/heif' || lname.endsWith('.heic') || lname.endsWith('.heif')) {
+        alert('⚠️ ไฟล์ HEIC ไม่รองรับ\n\nกรุณาแปลงเป็น JPG ก่อน:\nบน iPhone → Settings → Camera → Formats → Most Compatible\nหรือใช้แอป Photos → Share → Save as JPEG');
+        cleanup(); return;
+      }
+      toast('📸 กำลังประมวลผลภาพ...');
       editingItemImage = await compressImageToDataURL(file);
-      console.log('[image] OK len=', editingItemImage.length, 'starts=', editingItemImage.substring(0, 30));
+      console.log('[image] OK len=', editingItemImage.length);
       renderEditorImage();
       toast('✅ โหลดรูปแล้ว');
     } catch (err) {
       console.error('[image] failed:', err);
       alert('⚠️ ใช้รูปนี้ไม่ได้: ' + (err?.message || err));
+    } finally {
+      cleanup();
     }
   };
+  // Cancel fires no event on most browsers; clean up after a generous timeout
+  setTimeout(() => { if (!editingItemImage || cleaned) cleanup(); }, 60000);
+
   input.click();
 }
 
@@ -4393,14 +4430,16 @@ function compressImageToDataURL(file, maxSize = 500, quality = 0.6) {
   });
 }
 
-function saveItemEditor() {
-  const name = document.getElementById('editorName').value.trim();
-  const price = parseFloat(document.getElementById('editorPrice').value);
+async function saveItemEditor() {
+  const nameEl = document.getElementById('editorName');
+  const priceEl = document.getElementById('editorPrice');
+  const name = (nameEl?.value || '').trim();
+  const price = parseFloat(priceEl?.value);
   const available = document.getElementById('editorAvailable').checked;
   const isAddOn = document.getElementById('editorIsAddOn').checked;
   const catName = document.getElementById('editorCat').value;
-  if (!name) return toast('⚠️ กรอกชื่อเมนู');
-  if (isNaN(price) || price < 0) return toast('⚠️ ราคาไม่ถูกต้อง');
+  if (!name) { toast('⚠️ กรอกชื่อเมนู', true); nameEl?.focus(); return; }
+  if (isNaN(price) || price < 0) { toast('⚠️ ราคาไม่ถูกต้อง', true); priceEl?.focus(); return; }
 
   if (editingItemId && !editingIsCustom) {
     // Update override for built-in item
@@ -4440,10 +4479,13 @@ function saveItemEditor() {
   }
 
   localStorage.setItem('menuConfig', JSON.stringify(menuConfig));
-  if (window.cloud?.ready) window.cloud.saveMenuConfig(menuConfig).catch(e => console.warn(e));
-  toast('✅ บันทึกแล้ว');
+  if (window.cloud?.ready) {
+    try { await window.cloud.saveMenuConfig(menuConfig); } catch (e) { console.warn('[saveMenu] cloud', e); }
+  }
+  toast('✅ บันทึกแล้ว · ' + name);
   closeItemEditor();
   renderMenuManager();
+  if (typeof renderRegularItemList === 'function') try { renderRegularItemList(); } catch (e) {}
 }
 
 function deleteItemEditor() {
