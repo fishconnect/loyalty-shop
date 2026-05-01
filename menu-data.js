@@ -31,83 +31,58 @@ const OPT_EXTRA_AND_KAB_10 = () => ({
   prices: { 'พิเศษ': 10, 'กับข้าว': 10 }
 });
 
-// Helper: per-choice prices for premium proteins (ลูกค้าเลือกข้ามรายการได้ในกลุ่มเดียว)
-// Free = 0 (รวมในราคาอาหาร) — Premium = +10 (กุ้ง/ปลาหมึก/หมูกรอบ/รวมมิตร/ไข่เยี้ยวม้า/ไข่ข้น)
-const PROTEIN_PREMIUM_PRICES = {
-  'กุ้ง': 10, 'ปลาหมึก': 10, 'หมูกรอบ': 10,
-  'รวมมิตร(หมู+หมึก+กุ้ง)': 10, 'ไข่เยี้ยวม้า': 10, 'ไข่ข้น': 10
-};
+// 🥩 Common protein lists used by multiple presets
+const _BASIC_KAPRAO = ['หมูสับ', 'หมูชิ้น', 'ไก่', 'เครื่องในไก่', 'หน่อไม้ดอง'];
+const _PREMIUM_KAPRAO = ['หมูกรอบ', 'กุ้ง', 'ปลาหมึก', 'ไข่เยี้ยวม้า', 'รวมมิตร(หมู+หมึก+กุ้ง)', 'ไข่ข้น'];
 
-// 1) ราดข้าวกะเพรา group: เนื้อ 1-3 (รวมเนื้อพื้นฐาน + พรีเมี่ยม +10) + เผ็ด + ไข่ +5 + เพิ่มพิเศษ + กับข้าว +30
+// 1) ราดข้าวกะเพรา group: เนื้อพื้นฐาน 0-3 (ฟรี) + พรีเมี่ยม +10 (เลือกได้ตามใจ) + เผ็ด + ไข่ +5 + พิเศษ/กับข้าว
+//    — ลูกค้าเลือกแค่กุ้งโดยไม่ใส่เนื้อพื้นฐานก็ได้
 const OPT_KAPRAO = () => ([
-  { kind: 'required',
-    label: 'เลือกเนื้อ (1-3 อย่าง · บางรายการ +10฿)',
-    min: 1, max: 3, priceEach: 0,
-    choices: ['หมูสับ', 'หมูชิ้น', 'ไก่', 'เครื่องในไก่', 'หน่อไม้ดอง',
-              'หมูกรอบ', 'กุ้ง', 'ปลาหมึก', 'รวมมิตร(หมู+หมึก+กุ้ง)', 'ไข่เยี้ยวม้า', 'ไข่ข้น'],
-    prices: PROTEIN_PREMIUM_PRICES },
+  { kind: 'addOn', label: '🥩 เนื้อพื้นฐาน (เลือก 1-3 · ไม่คิดเงินเพิ่ม)',
+    min: 0, max: 3, priceEach: 0, choices: [..._BASIC_KAPRAO] },
+  { kind: 'addOn', label: '🦐 เนื้อพรีเมี่ยม (+10 ต่อรายการ)',
+    min: 0, max: 99, priceEach: 10, choices: [..._PREMIUM_KAPRAO] },
   OPT_SPICE_LEVEL(),
   { kind: 'addOn', label: 'เพิ่มไข่ (+5)', min: 0, max: 99, priceEach: 5, choices: [..._EGGS_5] },
   OPT_EXTRA_AND_KAB_30()
 ]);
 
-// 1b) ราดข้าว ผัดผัก (ไฟแดง): เนื้อ/ผัก 1-3 + เผ็ด + ไข่ +5 + เพิ่มพิเศษ + กับข้าว
-const OPT_FAIDAENG = () => ([
-  { kind: 'required',
-    label: 'เลือกเนื้อ/ผัก (1-3 อย่าง · บางรายการ +10฿)',
-    min: 1, max: 3, priceEach: 0,
-    choices: ['หมูสับ', 'หมูชิ้น', 'ไก่', 'เครื่องในไก่', 'คะน้า', 'ผักบุ้ง', 'ผักรวม',
-              'หมูกรอบ', 'กุ้ง', 'ปลาหมึก', 'รวมมิตร(หมู+หมึก+กุ้ง)', 'ไข่เยี้ยวม้า', 'ไข่ข้น'],
-    prices: PROTEIN_PREMIUM_PRICES },
-  OPT_SPICE_LEVEL(),
-  { kind: 'addOn', label: 'เพิ่มไข่ (+5)', min: 0, max: 99, priceEach: 5, choices: [..._EGGS_5] },
-  OPT_EXTRA_AND_KAB_30()
-]);
-
-// 2) ข้าวผัด: เนื้อ 1-3 (รวมเนื้อพื้นฐาน + พรีเมี่ยม +10) + ไข่ +5 + เพิ่มพิเศษ
+// 2) ข้าวผัด: เนื้อพื้นฐาน 1 อย่าง (บังคับ) + พรีเมี่ยม +10 + ไข่ +5 + พิเศษ
 const OPT_KAOPAD = () => ([
-  { kind: 'required',
-    label: 'เลือกเนื้อ (1-3 อย่าง · บางรายการ +10฿)',
-    min: 1, max: 3, priceEach: 0,
-    choices: ['หมูชิ้น', 'หมูสับ', 'ไก่', 'แหนม',
-              'หมูกรอบ', 'กุ้ง', 'ปลาหมึก', 'รวมมิตร(หมู+หมึก+กุ้ง)'],
-    prices: PROTEIN_PREMIUM_PRICES },
+  { kind: 'required', label: '🥩 เลือกเนื้อ (1 อย่าง · ไม่คิดเงินเพิ่ม)',
+    min: 1, max: 1, priceEach: 0, choices: ['หมูชิ้น', 'หมูสับ', 'ไก่', 'แหนม'] },
+  { kind: 'addOn', label: '🦐 เนื้อพรีเมี่ยม (+10 ต่อรายการ)',
+    min: 0, max: 99, priceEach: 10, choices: ['รวมมิตร(หมู+หมึก+กุ้ง)', 'กุ้ง', 'ปลาหมึก', 'หมูกรอบ'] },
   { kind: 'addOn', label: 'เพิ่มไข่ (+5)', min: 0, max: 99, priceEach: 5, choices: [..._EGGS_5] },
   OPT_EXTRA()
 ]);
 
-// 2b) ราดข้าว-ไข่เจียว: เนื้อ 1-3 (พื้นฐาน + พรีเมี่ยม +10) + เพิ่มพิเศษ + กับข้าว
+// 2b) ข้าวไข่เจียว: เนื้อ 1 (บังคับ) + พรีเมี่ยม +10 + พิเศษ + กับข้าว
 const OPT_KAOPAD_KAI = () => ([
-  { kind: 'required',
-    label: 'เลือกเนื้อ (1-3 อย่าง · บางรายการ +10฿)',
-    min: 1, max: 3, priceEach: 0,
-    choices: ['หมูสับ', 'ไก่สับ', 'แหนม',
-              'กุ้ง', 'ปลาหมึก', 'รวมมิตร(หมู+หมึก+กุ้ง)'],
-    prices: PROTEIN_PREMIUM_PRICES },
+  { kind: 'required', label: '🥩 เลือกเนื้อ (1 อย่าง · ไม่คิดเงินเพิ่ม)',
+    min: 1, max: 1, priceEach: 0, choices: ['หมูสับ', 'ไก่สับ', 'แหนม'] },
+  { kind: 'addOn', label: '🦐 เนื้อพรีเมี่ยม (+10 ต่อรายการ)',
+    min: 0, max: 99, priceEach: 10, choices: ['กุ้ง', 'ปลาหมึก', 'รวมมิตร(หมู+หมึก+กุ้ง)'] },
   OPT_EXTRA_AND_KAB_30()
 ]);
 
-// 2c) มาม่าผัดขึ้เมา / ผัดมาม่า: เนื้อ 1-3 (พื้นฐาน + พรีเมี่ยม +10) + เผ็ด + ไข่ +5 + เพิ่มพิเศษ
+// 2c) มาม่าผัดขึ้เมา / ผัดมาม่า: เนื้อ 1 (บังคับ) + พรีเมี่ยม +10 + เผ็ด + ไข่ +5 + พิเศษ
 const OPT_NOODLE_STIRFRY = () => ([
-  { kind: 'required',
-    label: 'เลือกเนื้อ (1-3 อย่าง · บางรายการ +10฿)',
-    min: 1, max: 3, priceEach: 0,
-    choices: ['หมูชิ้น', 'หมูสับ', 'ไก่',
-              'หมูกรอบ', 'กุ้ง', 'ปลาหมึก', 'รวมมิตร(หมู+หมึก+กุ้ง)'],
-    prices: PROTEIN_PREMIUM_PRICES },
+  { kind: 'required', label: '🥩 เลือกเนื้อ (1 อย่าง · ไม่คิดเงินเพิ่ม)',
+    min: 1, max: 1, priceEach: 0, choices: ['หมูชิ้น', 'หมูสับ', 'ไก่'] },
+  { kind: 'addOn', label: '🦐 เนื้อพรีเมี่ยม (+10 ต่อรายการ)',
+    min: 0, max: 99, priceEach: 10, choices: ['รวมมิตร(หมู+หมึก+กุ้ง)', 'กุ้ง', 'ปลาหมึก', 'หมูกรอบ'] },
   OPT_SPICE_LEVEL(),
   { kind: 'addOn', label: 'เพิ่มไข่ (+5)', min: 0, max: 99, priceEach: 5, choices: [..._EGGS_5] },
   OPT_EXTRA()
 ]);
 
-// 2d) ต้มยำ: เนื้อ 1-3 (พื้นฐาน + พรีเมี่ยม +10) + เผ็ด + เพิ่มพิเศษ +20
+// 2d) ต้มยำ: เนื้อพื้นฐาน 0-3 + พรีเมี่ยม +10 + เผ็ด + พิเศษ +20
 const OPT_TOMYUM_DISH = () => ([
-  { kind: 'required',
-    label: 'เลือกเนื้อ (1-3 อย่าง · บางรายการ +10฿)',
-    min: 1, max: 3, priceEach: 0,
-    choices: ['หมูสับ', 'หมูชิ้น', 'ไก่',
-              'กุ้ง', 'ปลาหมึก', 'รวมมิตร(หมู+หมึก+กุ้ง)'],
-    prices: PROTEIN_PREMIUM_PRICES },
+  { kind: 'addOn', label: '🥩 เนื้อพื้นฐาน (เลือก 1-3 · ไม่คิดเงินเพิ่ม)',
+    min: 0, max: 3, priceEach: 0, choices: ['หมูสับ', 'หมูชิ้น', 'ไก่'] },
+  { kind: 'addOn', label: '🦐 เนื้อพรีเมี่ยม (+10 ต่อรายการ)',
+    min: 0, max: 99, priceEach: 10, choices: ['กุ้ง', 'ปลาหมึก', 'รวมมิตร(หมู+หมึก+กุ้ง)'] },
   OPT_SPICE_LEVEL(),
   OPT_EXTRA_20()
 ]);
@@ -115,39 +90,32 @@ const OPT_TOMYUM_DISH = () => ([
 // 2e) ต้มจืด: แค่เพิ่มพิเศษ +20
 const OPT_TOMJUED = () => ([ OPT_EXTRA_20() ]);
 
-// 3) ผัดซีอิ๊ว: เนื้อ 1-3 (พื้นฐาน + พรีเมี่ยม +10) + เลือกเส้น (จำเป็น) + เพิ่มพิเศษ
+// 3) ผัดซีอิ๊ว: เนื้อ 1 (บังคับ) + พรีเมี่ยม +10 + เลือกเส้น (จำเป็น) + เพิ่มพิเศษ
 const OPT_PADSEEW = () => ([
-  { kind: 'required',
-    label: 'เลือกเนื้อ (1-3 อย่าง · บางรายการ +10฿)',
-    min: 1, max: 3, priceEach: 0,
-    choices: ['หมูชิ้น', 'หมูสับ', 'ไก่',
-              'หมูกรอบ', 'กุ้ง', 'ปลาหมึก', 'รวมมิตร(หมู+หมึก+กุ้ง)'],
-    prices: PROTEIN_PREMIUM_PRICES },
+  { kind: 'required', label: '🥩 เลือกเนื้อ (1 อย่าง · ไม่คิดเงินเพิ่ม)',
+    min: 1, max: 1, priceEach: 0, choices: ['หมูชิ้น', 'หมูสับ', 'ไก่'] },
+  { kind: 'addOn', label: '🦐 เนื้อพรีเมี่ยม (+10 ต่อรายการ)',
+    min: 0, max: 99, priceEach: 10, choices: ['รวมมิตร(หมู+หมึก+กุ้ง)', 'กุ้ง', 'ปลาหมึก', 'หมูกรอบ'] },
   { kind: 'required', label: 'เลือกเส้น', min: 1, max: 1, priceEach: 0, choices: [..._NOODLES_PS] },
   OPT_EXTRA()
 ]);
 
-// 4) ราดหน้า: เนื้อ 1-3 (พื้นฐาน + พรีเมี่ยม +10) + เลือกเส้น (จำเป็น) + เพิ่มพิเศษ
+// 4) ราดหน้า: เนื้อ 1 (บังคับ) + พรีเมี่ยม +10 + เลือกเส้น (จำเป็น) + เพิ่มพิเศษ
 const OPT_RADNAA = () => ([
-  { kind: 'required',
-    label: 'เลือกเนื้อ (1-3 อย่าง · บางรายการ +10฿)',
-    min: 1, max: 3, priceEach: 0,
-    choices: ['หมูชิ้น', 'หมูสับ', 'ไก่',
-              'กุ้ง', 'ปลาหมึก', 'รวมมิตร(หมู+หมึก+กุ้ง)'],
-    prices: PROTEIN_PREMIUM_PRICES },
+  { kind: 'required', label: '🥩 เลือกเนื้อ (1 อย่าง · ไม่คิดเงินเพิ่ม)',
+    min: 1, max: 1, priceEach: 0, choices: ['หมูชิ้น', 'หมูสับ', 'ไก่'] },
+  { kind: 'addOn', label: '🦐 เนื้อพรีเมี่ยม (+10 ต่อรายการ)',
+    min: 0, max: 99, priceEach: 10, choices: ['รวมมิตร(หมู+หมึก+กุ้ง)', 'กุ้ง', 'ปลาหมึก'] },
   { kind: 'required', label: 'เลือกเส้น', min: 1, max: 1, priceEach: 0, choices: [..._NOODLES_PS] },
   OPT_EXTRA()
 ]);
 
-// 5) สุกี้: เนื้อ 1-3 (พื้นฐาน + พรีเมี่ยม +5) + เพิ่มพิเศษ
-// (สุกี้ใช้ +5 ไม่ใช่ +10 — กำหนด price แยกที่ choice)
+// 5) สุกี้: เนื้อ 1 (บังคับ) + พรีเมี่ยม +5 + เพิ่มพิเศษ
 const OPT_SUKI = () => ([
-  { kind: 'required',
-    label: 'เลือกเนื้อ (1-3 อย่าง · บางรายการ +5฿)',
-    min: 1, max: 3, priceEach: 0,
-    choices: ['หมูชิ้น', 'ไก่',
-              'กุ้ง', 'ปลาหมึก', 'รวมมิตร(หมู+หมึก+กุ้ง)'],
-    prices: { 'กุ้ง': 5, 'ปลาหมึก': 5, 'รวมมิตร(หมู+หมึก+กุ้ง)': 5 } },
+  { kind: 'required', label: '🥩 เลือกเนื้อ (1 อย่าง · ไม่คิดเงินเพิ่ม)',
+    min: 1, max: 1, priceEach: 0, choices: ['หมูชิ้น', 'ไก่'] },
+  { kind: 'addOn', label: '🦐 เนื้อพรีเมี่ยม (+5 ต่อรายการ)',
+    min: 0, max: 99, priceEach: 5, choices: ['รวมมิตร(หมู+หมึก+กุ้ง)', 'กุ้ง', 'ปลาหมึก'] },
   OPT_EXTRA()
 ]);
 
@@ -211,30 +179,33 @@ const OPT_DRINK_TAIWAN = () => ([
 // ============================================
 window.MENU = [
   {
-    cat: "ราดข้าวกะเพรา",
+    cat: "ราดข้าว · ผัดกะเพรา & เมนูยอดนิยม",
     emoji: "🌶️",
     items: [
-      { id: 'rd-001', name: 'ราดข้าว ผัดกระเพรา',         price: 40, optionGroups: OPT_KAPRAO() },
-      { id: 'rd-002', name: 'ราดข้าว ใบโหรพา พริกแห้ง',    price: 40, optionGroups: OPT_KAPRAO() },
-      { id: 'rd-003', name: 'ราดข้าว ผัดพริกแกง',          price: 40, optionGroups: OPT_KAPRAO() },
-      { id: 'rd-010', name: 'ราดข้าว พะแนง',                price: 40, optionGroups: OPT_KAPRAO() },
-      { id: 'rd-004', name: 'ราดข้าว ทอดกระเทียม',         price: 40, optionGroups: OPT_KAPRAO() },
-      { id: 'rd-005', name: 'ราดข้าว ผัดฉ่า',               price: 40, optionGroups: OPT_KAPRAO() },
-      { id: 'rd-006', name: 'ราดข้าว ผัดผัก (ไฟแดง)',      price: 40, optionGroups: OPT_FAIDAENG() },
-      { id: 'rd-007', name: 'ราดข้าว พริกสด',               price: 40, optionGroups: OPT_KAPRAO() },
-      { id: 'rd-008', name: 'ราดข้าว พริกเผา',              price: 40, optionGroups: OPT_KAPRAO() },
-      { id: 'rd-009', name: 'ราดข้าว น้ำมันหอย',            price: 40, optionGroups: OPT_KAPRAO() },
+      { id: 'rd-001', name: 'ข้าวผัดกระเพรา',                price: 40, optionGroups: OPT_KAPRAO() },
+      { id: 'rd-002', name: 'ผัดใบโหรพา พริกแห้ง ราดข้าว',  price: 40, optionGroups: OPT_KAPRAO() },
+      { id: 'rd-003', name: 'ผัดพริกแกงราดข้าว',             price: 40, optionGroups: OPT_KAPRAO() },
+      { id: 'rd-010', name: 'ผัดพะแนงราดข้าว',               price: 40, optionGroups: OPT_KAPRAO() },
+      { id: 'rd-004', name: 'กระเทียมพริกไทยราดข้าว',        price: 40, optionGroups: OPT_KAPRAO() },
+      { id: 'rd-005', name: 'ผัดฉ่าราดข้าว',                  price: 40, optionGroups: OPT_KAPRAO() },
+      { id: 'rd-007', name: 'ผัดพริกสดราดข้าว',              price: 40, optionGroups: OPT_KAPRAO() },
+      { id: 'rd-008', name: 'ผัดน้ำพริกเผาราดข้าว',          price: 40, optionGroups: OPT_KAPRAO() },
+      { id: 'rd-009', name: 'ผัดน้ำมันหอยราดข้าว',           price: 40, optionGroups: OPT_KAPRAO() },
+      // ผัดผัก ราดข้าว — แยกเป็น 3 เมนู (เลือกผักคนละชนิด)
+      { id: 'rd-011', name: 'ผัดผักคะน้าราดข้าว',            price: 40, optionGroups: OPT_KAPRAO() },
+      { id: 'rd-012', name: 'ผัดผักบุ้งราดข้าว',             price: 40, optionGroups: OPT_KAPRAO() },
+      { id: 'rd-013', name: 'ผัดผักรวมราดข้าว',              price: 40, optionGroups: OPT_KAPRAO() },
     ]
   },
   {
     cat: "ข้าวผัด / ผัดเส้น",
     emoji: "🍚",
     items: [
-      { id: 'sf-001', name: 'ข้าวผัด',           price: 40, optionGroups: OPT_KAOPAD() },
-      { id: 'sf-004', name: 'ราดข้าว-ไข่เจียว',  price: 40, optionGroups: OPT_KAOPAD_KAI() },
-      { id: 'sf-002', name: 'ผัดซีอิ๊ว',          price: 40, optionGroups: OPT_PADSEEW() },
-      { id: 'sf-005', name: 'มาม่าผัดขึ้เมา',     price: 40, optionGroups: OPT_NOODLE_STIRFRY() },
-      { id: 'sf-006', name: 'ผัดมาม่า',           price: 40, optionGroups: OPT_NOODLE_STIRFRY() },
+      { id: 'sf-001', name: 'ข้าวผัด',          price: 40, optionGroups: OPT_KAOPAD() },
+      { id: 'sf-004', name: 'ข้าวไข่เจียว',     price: 40, optionGroups: OPT_KAOPAD_KAI() },
+      { id: 'sf-002', name: 'ผัดซีอิ๊ว',         price: 40, optionGroups: OPT_PADSEEW() },
+      { id: 'sf-005', name: 'มาม่าผัดขึ้เมา',    price: 40, optionGroups: OPT_NOODLE_STIRFRY() },
+      { id: 'sf-006', name: 'ผัดมาม่า',          price: 40, optionGroups: OPT_NOODLE_STIRFRY() },
       { id: 'sf-003', name: 'ราดหน้า',           price: 40, optionGroups: OPT_RADNAA() },
     ]
   },
@@ -242,26 +213,26 @@ window.MENU = [
     cat: "สุกี้",
     emoji: "🍲",
     items: [
-      { id: 'sk-001', name: 'สุกี้น้ำ',  price: 45, optionGroups: OPT_SUKI() },
-      { id: 'sk-002', name: 'สุกี้แห้ง', price: 45, optionGroups: OPT_SUKI() },
+      { id: 'sk-001', name: 'สุกี้ น้ำ',  price: 45, optionGroups: OPT_SUKI() },
+      { id: 'sk-002', name: 'สุกี้ แห้ง', price: 45, optionGroups: OPT_SUKI() },
     ]
   },
   {
     cat: "เมนูพิเศษ ⭐",
     emoji: "⭐",
     items: [
-      { id: 'sp-001', name: 'ราดข้าว ปลาหมึกผัดไข่เค็ม',          price: 60, optionGroups: OPT_EGG_ONLY() },
-      { id: 'sp-002', name: 'ราดข้าว ผัดเผ็ดหมูป่า',                price: 50, optionGroups: OPT_EGG_ONLY() },
-      { id: 'sp-003', name: 'ราดข้าว ผัดกระเพราหมูป่า',              price: 50, optionGroups: OPT_EGG_ONLY() },
-      { id: 'sp-004', name: 'ราดข้าว ผัดพริกปลาดุกสด',              price: 50, optionGroups: OPT_EGG_ONLY() },
-      { id: 'sp-005', name: 'ราดข้าว ผัดพริกปลาดุกทอด',             price: 50, optionGroups: OPT_EGG_ONLY() },
-      { id: 'sp-006', name: 'ราดข้าว สามชั้นทอดน้ำปลา',              price: 50, optionGroups: OPT_EGG_ONLY() },
-      { id: 'sp-007', name: 'ราดข้าว สามชั้นคั่วพริกเกลือ',          price: 50, optionGroups: OPT_EGG_ONLY() },
-      { id: 'sp-008', name: 'ราดข้าว หมูกรอบคั่วพริกเกลือ',          price: 50, optionGroups: OPT_EGG_ONLY() },
-      { id: 'sp-009', name: 'ราดข้าว ห่อหมกทะเลไข่ข้น',              price: 50, optionGroups: OPT_EGG_ONLY() },
-      { id: 'sp-010', name: 'ราดข้าว กระเพราหมูสับใส้กรอกแดง',       price: 40, optionGroups: OPT_EGG_ONLY() },
-      { id: 'sp-011', name: 'ราดข้าว กระเพราหมูสับ + หมูยอ',         price: 40, optionGroups: OPT_EGG_ONLY() },
-      { id: 'sp-012', name: 'ราดข้าว ผัดเต้าหู้หมูสับ',               price: 40, optionGroups: OPT_EGG_ONLY() },
+      { id: 'sp-001', name: 'ปลาหมึกผัดไข่เค็มราดข้าว',         price: 60, optionGroups: OPT_EGG_ONLY() },
+      { id: 'sp-002', name: 'ผัดเผ็ดหมูป่าราดข้าว',              price: 50, optionGroups: OPT_EGG_ONLY() },
+      { id: 'sp-003', name: 'ผัดกระเพราหมูป่าราดข้าว',           price: 50, optionGroups: OPT_EGG_ONLY() },
+      { id: 'sp-004', name: 'ผัดพริกปลาดุกสดราดข้าว',           price: 50, optionGroups: OPT_EGG_ONLY() },
+      { id: 'sp-005', name: 'ผัดพริกปลาดุกทอดราดข้าว',          price: 50, optionGroups: OPT_EGG_ONLY() },
+      { id: 'sp-006', name: 'ข้าวสามชั้นทอดน้ำปลา',              price: 50, optionGroups: OPT_EGG_ONLY() },
+      { id: 'sp-007', name: 'ข้าวสามชั้นคั่วพริกเกลือ',          price: 50, optionGroups: OPT_EGG_ONLY() },
+      { id: 'sp-008', name: 'ข้าวหมูกรอบคั่วพริกเกลือ',          price: 50, optionGroups: OPT_EGG_ONLY() },
+      { id: 'sp-009', name: 'ข้าวห่อหมกทะเลไข่ข้น',              price: 50, optionGroups: OPT_EGG_ONLY() },
+      { id: 'sp-010', name: 'ข้าวผัดกระเพราหมูสับใส้กรอกแดงราดข้าว', price: 40, optionGroups: OPT_EGG_ONLY() },
+      { id: 'sp-011', name: 'ข้าวผัดกระเพราหมูสับ+หมูยอ ราดข้าว',    price: 40, optionGroups: OPT_EGG_ONLY() },
+      { id: 'sp-012', name: 'ผัดเต้าหู้หมูสับราดข้าว',           price: 40, optionGroups: OPT_EGG_ONLY() },
     ]
   },
   {
@@ -269,11 +240,11 @@ window.MENU = [
     emoji: "🥗",
     items: [
       { id: 'ym-001', name: 'ยำวุ้นเส้นรวมมิตร',     price: 50, optionGroups: OPT_EXTRA_ONLY() },
-      { id: 'ym-002', name: 'ยำมาม่ารวมมิตร',          price: 50, optionGroups: OPT_EXTRA_ONLY() },
+      { id: 'ym-002', name: 'ยำมาม่ารวมมิตร',         price: 50, optionGroups: OPT_EXTRA_ONLY() },
       { id: 'ym-003', name: 'ยำรวมมิตร (ไม่ใส่เส้น)', price: 50, optionGroups: OPT_EXTRA_ONLY() },
-      { id: 'ym-004', name: 'ยำไข่เยี่ยวม้า',          price: 50, optionGroups: OPT_EXTRA_ONLY() },
-      { id: 'ym-005', name: 'ราดข้าว ยำไข่เจียว',     price: 40, optionGroups: OPT_YAM_RICE() },
-      { id: 'ym-006', name: 'ราดข้าว ยำไข่ดาว',       price: 40, optionGroups: OPT_YAM_RICE() },
+      { id: 'ym-004', name: 'ยำไข่เยี่ยวม้า',         price: 50, optionGroups: OPT_EXTRA_ONLY() },
+      { id: 'ym-005', name: 'ข้าวยำไข่เจียว',         price: 40, optionGroups: OPT_YAM_RICE() },
+      { id: 'ym-006', name: 'ข้าวยำไข่ดาว',           price: 40, optionGroups: OPT_YAM_RICE() },
     ]
   },
   {
@@ -286,13 +257,14 @@ window.MENU = [
     ]
   },
   {
-    cat: "ทานเล่น / สเต๊ก",
+    cat: "ทานเล่น / สเต๊ก / ชุดพิเศษ",
     emoji: "🍗",
     items: [
-      { id: 'tn-001', name: 'สเต็กสันคอ',              price: 89 },
-      { id: 'tn-002', name: 'เฟร์นฟรายทอด',            price: 39 },
-      { id: 'tn-003', name: 'ไก่ป๊อบ',                  price: 49 },
-      { id: 'tn-004', name: 'เฟร์นฟรายทอด + ไก่ป๊อบ',  price: 59 },
+      { id: 'tn-001', name: 'สเต็กสันคอ',                price: 89 },
+      { id: 'tn-002', name: 'เฟร์นฟรายทอด',              price: 39 },
+      { id: 'tn-003', name: 'ไก่ป๊อบ',                    price: 49 },
+      { id: 'tn-004', name: 'เฟร์นฟรายทอด + ไก่ป๊อบ',    price: 59 },
+      { id: 'tn-005', name: 'ชุดหมูจุ่ม',                 price: 199 },
     ]
   },
   {
