@@ -367,14 +367,22 @@ function setView(v) {
 function render() {
   const db = loadDB();
   const orders = (cloudOrders !== null) ? cloudOrders : (db.pendingOrders || []);
-  // Group by status
+  // Group by status — but route 'ready' to the right tab based on order_type:
+  //   • PICKUP / PHONE / no-type → ready stays in 🔥 ครัว tab (kitchen hands food to customer)
+  //   • DELIVERY                 → ready/delivering go to 🚚 จัดส่ง tab (rider takes over)
   const kitchenStatuses = ['pending','confirmed','cooking'];
-  const deliveryStatuses = ['ready','delivering'];
-  const doneStatuses = ['delivered','done']; // 'done' is legacy
+  const doneStatuses = ['delivered','done']; // 'done' is legacy / pickup-completed
+
+  const isDeliveryOrder = o => o.order_type === 'delivery';
 
   // Sort: scheduled orders first (by scheduled time, soonest first), then ASAP by order date (newest first)
-  const inKitchen = orders.filter(o => kitchenStatuses.includes(o.status || 'pending'))
-    .sort((a, b) => {
+  const inKitchen = orders.filter(o => {
+    const s = o.status || 'pending';
+    if (kitchenStatuses.includes(s)) return true;
+    // Pickup ready orders stay in kitchen — they never go to the delivery tab
+    if (s === 'ready' && !isDeliveryOrder(o)) return true;
+    return false;
+  }).sort((a, b) => {
       const aSch = a.scheduled_at ? new Date(a.scheduled_at).getTime() : 0;
       const bSch = b.scheduled_at ? new Date(b.scheduled_at).getTime() : 0;
       if (aSch && bSch) return aSch - bSch;        // both scheduled → earliest first
@@ -382,7 +390,8 @@ function render() {
       if (bSch) return 1;
       return new Date(b.date) - new Date(a.date);   // both ASAP → newest first
     });
-  const inDelivery = orders.filter(o => deliveryStatuses.includes(o.status))
+  // Delivery tab — only orders flagged as delivery type
+  const inDelivery = orders.filter(o => isDeliveryOrder(o) && ['ready','delivering'].includes(o.status))
     .sort((a, b) => new Date(b.date) - new Date(a.date));
   const completed = orders.filter(o => doneStatuses.includes(o.status))
     .sort((a, b) => new Date(b.completed_at || b.delivered_at || b.date) - new Date(a.completed_at || a.delivered_at || a.date));
@@ -576,12 +585,18 @@ function render() {
             ` : ''}
             <button onclick="printOrderReceipt('${o.id}')" style="background:#fef3c7;color:#92400e;border:1.5px solid #f59e0b;flex:0;max-width:60px" title="พิมพ์ใบเสร็จ">🖨️</button>
             ${(() => {
-              // 🔀 Conditional flow:
-              //  • Pickup / phone / no-type orders: ready → "ลูกค้ารับแล้ว" (skip delivering)
-              //  • Delivery orders: ready → delivering → delivered as before
+              // 🔀 Conditional flow per order type:
+              //  • PICKUP / PHONE: cooking → ready ('อาหารเสร็จ — รอลูกค้ามารับ')
+              //                    ready    → DONE ('✓ ลูกค้ารับแล้ว' — opens payment picker)
+              //  • DELIVERY:       cooking → ready ('อาหารเสร็จ — พร้อมส่ง')
+              //                    ready    → delivering ('🚚 รับงาน')
+              //                    delivering → delivered ('✓ จัดส่งสำเร็จ' — opens payment picker)
               const isPickup = o.order_type !== 'delivery';
+              if (status === 'cooking' && isPickup) {
+                return `<button class="btn-done" style="background:#f97316" onclick="advanceStatus('${o.id}','ready')">✓ อาหารเสร็จ — รอลูกค้ามารับ</button>`;
+              }
               if (status === 'ready' && isPickup) {
-                return `<button class="btn-done" style="background:#16a34a" onclick="openPaymentPicker('${o.id}')">✓ ลูกค้ารับแล้ว</button>`;
+                return `<button class="btn-done" style="background:#16a34a" onclick="openPaymentPicker('${o.id}')">✓ ลูกค้ารับแล้ว · รับเงิน</button>`;
               }
               if (stat.next) {
                 return `<button class="btn-done" style="background:${stat.color}" onclick="advanceStatus('${o.id}','${stat.next}')">${stat.nextLabel}</button>`;
