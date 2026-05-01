@@ -846,6 +846,26 @@
     </details>
   </div>
 
+  <div class="card" style="border:2px solid #f59e0b">
+    <h2>🎯 โปรโมชั่นที่เปิด-ปิดได้</h2>
+    <div class="hint" style="font-size:12px;margin-bottom:8px">
+      เปิด/ปิดฟีเจอร์ส่งเสริมการขายโดยไม่ต้องแก้ code — มีผลกับลูกค้าทุกเครื่องทันที (ผ่าน cloud sync)
+    </div>
+    <div class="toggle-row" style="margin:8px 0">
+      <input type="checkbox" id="featReferralToggle" onchange="saveFeatureFlags()">
+      <label for="featReferralToggle" style="margin:0">🤝 ระบบแนะนำเพื่อน (Referral · +5pt ทั้งคู่)</label>
+    </div>
+    <div class="toggle-row" style="margin:8px 0">
+      <input type="checkbox" id="featBirthdayToggle" onchange="saveFeatureFlags()">
+      <label for="featBirthdayToggle" style="margin:0">🎂 โบนัสวันเกิด (+5pt ทุกปี)</label>
+    </div>
+    <div id="featStatus" style="font-size:12px;color:#5c6982;text-align:center;margin-top:4px"></div>
+    <div class="hint" style="font-size:11px;margin-top:8px;background:#fef3c7;color:#92400e;padding:8px;border-radius:6px;line-height:1.5">
+      💡 <b>ตอนนี้ปิดทั้งคู่ไว้</b> — ลูกค้าสมัครใหม่จะไม่เห็นช่องวันเกิด/รหัสแนะนำ และไม่รับโบนัสจากฟีเจอร์นี้<br>
+      เปิดเมื่อพร้อมโปรโมชั่น (เช่น 3 เดือนข้างหน้า) ลูกค้าจะเห็นช่องและได้โบนัสทันที
+    </div>
+  </div>
+
   <div class="card" style="border:2px solid #06c755">
     <h2>💬 ปุ่ม Chat (ที่ลูกค้ากดบนหน้าเมนู)</h2>
     <div class="hint" style="font-size:12px;margin-bottom:8px">
@@ -3047,6 +3067,45 @@ function initNotifSettingsUI() {
   updateTgStatus();
 }
 
+// ========== Feature Flags (referral / birthday on/off) ==========
+function getFeatureFlags() {
+  return JSON.parse(localStorage.getItem('featureFlags') || '{"referral":false,"birthday":false}');
+}
+function saveFeatureFlags() {
+  const flags = {
+    referral: !!document.getElementById('featReferralToggle')?.checked,
+    birthday: !!document.getElementById('featBirthdayToggle')?.checked
+  };
+  localStorage.setItem('featureFlags', JSON.stringify(flags));
+  if (window.cloud?.saveFeatureFlags) window.cloud.saveFeatureFlags(flags).catch(()=>{});
+  const st = document.getElementById('featStatus');
+  if (st) {
+    const onCount = [flags.referral, flags.birthday].filter(Boolean).length;
+    st.textContent = onCount === 0 ? '⏸️ ปิดทั้ง 2 ฟีเจอร์ — ลูกค้าจะไม่เห็นช่อง'
+                  : onCount === 2 ? '✅ เปิดทั้ง 2 ฟีเจอร์ — ลูกค้าใหม่จะเห็นช่องและได้โบนัส'
+                  : `✅ เปิด ${onCount} จาก 2 ฟีเจอร์`;
+    st.style.color = onCount === 0 ? '#5c6982' : '#16a34a';
+  }
+  toast(`✓ บันทึกแล้ว ${flags.referral?'🤝':''} ${flags.birthday?'🎂':''}`);
+}
+function initFeatureFlagsUI() {
+  const flags = getFeatureFlags();
+  const r = document.getElementById('featReferralToggle');
+  const b = document.getElementById('featBirthdayToggle');
+  if (r) r.checked = !!flags.referral;
+  if (b) b.checked = !!flags.birthday;
+  // Update status text without re-saving
+  const st = document.getElementById('featStatus');
+  if (st) {
+    const onCount = [flags.referral, flags.birthday].filter(Boolean).length;
+    st.textContent = onCount === 0 ? '⏸️ ปิดทั้ง 2 ฟีเจอร์'
+                  : onCount === 2 ? '✅ เปิดทั้ง 2 ฟีเจอร์'
+                  : `✅ เปิด ${onCount} จาก 2 ฟีเจอร์`;
+    st.style.color = onCount === 0 ? '#5c6982' : '#16a34a';
+  }
+}
+document.addEventListener('DOMContentLoaded', initFeatureFlagsUI);
+
 // ========== Chat button (customer-facing) settings ==========
 function getChatSettings() {
   return JSON.parse(localStorage.getItem('chatSettings') || '{"type":"phone","value":"0619623696"}');
@@ -3842,6 +3901,15 @@ whenCloudReady(() => {
       if (cfg) {
         localStorage.setItem('telegramNotif', JSON.stringify(cfg));
         if (typeof initNotifSettingsUI === 'function') try { initNotifSettingsUI(); } catch(e) {}
+      }
+    });
+  }
+  // Feature flags sync (so admin devices stay in sync)
+  if (window.cloud.onFeatureFlags) {
+    window.cloud.onFeatureFlags(flags => {
+      if (flags) {
+        localStorage.setItem('featureFlags', JSON.stringify(flags));
+        if (typeof initFeatureFlagsUI === 'function') try { initFeatureFlagsUI(); } catch(e) {}
       }
     });
   }

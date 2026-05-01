@@ -1427,6 +1427,12 @@ let cartRewards = {
 let orderType = 'pickup';
 let deliveryLocation = null; // { lat, lng } from geolocation API
 
+// Feature flags — referral / birthday default OFF (admin can flip in settings)
+function getFeatureFlags() {
+  try { return JSON.parse(localStorage.getItem('featureFlags') || '{"referral":false,"birthday":false}'); }
+  catch(e) { return { referral: false, birthday: false }; }
+}
+
 // Schedule mode — 'asap' (default) or 'later' (with scheduled_at ISO string)
 let scheduleMode = 'asap';
 let scheduledAt = null;          // ISO string when scheduleMode === 'later'
@@ -1667,9 +1673,13 @@ function checkCustomer() {
     if (refBox) refBox.style.display = 'none';
   } else {
     found.innerHTML = `<div class="customer-found new">🆕 ลูกค้าใหม่ — สมัครรับ +5 แต้มฟรี!</div>`;
-    // Show optional birth + referral fields
-    if (birthBox) { birthBox.style.display = 'block'; ensureBirthDateOptions(); }
-    if (refBox) refBox.style.display = 'block';
+    // Show optional birth + referral fields ONLY if feature flags are on
+    const flags = getFeatureFlags();
+    if (birthBox) {
+      if (flags.birthday) { birthBox.style.display = 'block'; ensureBirthDateOptions(); }
+      else birthBox.style.display = 'none';
+    }
+    if (refBox) refBox.style.display = flags.referral ? 'block' : 'none';
     resetCartRewards();
   }
   renderRewardsBox();
@@ -2022,7 +2032,8 @@ async function submitOrder() {
   // and only if referralCode field is present + value matches another customer
   let referrerCustomer = null;
   const isNewCustomer = signupBonusGiven; // signupBonusGiven flag = true ⇒ this is the first order
-  if (isNewCustomer && !isShopMode && !isFactoryMode) {
+  const featFlags = getFeatureFlags();
+  if (featFlags.referral && isNewCustomer && !isShopMode && !isFactoryMode) {
     const refField = document.getElementById('referralCode');
     const refRaw = (refField?.value || '').trim();
     if (refRaw) {
@@ -2053,7 +2064,8 @@ async function submitOrder() {
   }
 
   // 🎂 Birthday handling — lock-once on signup, +5pt if order placed on birthday
-  if (isNewCustomer && !isShopMode && !isFactoryMode) {
+  // Gated by feature flag — admin can turn on later
+  if (featFlags.birthday && isNewCustomer && !isShopMode && !isFactoryMode) {
     const bd = document.getElementById('birthDay')?.value;
     const bm = document.getElementById('birthMonth')?.value;
     if (bd && bm) {
@@ -2063,9 +2075,9 @@ async function submitOrder() {
       db.customers[customerId] = customer;
     }
   }
-  // Birthday bonus award (every year, max once per year)
+  // Birthday bonus award (every year, max once per year) — also gated by flag
   let birthdayBonusGiven = false;
-  if (customer.birth_day && customer.birth_month) {
+  if (featFlags.birthday && customer.birth_day && customer.birth_month) {
     const today = new Date();
     if (today.getDate() === customer.birth_day && (today.getMonth() + 1) === customer.birth_month) {
       const yearKey = today.getFullYear();
@@ -2367,6 +2379,18 @@ whenCloudReady(() => {
       if (cfg) {
         localStorage.setItem('chatSettings', JSON.stringify(cfg));
         applyChatConfig(cfg);
+      }
+    });
+  }
+  // Feature flags sync — controls referral / birthday visibility
+  if (window.cloud?.onFeatureFlags) {
+    window.cloud.onFeatureFlags(flags => {
+      if (flags) {
+        localStorage.setItem('featureFlags', JSON.stringify(flags));
+        // Re-render the cart customer-form section if it's showing
+        if (typeof checkCustomer === 'function' && document.getElementById('customerForm')?.style.display === 'block') {
+          try { checkCustomer(); } catch(e) {}
+        }
       }
     });
   }

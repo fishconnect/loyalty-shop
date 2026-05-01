@@ -122,6 +122,23 @@ window.cloud = {
     } catch (e) { return '1234'; }
   },
 
+  // Feature flags (turn marketing features on/off without redeploy)
+  async saveFeatureFlags(flags) {
+    try { await setDoc(doc(fdb, 'settings', 'features'), flags, { merge: true }); }
+    catch (e) { console.warn('[cloud] saveFeatureFlags', e); }
+  },
+  async getFeatureFlags() {
+    try {
+      const s = await getDoc(doc(fdb, 'settings', 'features'));
+      return s.exists() ? s.data() : null;
+    } catch (e) { return null; }
+  },
+  onFeatureFlags(cb) {
+    return onSnapshot(doc(fdb, 'settings', 'features'), snap => {
+      cb(snap.exists() ? snap.data() : null);
+    });
+  },
+
   // Chat / contact button config (customer-facing chat link)
   async saveContactConfig(cfg) {
     try { await setDoc(doc(fdb, 'settings', 'contact'), cfg, { merge: true }); }
