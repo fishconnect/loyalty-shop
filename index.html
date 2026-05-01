@@ -789,9 +789,14 @@
       <div style="padding:16px 20px">
         <label style="margin-bottom:8px">📷 รูปอาหาร</label>
         <div id="editorImageWrap" style="position:relative;margin-bottom:8px"></div>
-        <button onclick="pickImageForEditor()" style="width:100%;padding:12px;background:#ebf0ff;color:#1652F0;border:1.5px solid #1652F0;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:14px">
+        <button onclick="pickImageForEditor()" style="width:100%;padding:12px;background:#ebf0ff;color:#1652F0;border:1.5px solid #1652F0;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:6px">
           📷 ถ่ายรูป / เลือกจากเครื่อง
         </button>
+        <div style="font-size:11px;color:#5c6982;line-height:1.5;background:#fef3c7;padding:8px 10px;border-radius:8px;margin-bottom:14px">
+          📌 <b>ข้อจำกัดรูป:</b> ไฟล์ต้องไม่เกิน <b>10 MB</b> · แนะนำ JPG / PNG · iOS HEIC ไม่รองรับ<br>
+          ระบบจะย่อรูปอัตโนมัติเหลือ ~350px (ประมาณ 30-80 KB)<br>
+          รูปจะเก็บ <b>เฉพาะเครื่องนี้</b> (sync ข้ามเครื่องไม่ได้ เพื่อให้ระบบเร็ว)
+        </div>
 
         <label>ชื่อเมนู</label>
         <input type="text" id="editorName" placeholder="เช่น ข้าวผัดหมูสับ พิเศษ">
@@ -4346,58 +4351,81 @@ function renderEditorImage() {
   }
 }
 
+// ⚠️ Limits — these are clear and we tell the user
+const IMG_MAX_FILE_SIZE_MB = 10;       // reject files larger than this
+const IMG_TARGET_WIDTH = 350;           // px — output width after compress
+const IMG_QUALITY = 0.55;               // 0..1 JPEG quality
+const IMG_TARGET_KB = 80;               // stay under this for healthy storage
+
 function pickImageForEditor() {
-  // 🔧 Some browsers (older Safari, embedded webviews) won't fire .click() on
-  // a detached <input>. Append to DOM, click, then remove after change.
+  // Append to DOM (some browsers no-op .click() on detached inputs)
   const input = document.createElement('input');
   input.type = 'file';
-  input.accept = 'image/jpeg,image/jpg,image/png,image/webp,image/gif';
-  // NOTE: removed capture='environment' — it forces the camera and prevents
-  // the user from picking from their photo library on some Android builds.
-  // Users who want camera can pick "ถ่ายรูป" from the system file picker.
+  input.accept = 'image/jpeg,image/jpg,image/png,image/webp';
   input.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0';
   document.body.appendChild(input);
 
-  let cleaned = false;
-  const cleanup = () => {
-    if (cleaned) return;
-    cleaned = true;
-    try { input.remove(); } catch (e) {}
-  };
+  const cleanup = () => { try { input.remove(); } catch (e) {} };
 
   input.onchange = async e => {
     try {
-      const file = e.target.files && e.target.files[0];
+      const file = e.target.files?.[0];
       if (!file) { cleanup(); return; }
-      console.log('[image] file:', file.name, file.type, (file.size/1024).toFixed(1)+'KB');
+
+      // Reject HEIC/HEIF (iPhone default — won't decode in <img>)
       const lname = (file.name || '').toLowerCase();
-      if (file.type === 'image/heic' || file.type === 'image/heif' || lname.endsWith('.heic') || lname.endsWith('.heif')) {
-        alert('⚠️ ไฟล์ HEIC ไม่รองรับ\n\nกรุณาแปลงเป็น JPG ก่อน:\nบน iPhone → Settings → Camera → Formats → Most Compatible\nหรือใช้แอป Photos → Share → Save as JPEG');
+      if (file.type === 'image/heic' || file.type === 'image/heif'
+          || lname.endsWith('.heic') || lname.endsWith('.heif')) {
+        alert('⚠️ ไฟล์ HEIC ไม่รองรับ\n\nบน iPhone → Settings → Camera → Formats → Most Compatible\nแล้วถ่ายรูปใหม่ครับ');
         cleanup(); return;
       }
-      toast('📸 กำลังประมวลผลภาพ...');
-      editingItemImage = await compressImageToDataURL(file);
-      console.log('[image] OK len=', editingItemImage.length);
+
+      // Reject if file way too large (don't try to decode 50MB photos)
+      const fileMB = file.size / 1024 / 1024;
+      if (fileMB > IMG_MAX_FILE_SIZE_MB) {
+        alert(`⚠️ ไฟล์ใหญ่เกินไป\n\nไฟล์ของคุณ: ${fileMB.toFixed(1)} MB\nสูงสุดที่รับได้: ${IMG_MAX_FILE_SIZE_MB} MB\n\nกรุณาเลือกรูปขนาดเล็กกว่านี้ หรือถ่ายใหม่ด้วยความละเอียดต่ำลง`);
+        cleanup(); return;
+      }
+
+      // Show "loading" inside the image preview slot so user sees feedback
+      const wrap = document.getElementById('editorImageWrap');
+      if (wrap) wrap.innerHTML = `<div style="background:#ebf0ff;padding:30px;border-radius:12px;text-align:center;color:#1652F0"><div style="font-size:32px">⏳</div><div style="font-weight:700;margin-top:6px">กำลังประมวลผลภาพ...</div></div>`;
+
+      const result = await compressImageToDataURL(file, IMG_TARGET_WIDTH, IMG_QUALITY);
+      const sizeKB = Math.round(result.length / 1024);
+
+      editingItemImage = result;
       renderEditorImage();
-      toast('✅ โหลดรูปแล้ว');
+
+      // Show concrete size feedback so admin knows what got saved
+      const sizeColor = sizeKB <= IMG_TARGET_KB ? '#16a34a' : sizeKB <= 200 ? '#f59e0b' : '#dc2626';
+      const sizeMsg = sizeKB <= IMG_TARGET_KB
+        ? `✅ โหลดรูปแล้ว · ${sizeKB} KB (เล็ก ดี)`
+        : sizeKB <= 200
+        ? `✅ โหลดรูปแล้ว · ${sizeKB} KB (ปานกลาง — โหลดอาจช้า)`
+        : `⚠️ โหลดรูปแล้ว · ${sizeKB} KB (ใหญ่ไป — อาจ save ไม่ได้ครบ)`;
+      const t = document.createElement('div');
+      t.textContent = sizeMsg;
+      t.style.cssText = `font-size:12px;font-weight:700;text-align:center;color:${sizeColor};margin-top:6px`;
+      const wrap2 = document.getElementById('editorImageWrap');
+      if (wrap2) wrap2.appendChild(t);
     } catch (err) {
       console.error('[image] failed:', err);
-      alert('⚠️ ใช้รูปนี้ไม่ได้: ' + (err?.message || err));
+      alert('⚠️ ใช้รูปนี้ไม่ได้\n\n' + (err?.message || err) + '\n\nลองรูปอื่น หรือลด resolution ก่อน');
+      renderEditorImage();
     } finally {
       cleanup();
     }
   };
-  // Cancel fires no event on most browsers; clean up after a generous timeout
-  setTimeout(() => { if (!editingItemImage || cleaned) cleanup(); }, 60000);
 
+  setTimeout(cleanup, 120000); // safety cleanup after 2 min
   input.click();
 }
 
-function compressImageToDataURL(file, maxSize = 500, quality = 0.6) {
+function compressImageToDataURL(file, maxSize = IMG_TARGET_WIDTH, quality = IMG_QUALITY) {
   return new Promise((resolve, reject) => {
-    if (file.size > 20 * 1024 * 1024) return reject(new Error('ไฟล์ใหญ่เกิน 20MB'));
     const reader = new FileReader();
-    reader.onerror = () => reject(new Error('อ่านไฟล์ไม่ได้'));
+    reader.onerror = () => reject(new Error('อ่านไฟล์ไม่ได้ — ลองรูปอื่น'));
     reader.onload = e => {
       const img = new Image();
       img.onerror = () => reject(new Error('ไฟล์ภาพไม่รองรับ (อาจเป็น HEIC)'));
@@ -4411,13 +4439,18 @@ function compressImageToDataURL(file, maxSize = 500, quality = 0.6) {
           const canvas = document.createElement('canvas');
           canvas.width = width; canvas.height = height;
           const ctx = canvas.getContext('2d');
-          if (!ctx) return reject(new Error('canvas ไม่รองรับ'));
           ctx.fillStyle = '#fff';
           ctx.fillRect(0, 0, width, height);
           ctx.drawImage(img, 0, 0, width, height);
-          const dataUrl = canvas.toDataURL('image/jpeg', quality);
-          if (!dataUrl || dataUrl.length < 100 || !dataUrl.startsWith('data:image/')) {
-            return reject(new Error('แปลงไฟล์ไม่สำเร็จ'));
+          let dataUrl = canvas.toDataURL('image/jpeg', quality);
+          // If still too big, try harder (drop quality, then size)
+          let q = quality;
+          while (dataUrl.length / 1024 > 250 && q > 0.3) {
+            q -= 0.1;
+            dataUrl = canvas.toDataURL('image/jpeg', q);
+          }
+          if (!dataUrl.startsWith('data:image/')) {
+            return reject(new Error('แปลงไฟล์ไม่สำเร็จ — ลองรูปอื่น'));
           }
           resolve(dataUrl);
         } catch (err) {
@@ -4441,10 +4474,11 @@ async function saveItemEditor() {
   if (!name) { toast('⚠️ กรอกชื่อเมนู', true); nameEl?.focus(); return; }
   if (isNaN(price) || price < 0) { toast('⚠️ ราคาไม่ถูกต้อง', true); priceEl?.focus(); return; }
 
+  // 🔍 Build the override / custom record to write
   if (editingItemId && !editingIsCustom) {
-    // Update override for built-in item
-    if (!menuConfig.overrides[editingItemId]) menuConfig.overrides[editingItemId] = {};
-    const o = menuConfig.overrides[editingItemId];
+    // Built-in item — write/update override
+    menuConfig.overrides = menuConfig.overrides || {};
+    const o = menuConfig.overrides[editingItemId] = menuConfig.overrides[editingItemId] || {};
     o.name = name;
     o.price = price;
     o.available = available;
@@ -4453,39 +4487,81 @@ async function saveItemEditor() {
     if (editingItemImage) o.image = editingItemImage;
     else delete o.image;
   } else if (editingItemId && editingIsCustom) {
-    // Update existing custom item
-    if (!menuConfig.custom) menuConfig.custom = [];
+    menuConfig.custom = menuConfig.custom || [];
     const idx = menuConfig.custom.findIndex(c => c.id === editingItemId);
     if (idx >= 0) {
-      menuConfig.custom[idx] = {
+      const updated = {
         ...menuConfig.custom[idx],
         name, price, available,
         category: isAddOn ? '_addon_' : catName,
-        isAddOn: !!isAddOn,
-        image: editingItemImage || undefined
+        isAddOn: !!isAddOn
       };
+      if (editingItemImage) updated.image = editingItemImage;
+      else delete updated.image;
+      menuConfig.custom[idx] = updated;
     }
   } else {
-    // New custom item
-    if (!menuConfig.custom) menuConfig.custom = [];
-    menuConfig.custom.push({
+    menuConfig.custom = menuConfig.custom || [];
+    const newItem = {
       id: 'cust-' + Date.now(),
       name, price, available,
       category: isAddOn ? '_addon_' : catName,
       isAddOn: !!isAddOn,
-      emoji: isAddOn ? '🍳' : '🍽️',
-      image: editingItemImage || undefined
-    });
+      emoji: isAddOn ? '🍳' : '🍽️'
+    };
+    if (editingItemImage) newItem.image = editingItemImage;
+    menuConfig.custom.push(newItem);
   }
 
-  localStorage.setItem('menuConfig', JSON.stringify(menuConfig));
-  if (window.cloud?.ready) {
-    try { await window.cloud.saveMenuConfig(menuConfig); } catch (e) { console.warn('[saveMenu] cloud', e); }
+  // 💾 Save locally — this is the SOURCE OF TRUTH for images on this device
+  let localSaveOK = false, localErr = null;
+  try {
+    const json = JSON.stringify(menuConfig);
+    const sizeMB = (json.length / 1024 / 1024).toFixed(2);
+    console.log('[saveMenu] localStorage size:', sizeMB, 'MB');
+    if (json.length > 9 * 1024 * 1024) {
+      throw new Error(`menuConfig ใหญ่เกิน 9MB (ตอนนี้ ${sizeMB} MB) — รูปบางตัวต้องลด`);
+    }
+    localStorage.setItem('menuConfig', json);
+    localSaveOK = true;
+  } catch (e) {
+    localErr = e;
+    console.error('[saveMenu] localStorage failed:', e);
   }
-  toast('✅ บันทึกแล้ว · ' + name);
+
+  if (!localSaveOK) {
+    alert(`❌ บันทึกในเครื่องล้มเหลว\n\n${localErr?.message || localErr}\n\nกรุณาลบเมนูที่ไม่ใช้ออกบ้าง หรือใช้รูปขนาดเล็กกว่านี้`);
+    return;
+  }
+
+  // ☁️ Cloud sync — image-stripped (Firestore 1MB doc limit)
+  let cloudOK = true, cloudErr = null;
+  if (window.cloud?.ready) {
+    try { await window.cloud.saveMenuConfig(menuConfig); }
+    catch (e) { cloudOK = false; cloudErr = e; console.warn('[saveMenu] cloud failed:', e); }
+  }
+
+  // ✅ Verify by re-reading what we just wrote
+  const verify = JSON.parse(localStorage.getItem('menuConfig') || '{}');
+  const verifiedItem = editingItemId
+    ? (editingIsCustom
+        ? (verify.custom || []).find(c => c.id === editingItemId)
+        : verify.overrides?.[editingItemId])
+    : null;
+  console.log('[saveMenu] verified saved:', { name: verifiedItem?.name, hasImage: !!verifiedItem?.image });
+
   closeItemEditor();
-  renderMenuManager();
-  if (typeof renderRegularItemList === 'function') try { renderRegularItemList(); } catch (e) {}
+  // Force re-render — clear DOM, then rebuild
+  setTimeout(() => {
+    renderMenuManager();
+    if (typeof renderRegularItemList === 'function') try { renderRegularItemList(); } catch (e) {}
+  }, 50);
+
+  if (cloudOK) {
+    toast(`✅ บันทึกแล้ว · ${name}${editingItemImage ? ' · มีรูป' : ''}`);
+  } else {
+    alert(`✅ บันทึกในเครื่องสำเร็จ\n⚠️ Sync cloud ล้มเหลว: ${cloudErr?.message || ''}\n\nรูปจะแสดงในเครื่องนี้ปกติ — แต่อาจไม่ขึ้นในเครื่องอื่น (ใช้รูปขนาดเล็กกว่านี้ก็จะ sync ได้)`);
+  }
 }
 
 function deleteItemEditor() {
