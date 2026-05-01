@@ -1995,6 +1995,7 @@ function renderCustomerDetail() {
 
     <button class="btn-secondary" style="width:100%;margin-top:8px" onclick="recomputePoints('${c.id}')">🔄 คำนวณแต้มใหม่ (จากออเดอร์จริง)</button>
     <button class="btn-ghost" style="width:100%;margin-top:8px" onclick="editCustomer('${c.id}')">✏️ แก้ไขชื่อ/เบอร์ลูกค้า</button>
+    <button class="btn-danger" style="width:100%;margin-top:8px;background:#fee2e2;color:#dc2626;border:1.5px solid #dc2626" onclick="deleteCustomerHistory('${c.id}')">🧹 ลบประวัติออเดอร์ทั้งหมด (test data)</button>
   `;
   } catch (err) {
     console.error('[renderCustomerDetail] failed', err);
@@ -2302,6 +2303,77 @@ async function deleteCustomer(id) {
   toast('🗑️ ลบแล้ว');
   if (checkSelectedId === id) closeCustomerDetail();
   renderCustomers();
+}
+
+// 🧹 Delete ALL orders (history) for a customer — used to remove test/dummy data
+// so it doesn't pollute the dashboard. Optionally also delete the customer record.
+async function deleteCustomerHistory(id) {
+  const c = getCustomer(id);
+  if (!c) return toast('⚠️ ไม่พบลูกค้า', true);
+
+  // Find all orders attributed to this customer
+  const matches = (db.pendingOrders || []).filter(o =>
+    o.customer_id === id || (c.phone && o.customer_phone === c.phone)
+  );
+  const totalAmount = matches.reduce((s, o) => s + (o.total || 0), 0);
+  const totalOrders = matches.length;
+
+  if (totalOrders === 0) {
+    if (!confirm(`${c.name} ไม่มีออเดอร์อยู่แล้ว\n\nต้องการลบ "ลูกค้า" ออกจากระบบเลยไหม?`)) return;
+    return deleteCustomer(id);
+  }
+
+  const ok = confirm(
+    `🧹 ลบประวัติออเดอร์ทั้งหมดของ "${c.name}"?\n\n` +
+    `📦 ออเดอร์ที่จะถูกลบ: ${totalOrders} รายการ\n` +
+    `💰 ยอดรวม: ฿${totalAmount.toLocaleString('th-TH')}\n\n` +
+    `⚠️ ลบแล้วกู้คืนไม่ได้ — ใช้สำหรับ test data เท่านั้น\n` +
+    `📊 Dashboard ยอดขายจะคำนวณใหม่อัตโนมัติ\n\n` +
+    `กด OK = ลบประวัติทั้งหมด\nกด Cancel = ยกเลิก`
+  );
+  if (!ok) return;
+
+  toast(`⏳ กำลังลบ ${totalOrders} ออเดอร์...`);
+
+  // Delete from cloud (in parallel) + remove from local
+  let cloudErrors = 0;
+  if (window.cloud?.deleteOrder) {
+    await Promise.all(matches.map(async o => {
+      try { await window.cloud.deleteOrder(o.id); }
+      catch(e) { cloudErrors++; console.warn('[deleteHistory] order', o.id, e); }
+    }));
+  }
+  // Remove from local arrays
+  const matchIds = new Set(matches.map(o => o.id));
+  db.pendingOrders = (db.pendingOrders || []).filter(o => !matchIds.has(o.id));
+  db.orders = (db.orders || []).filter(o =>
+    o.customer_id !== id && (!c.phone || o.customer_phone !== c.phone)
+  );
+  // Also reset customer's accumulated counters since they're tied to deleted orders
+  c.points = 0;
+  c.lifetime_points = 0;
+  c.total_boxes = 0;
+  c.redeemed_count = 0;
+  c.drink_redeemed_count = 0;
+  c.dish_redeemed_count = 0;
+  c.signup_bonus_received = false;
+  db.customers[id] = c;
+  saveDB();
+  if (window.cloud) {
+    try { await window.cloud.saveCustomer(c); } catch(e) { console.warn('[deleteHistory] saveCustomer', e); }
+  }
+
+  closeModal();
+  toast(`✅ ลบ ${totalOrders} ออเดอร์ของ ${c.name} เรียบร้อย${cloudErrors ? ` · ⚠️ cloud ${cloudErrors} รายการ failed` : ''}`);
+
+  // Ask if also remove the customer record itself
+  if (confirm(`ลบ "ลูกค้า ${c.name}" ออกจากระบบเลยไหม?\n\n(ตัวลูกค้ายังอยู่ตอนนี้แต่ไม่มีประวัติแล้ว)`)) {
+    return deleteCustomer(id);
+  }
+
+  if (checkSelectedId === id) renderCustomerDetail();
+  renderCustomers();
+  if (typeof renderReports === 'function') try { renderReports(); } catch(e) {}
 }
 
 // ========== Customers List (with filter, sort, KPI bar) ==========
