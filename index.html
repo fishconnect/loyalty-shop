@@ -2065,24 +2065,114 @@ function editCustomer(id) {
   showModal('แก้ไขข้อมูลลูกค้า', html);
 }
 
-function saveEdit(id) {
+async function saveEdit(id) {
   const c = getCustomer(id);
-  const name = document.getElementById('edName').value.trim();
-  const phone = normalizePhone(document.getElementById('edPhone').value);
-  if (!name) return toast('⚠️ ต้องมีชื่อ');
-  c.name = name;
-  c.phone = phone;
+  if (!c) return;
+  const newName = document.getElementById('edName').value.trim();
+  const newPhone = normalizePhone(document.getElementById('edPhone').value);
+  if (!newName) return toast('⚠️ ต้องมีชื่อ', true);
+
+  const oldName = c.name;
+  const oldPhone = c.phone || '';
+  const oldId = String(c.id);
+  // The "real" customer key is the customer's id (almost always = phone for online customers).
+  // Anchor the new id off the new phone IF the old id WAS the phone (most common case).
+  // Walk-in / factory customers keep their existing id.
+  const wasIdPhone = (oldId === oldPhone) && oldPhone.length >= 9;
+  const newId = (wasIdPhone && newPhone) ? newPhone : oldId;
+
+  const phoneChanged = oldPhone !== newPhone;
+  const idChanged = oldId !== newId;
+  const nameChanged = oldName !== newName;
+
+  // Block phone collision — if new phone is already used by a DIFFERENT customer
+  if (idChanged && db.customers[newId]) {
+    return toast(`⚠️ เบอร์ ${newPhone} มีลูกค้า "${db.customers[newId].name}" อยู่แล้ว — ใช้เบอร์อื่น`, true);
+  }
+
+  // Confirm migration if phone is changing (carries points + history)
+  if (phoneChanged) {
+    const ok = confirm(
+      `เปลี่ยนเบอร์จาก ${oldPhone || '(ไม่มี)'} → ${newPhone || '(ไม่มี)'}\n\n` +
+      `📦 ประวัติ ${(c.total_boxes || 0)} กล่อง · 🎁 แลกไป ${c.redeemed_count || 0} · ⭐ ${c.points || 0}pt\n` +
+      `จะถูก ย้ายตามไป ทั้งหมดที่เบอร์ใหม่นี้\n\n` +
+      `กด OK = ยืนยันย้ายข้อมูล\nกด Cancel = ยกเลิก`
+    );
+    if (!ok) return;
+  }
+
+  // === Update customer record ===
+  const updated = { ...c, id: newId, name: newName, phone: newPhone };
+
+  if (idChanged) {
+    // Move local: new key in, old key out
+    db.customers[newId] = updated;
+    delete db.customers[oldId];
+  } else {
+    db.customers[oldId] = updated;
+  }
+
+  // === Migrate orders (denormalized fields) ===
+  // Both pendingOrders + legacy orders carry customer_id, customer_phone, customer_name
+  const allOrderArrs = [db.pendingOrders || [], db.orders || []];
+  let touchedOrders = [];
+  allOrderArrs.forEach(arr => {
+    arr.forEach(o => {
+      let touched = false;
+      if (o.customer_id === oldId) { o.customer_id = newId; touched = true; }
+      if (phoneChanged && (o.customer_phone === oldPhone || !o.customer_phone)) {
+        o.customer_phone = newPhone; touched = true;
+      }
+      if (nameChanged && o.customer_name === oldName) {
+        o.customer_name = newName; touched = true;
+      }
+      if (touched) touchedOrders.push(o);
+    });
+  });
+
   saveDB();
+
+  // === Sync to cloud ===
+  if (window.cloud) {
+    try {
+      // Save updated customer at new id
+      await window.cloud.saveCustomer(updated);
+      // Delete old customer doc if id changed
+      if (idChanged && window.cloud.deleteCustomer) {
+        await window.cloud.deleteCustomer(oldId);
+      }
+      // Push touched orders
+      for (const o of touchedOrders) {
+        if (o.id) await window.cloud.saveOrder(o);
+      }
+    } catch (e) {
+      console.warn('[saveEdit] cloud sync failed', e);
+      toast('⚠️ บันทึกใน cloud ไม่สมบูรณ์ — refresh แล้วเช็คอีกที', true);
+    }
+  }
+
   closeModal();
-  toast('✅ แก้ไขแล้ว');
-  if (checkSelectedId === id) renderCustomerDetail();
+  const summary = [];
+  if (nameChanged) summary.push(`ชื่อ: ${oldName} → ${newName}`);
+  if (phoneChanged) summary.push(`เบอร์: ${oldPhone || '-'} → ${newPhone || '-'}`);
+  if (touchedOrders.length) summary.push(`ออเดอร์ที่อัพเดต: ${touchedOrders.length}`);
+  toast('✅ ' + (summary.join(' · ') || 'แก้ไขแล้ว'));
+
+  // Update detail view if it was showing the migrated customer
+  if (checkSelectedId === oldId) checkSelectedId = newId;
+  if (checkSelectedId === newId) renderCustomerDetail();
   renderCustomers();
+  if (typeof renderReports === 'function') try { renderReports(); } catch(e) {}
 }
 
-function deleteCustomer(id) {
+async function deleteCustomer(id) {
   if (!confirm('ลบลูกค้านี้? (ออเดอร์/การแลกในอดีตจะยังอยู่)')) return;
   delete db.customers[id];
   saveDB();
+  // Sync delete to cloud (otherwise it'd repopulate via onCustomers snapshot)
+  if (window.cloud?.deleteCustomer) {
+    try { await window.cloud.deleteCustomer(id); } catch(e) { console.warn('cloud deleteCustomer', e); }
+  }
   closeModal();
   toast('🗑️ ลบแล้ว');
   if (checkSelectedId === id) closeCustomerDetail();

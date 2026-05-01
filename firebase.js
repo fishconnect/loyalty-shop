@@ -33,6 +33,10 @@ window.cloud = {
       return s.exists() ? s.data() : null;
     } catch (e) { console.warn('[cloud] getCustomer', e); return null; }
   },
+  async deleteCustomer(id) {
+    try { await deleteDoc(doc(fdb, 'customers', String(id))); }
+    catch (e) { console.warn('[cloud] deleteCustomer', e); }
+  },
   async getAllCustomers() {
     try {
       const snap = await getDocs(collection(fdb, 'customers'));
