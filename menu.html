@@ -2184,7 +2184,13 @@ async function submitOrder() {
 
 // ============ Returning Customer ============
 const isShopMode = new URLSearchParams(location.search).get('mode') === 'shop';
-const lastPhone = localStorage.getItem('lastCustomerPhone');
+// 🔗 Customer identity sources (priority): URL ?phone= → localStorage
+// URL param lets customers bookmark a personal link that works on any device.
+const _urlPhone = new URLSearchParams(location.search).get('phone');
+if (_urlPhone) {
+  localStorage.setItem('lastCustomerPhone', _urlPhone);  // remember on this device too
+}
+const lastPhone = _urlPhone || localStorage.getItem('lastCustomerPhone');
 const lastName = localStorage.getItem('lastCustomerName');
 
 function renderUserWidget(customer, pendingOrder, recentDoneOrder) {
@@ -2218,6 +2224,7 @@ function renderUserWidget(customer, pendingOrder, recentDoneOrder) {
     if (pts >= LOYALTY.REWARD_DISCOUNT_POINTS) rewardPill = ` <span class="reward-pill">🎁 ลด 50฿ พร้อมใช้</span>`;
     else if (pts >= LOYALTY.REWARD_DRINK_POINTS) rewardPill = ` <span class="reward-pill">🥤 ฟรีเครื่องดื่มพร้อมใช้</span>`;
     const initial = customer.name.charAt(0) || '?';
+    const phoneVal = customer.phone || customer.id || '';
     w.className = 'user-widget show';
     w.innerHTML = `
       <div class="avatar">${initial}</div>
@@ -2225,7 +2232,7 @@ function renderUserWidget(customer, pendingOrder, recentDoneOrder) {
         <div class="name">สวัสดี ${customer.name} 👋</div>
         <div class="meta">🌟 ${pts} แต้ม${rewardPill}</div>
       </div>
-      <a class="action" href="javascript:openCart()">สั่งใหม่</a>
+      <a class="action" href="points.html?phone=${phoneVal}" style="background:#1652F0">⭐ แต้ม + ประวัติ</a>
     `;
   } else {
     w.classList.remove('show');

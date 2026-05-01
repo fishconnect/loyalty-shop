@@ -206,7 +206,7 @@ function render() {
         <div class="status-icon">❓</div>
         <div class="status-title">ไม่พบ order</div>
         <div class="status-sub">อาจเปลี่ยนเครื่องหรือล้าง browser ลองใหม่ที่หน้าเมนู</div>
-        <a href="menu.html" class="btn btn-primary">กลับหน้าเมนู</a>
+        <a href="menu.html${phone?'?phone='+encodeURIComponent(phone):''}" class="btn btn-primary">กลับหน้าเมนู</a>
       </div>
     `;
     return;
@@ -383,7 +383,7 @@ function renderCancelled(order) {
       <div class="status-title" style="color:#dc2626">ออเดอร์ถูกยกเลิก</div>
       <div class="status-sub">Order #${order.id.slice(-6)}${order.cancel_reason && order.cancel_reason !== '—' ? ` · เหตุผล: ${order.cancel_reason}` : ''}</div>
       ${renderItemsHTML(order)}
-      <a href="menu.html" class="btn btn-primary" style="margin-top:16px">สั่งใหม่</a>
+      <a href="menu.html${phone?'?phone='+encodeURIComponent(phone):''}" class="btn btn-primary" style="margin-top:16px">สั่งใหม่</a>
     </div>
   `;
 }
@@ -433,7 +433,7 @@ function renderPending(order) {
 
       ${renderItemsHTML(order)}
 
-      <a href="menu.html" class="btn btn-ghost" style="margin-top:16px">← กลับหน้าเมนู</a>
+      <a href="menu.html${phone?'?phone='+encodeURIComponent(phone):''}" class="btn btn-ghost" style="margin-top:16px">← กลับหน้าเมนู</a>
     </div>
   `;
 }
@@ -527,7 +527,7 @@ function renderDone(order, db) {
       ` : ''}
 
       <a href="points.html?phone=${phone}" class="btn btn-success" style="margin-top:16px">⭐ ดูแต้มเต็ม + รางวัลที่แลกได้</a>
-      <a href="menu.html" class="btn btn-ghost">สั่งเพิ่ม</a>
+      <a href="menu.html${phone?'?phone='+encodeURIComponent(phone):''}" class="btn btn-ghost">สั่งเพิ่ม</a>
     </div>
   `;
 }

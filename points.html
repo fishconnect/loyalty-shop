@@ -427,10 +427,39 @@ function renderCustomer(customer, allOrders) {
     </div>
 
     <div class="actions">
-      <a href="menu.html" class="btn btn-primary">🍽️ สั่งอาหารเพิ่ม</a>
+      <a href="menu.html?phone=${phone}" class="btn btn-primary">🍽️ สั่งอาหารเพิ่ม</a>
+      <button onclick="saveMyLink()" class="btn btn-ghost" style="background:#fef3c7;color:#92400e;border:1.5px solid #fbbf24">📤 บันทึก/แชร์ลิงก์ของฉัน</button>
       <a href="javascript:logout()" class="btn btn-ghost">เปลี่ยนเบอร์</a>
     </div>
+    <div id="shareStatus" style="font-size:12px;color:#5c6982;text-align:center;margin-top:6px"></div>
   `;
+}
+
+// Generate + share/copy personal link so customer can bookmark on any device
+async function saveMyLink() {
+  const url = location.origin + location.pathname.replace('points.html', '') + 'menu.html?phone=' + encodeURIComponent(phone);
+  // Try Web Share API (best on mobile — opens system share sheet)
+  if (navigator.share) {
+    try {
+      await navigator.share({
+        title: 'แต้มสะสม ครัวผู้ใหญ่ปอง',
+        text: 'ลิงก์ของฉัน — เก็บไว้ดูแต้ม + สั่งอาหารได้ตลอด',
+        url
+      });
+      return;
+    } catch(e) { /* user cancelled — fall back */ }
+  }
+  // Fallback: copy to clipboard
+  try {
+    await navigator.clipboard.writeText(url);
+    setShareStatus(`✅ คัดลอกลิงก์แล้ว — ${url}`, '#16a34a');
+  } catch(e) {
+    setShareStatus(`ลิงก์ของคุณ: ${url}`, '#1652F0');
+  }
+}
+function setShareStatus(msg, color) {
+  const el = document.getElementById('shareStatus');
+  if (el) { el.textContent = msg; el.style.color = color || '#5c6982'; }
 }
 
 function logout() {
