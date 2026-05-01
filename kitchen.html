@@ -1653,15 +1653,36 @@ async function printViaBluetooth(order, btRef) {
   if (!bt?.chr) return { error: 'ยังไม่ได้เชื่อมต่อ' };
 
   const mode = localStorage.getItem('btPrintMode') || 'bitmap';
+  // 🏷️ Sticker mode: print 1 mini-sticker per dish unit (qty matters), each
+  //    auto-cut so the kitchen can stick one on every food box without writing.
+  const stickersEnabled = localStorage.getItem('btPrintStickers') !== '0'; // default ON
 
   try {
-    let data;
+    // 1) Main receipt (always)
+    let mainData;
     if (mode === 'text') {
-      data = buildESCPOS(order);
+      mainData = buildESCPOS(order);
     } else {
-      data = await buildBitmapESCPOS(order);
+      mainData = await buildBitmapESCPOS(order);
     }
-    await btSendBytes(bt.chr, data);
+    await btSendBytes(bt.chr, mainData);
+
+    // 2) Stickers (one per unit per item) — only available in bitmap mode
+    if (stickersEnabled && mode !== 'text') {
+      const items = (order.items || []).filter(it => !it.isReward); // skip free drinks
+      let totalStickers = 0;
+      items.forEach(it => totalStickers += (it.qty || 1));
+      let stickerIdx = 0;
+      for (const item of items) {
+        const qty = item.qty || 1;
+        for (let i = 1; i <= qty; i++) {
+          stickerIdx++;
+          const stickerData = await buildStickerESCPOS(order, item, i, qty, stickerIdx, totalStickers);
+          await btSendBytes(bt.chr, stickerData);
+        }
+      }
+    }
+
     return { success: true };
   } catch (e) {
     console.error('BT print error', e);
@@ -1830,6 +1851,183 @@ async function renderReceiptCanvas(order) {
   fctx.fillRect(0, 0, W, y);
   fctx.drawImage(canvas, 0, 0);
   return final;
+}
+
+// 🏷️ Render a single mini-sticker (one per dish unit) for BT printer.
+// Goal: kitchen sticks 1 sticker on each food box — no more handwriting.
+// Layout: large customer name → giant item name → options → spice → big NOTE box.
+async function renderStickerCanvas(order, item, unitIdx, totalUnits, globalIdx, globalTotal) {
+  const W = 576;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = 1200; // generous, will be trimmed
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, W, canvas.height);
+  ctx.fillStyle = '#000';
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.textRendering = 'geometricPrecision';
+
+  let y = 14;
+  const FONT = '"Sarabun", "Tahoma", "Noto Sans Thai", sans-serif';
+  const setFont = (size, bold = false) => { ctx.font = `${bold ? 'bold ' : ''}${size}px ${FONT}`; };
+  const center = (text, size, bold = false) => {
+    setFont(size, bold);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.fillText(text, W / 2, y);
+    y += size + 4;
+  };
+  const left = (text, size, bold = false) => {
+    setFont(size, bold);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText(text, 16, y);
+    y += size + 3;
+  };
+  const divider = () => { y += 4; ctx.fillRect(14, y, W - 28, 2); y += 7; };
+  const blackBox = (text, size) => {
+    setFont(size, true);
+    const padding = 14;
+    const h = size + padding * 2;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(8, y, W - 16, h);
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(text, W / 2, y + h / 2);
+    ctx.fillStyle = '#000';
+    y += h + 6;
+  };
+
+  // Header — order ID + position in order
+  setFont(22, true);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  ctx.fillText(`#${order.id.slice(-6)}`, 16, y);
+  ctx.textAlign = 'right';
+  ctx.fillText(`${globalIdx}/${globalTotal}`, W - 16, y);
+  y += 28;
+  divider();
+
+  // Customer name — BIG so kitchen knows whose food it is
+  center(order.customer_name || 'ลูกค้า', 40, true);
+  if (order.customer_phone) {
+    setFont(20, true);
+    ctx.fillStyle = '#000';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.fillText(maskPhone(order.customer_phone), W / 2, y);
+    y += 26;
+  }
+  // Order type
+  if (order.order_type === 'delivery') {
+    blackBox('🚚 DELIVERY', 22);
+  } else {
+    setFont(18, true);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.fillText('🏪 รับที่ร้าน', W / 2, y);
+    y += 24;
+  }
+  divider();
+
+  // Item name — HUGE, this is what kitchen reads at a glance
+  const mainNm = item.mainName || item.name;
+  // Wrap if name is long
+  setFont(46, true);
+  const maxLineWidth = W - 30;
+  const words = String(mainNm).split('');  // Thai has no spaces — char-by-char wrap
+  let line = '';
+  const lines = [];
+  for (const ch of words) {
+    const test = line + ch;
+    if (ctx.measureText(test).width > maxLineWidth && line) {
+      lines.push(line); line = ch;
+    } else { line = test; }
+  }
+  if (line) lines.push(line);
+  for (const ln of lines) center(ln, 46, true);
+
+  // Quantity badge if more than 1 of this item
+  if (totalUnits > 1) {
+    setFont(22, true);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.fillText(`(ชิ้นที่ ${unitIdx} จาก ${totalUnits})`, W / 2, y);
+    y += 28;
+  }
+
+  y += 6;
+  // Options — clear separation: spice, basic, premium, eggs, extras
+  if (item.options && item.options.length) {
+    for (const o of item.options) {
+      const isSpicy = (o.choice || '').includes('เผ็ด');
+      const isPremium = (o.price || 0) > 0;
+      let prefix = '• ';
+      let priceTag = '';
+      if (isPremium) { prefix = '+ '; priceTag = ` (+${o.price}฿)`; }
+      const label = prefix + o.choice + priceTag;
+      if (isSpicy) {
+        // Spice level — distinct row to grab cook's attention
+        setFont(28, true);
+        ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+        ctx.fillText('🌶️  ' + o.choice, 16, y);
+        y += 32;
+      } else {
+        left(label, 26, true);
+      }
+    }
+  }
+
+  // Note — VERY prominent (inverted black box)
+  if (item.note) {
+    y += 4;
+    blackBox('📝 ' + item.note, 28);
+  }
+
+  // Free indicator
+  const freeQty = item.freeQty || 0;
+  if (freeQty > 0 && unitIdx <= freeQty) {
+    blackBox('🎁 รายการนี้ฟรี (จากแต้ม)', 22);
+  }
+
+  divider();
+  // Footer: time
+  setFont(18);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  ctx.fillText(fmtReceiptDate(order.date), W / 2, y);
+  y += 22;
+
+  // Trim canvas to actual content height
+  const final = document.createElement('canvas');
+  final.width = W;
+  final.height = y;
+  const fctx = final.getContext('2d');
+  fctx.fillStyle = '#fff';
+  fctx.fillRect(0, 0, W, y);
+  fctx.drawImage(canvas, 0, 0);
+  return final;
+}
+
+// 🏷️ Build sticker as ESC/POS bytes (init + raster + cut). Same pipeline as
+// buildBitmapESCPOS but uses renderStickerCanvas instead of the receipt one.
+async function buildStickerESCPOS(order, item, unitIdx, totalUnits, globalIdx, globalTotal) {
+  const canvas = await renderStickerCanvas(order, item, unitIdx, totalUnits, globalIdx, globalTotal);
+  const raster = canvasToMonochromeBytes(canvas);
+  const W = canvas.width, H = canvas.height;
+  const bytesPerRow = Math.ceil(W / 8);
+  const out = [];
+  out.push(0x1B, 0x40);  // init
+  const ROWS_PER_CHUNK = 48;
+  let row = 0;
+  while (row < H) {
+    const rowsThis = Math.min(ROWS_PER_CHUNK, H - row);
+    out.push(0x1D, 0x76, 0x30, 0x00);
+    out.push(bytesPerRow & 0xFF, (bytesPerRow >> 8) & 0xFF);
+    out.push(rowsThis & 0xFF, (rowsThis >> 8) & 0xFF);
+    const start = row * bytesPerRow;
+    const end = (row + rowsThis) * bytesPerRow;
+    for (let i = start; i < end; i++) out.push(raster[i]);
+    row += rowsThis;
+  }
+  out.push(0x0A, 0x0A, 0x0A, 0x0A);  // feed for cut alignment
+  out.push(0x1D, 0x56, 0x00);         // GS V 0 — full cut
+  return new Uint8Array(out);
 }
 
 function canvasToMonochromeBytes(canvas) {

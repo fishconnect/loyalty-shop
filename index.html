@@ -868,6 +868,14 @@
       <input type="checkbox" id="autoPrintToggle" onchange="saveAutoPrint()">
       <label for="autoPrintToggle" style="margin:0">🔔 พิมพ์ใบเสร็จอัตโนมัติเมื่อมี order ใหม่</label>
     </div>
+    <div class="toggle-row" style="margin-top:6px">
+      <input type="checkbox" id="stickerPrintToggle" onchange="saveStickerSetting()">
+      <label for="stickerPrintToggle" style="margin:0">🏷️ พิมพ์สติกเกอร์ติดกล่องอาหาร (1 จาน 1 สติกเกอร์ · auto-cut)</label>
+    </div>
+    <div class="hint" style="font-size:11px;color:#5c6982;margin:4px 0 0 28px">
+      ✅ ใบเสร็จรวมพิมพ์ก่อน → auto-cut → แล้วตามด้วยสติกเกอร์รายจาน (cut คั่นทุกอัน)<br>
+      ใช้ผ่าน Bluetooth printer เท่านั้น · กดปุ่ม 🖨️ ที่ครัว = พิมพ์ทั้งใบเสร็จ + สติกเกอร์
+    </div>
     <button class="btn-secondary" onclick="testPrintReceipt()" style="width:100%;margin-top:8px">🖨️ ทดสอบพิมพ์ใบเสร็จ (ใช้ระบบ OS Print)</button>
 
     <div class="hint" style="margin-top:10px;line-height:1.6;font-size:12px">
@@ -3672,6 +3680,20 @@ function saveAutoPrint() {
   localStorage.setItem('autoPrint', enabled ? '1' : '0');
   toast(enabled ? '🔔 พิมพ์อัตโนมัติเปิดแล้ว' : '🔕 ปิดการพิมพ์อัตโนมัติ');
 }
+
+// 🏷️ Sticker print toggle — kitchen prints 1 mini-label per dish unit
+function saveStickerSetting() {
+  const enabled = document.getElementById('stickerPrintToggle').checked;
+  localStorage.setItem('btPrintStickers', enabled ? '1' : '0');
+  toast(enabled ? '🏷️ เปิดพิมพ์สติกเกอร์รายจาน' : '🏷️ ปิดพิมพ์สติกเกอร์รายจาน');
+}
+function initStickerToggleUI() {
+  const el = document.getElementById('stickerPrintToggle');
+  if (!el) return;
+  // Default ON — only off if explicitly set to '0'
+  el.checked = localStorage.getItem('btPrintStickers') !== '0';
+}
+document.addEventListener('DOMContentLoaded', initStickerToggleUI);
 
 // ========== Order Notification Sound ==========
 function saveNotifSettings() {
