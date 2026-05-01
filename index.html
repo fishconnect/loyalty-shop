@@ -567,6 +567,28 @@
     </div>
   </div>
 
+  <!-- 💰 Cash vs Transfer + Discount summary (per-period) -->
+  <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr)">
+    <div class="kpi-card clickable" onclick="drillDown('payment','cash')" style="background:linear-gradient(135deg,#dcfce7,#bbf7d0)">
+      <div class="kpi-icon">💵</div>
+      <div class="kpi-value" id="kpiCash" style="color:#16a34a">฿0</div>
+      <div class="kpi-label">เงินสด</div>
+      <div class="kpi-sub" id="kpiCashSub">0 ออเดอร์</div>
+    </div>
+    <div class="kpi-card clickable" onclick="drillDown('payment','transfer')" style="background:linear-gradient(135deg,#ebf0ff,#c5d3ff)">
+      <div class="kpi-icon">💳</div>
+      <div class="kpi-value" id="kpiTransfer" style="color:#1652F0">฿0</div>
+      <div class="kpi-label">เงินโอน</div>
+      <div class="kpi-sub" id="kpiTransferSub">0 ออเดอร์</div>
+    </div>
+    <div class="kpi-card clickable" onclick="drillDown('discounts')" style="background:linear-gradient(135deg,#fee2e2,#fecaca)">
+      <div class="kpi-icon">🎁</div>
+      <div class="kpi-value" id="kpiDiscount" style="color:#dc2626">฿0</div>
+      <div class="kpi-label">ส่วนลดรวม</div>
+      <div class="kpi-sub" id="kpiDiscountSub">0 ครั้ง</div>
+    </div>
+  </div>
+
   <!-- 2nd row of KPIs: loyalty/operational metrics -->
   <div class="kpi-grid" style="grid-template-columns:repeat(2,1fr)">
     <div class="kpi-card clickable" onclick="drillDown('loyalty')" style="background:linear-gradient(135deg,#dcfce7,#bbf7d0)">
@@ -2704,6 +2726,26 @@ function renderReports() {
     ? `${orderCount} ออเดอร์`
     : (aovDiff >= 0 ? `↑ ${aovDiff}% vs ก่อนหน้า` : `↓ ${Math.abs(aovDiff)}% vs ก่อนหน้า`);
 
+  // ===== Cash / Transfer / Discount totals =====
+  let cashAmt = 0, cashCount = 0, transferAmt = 0, transferCount = 0;
+  let discountAmt = 0, discountCount = 0;
+  inRange.forEach(o => {
+    const t = (o.total != null) ? o.total : (o.boxes || 0) * price;
+    const m = o.payment_method;
+    if (m === 'cash')          { cashAmt += t;     cashCount++; }
+    else if (m === 'transfer') { transferAmt += t; transferCount++; }
+    // Else: legacy/unknown — counted in revenue but not split
+    // Discount = either explicit discount field, or sum of redemption values
+    const d = o.discount || (o.redemptions || []).reduce((s,r) => s + (r.value || 0), 0);
+    if (d > 0) { discountAmt += d; discountCount++; }
+  });
+  document.getElementById('kpiCash').textContent = fmtBaht(cashAmt);
+  document.getElementById('kpiCashSub').textContent = `${cashCount} ออเดอร์`;
+  document.getElementById('kpiTransfer').textContent = fmtBaht(transferAmt);
+  document.getElementById('kpiTransferSub').textContent = `${transferCount} ออเดอร์`;
+  document.getElementById('kpiDiscount').textContent = fmtBaht(discountAmt);
+  document.getElementById('kpiDiscountSub').textContent = `${discountCount} ครั้ง`;
+
   // ===== Loyalty KPI (points issued / redeemed) =====
   const ptsIssued = inRange.reduce((s,o) => s + (o.points_earned || 0), 0);
   const ptsUsed = inRange.reduce((s,o) => s + (o.points_used || 0), 0);
@@ -2821,7 +2863,8 @@ function renderReports() {
     inRange, allCompleted, dayData, hourCounts, itemCounts, channels, channelRev,
     heatData, catCounts, customers, label, range: currentRange, price,
     revenue, boxes, orderCount, avgOrder, newCustomers, prevRevenue,
-    ptsIssued, ptsUsed, drinkRedeems, discountRedeems, freeBoxes
+    ptsIssued, ptsUsed, drinkRedeems, discountRedeems, freeBoxes,
+    cashAmt, cashCount, transferAmt, transferCount, discountAmt, discountCount
   };
 }
 
@@ -3099,6 +3142,73 @@ function drillDown(type, param) {
           <div class="label-row"><span class="name">${n}</span><span class="val">${v.qty} · ${fmtBaht(v.rev)}</span></div>
           <div class="bar-bg"><div class="bar-fill" style="width:${(v.qty/max)*100}%"></div></div>
         </div>`).join('') || '<div class="empty">— ยังไม่มี —</div>'}
+    `;
+  } else if (type === 'payment') {
+    // param = 'cash' | 'transfer'
+    const isCash = param === 'cash';
+    title = `${isCash ? '💵 เงินสด' : '💳 เงินโอน'} ${cache.label}`;
+    const ordersOfMethod = cache.inRange.filter(o => o.payment_method === param);
+    const total = ordersOfMethod.reduce((s, o) => s + (o.total || 0), 0);
+    const noMethodCount = cache.inRange.filter(o => !o.payment_method).length;
+    content = `
+      <div style="margin-bottom:12px;padding:12px;background:${isCash?'#dcfce7':'#ebf0ff'};border-radius:10px">
+        <div style="font-size:12px;color:#5c6982">รวม ${isCash ? '💵 เงินสด' : '💳 เงินโอน'}</div>
+        <div style="font-size:28px;font-weight:900;color:${isCash?'#16a34a':'#1652F0'}">${fmtBaht(total)}</div>
+        <div style="font-size:12px;color:#5c6982;margin-top:4px">${ordersOfMethod.length} ออเดอร์</div>
+      </div>
+      ${noMethodCount > 0 ? `<div style="background:#fef3c7;color:#92400e;padding:8px 10px;border-radius:8px;margin-bottom:10px;font-size:12px">⚠️ มีอีก ${noMethodCount} ออเดอร์ ที่ยังไม่ได้ระบุวิธีชำระ (legacy data)</div>` : ''}
+      <h4 style="margin:8px 0">📋 รายการออเดอร์</h4>
+      ${ordersOfMethod.sort((a,b) => new Date(b._useDate) - new Date(a._useDate)).map(o => {
+        const c = getCustomer(o.customer_id);
+        const name = c?.name || o.customer_name || '?';
+        return `<div class="order-item" onclick="closeDrill();editOrder('${o.id}')">
+          <div style="flex:1"><b>${name}</b> · <span style="color:${isCash?'#16a34a':'#1652F0'};font-weight:700">${fmtBaht(o.total)}</span><div style="font-size:11px;color:#6b7280">${fmtDate(o._useDate)}</div></div></div>`;
+      }).join('') || '<div class="empty">— ยังไม่มี —</div>'}
+    `;
+  } else if (type === 'discounts') {
+    title = `🎁 ส่วนลดที่ลูกค้าได้รับ ${cache.label}`;
+    const discountedOrders = cache.inRange.filter(o => {
+      const d = o.discount || (o.redemptions || []).reduce((s,r) => s + (r.value || 0), 0);
+      return d > 0;
+    }).map(o => ({
+      ...o,
+      _discount: o.discount || (o.redemptions || []).reduce((s,r) => s + (r.value || 0), 0)
+    }));
+    const totalDisc = discountedOrders.reduce((s, o) => s + o._discount, 0);
+    // Breakdown by type
+    let drinkValue = 0, drinkCount = 0, dish50Value = 0, dish50Count = 0;
+    cache.inRange.forEach(o => {
+      (o.redemptions || []).forEach(r => {
+        if (r.type === 'drink') { drinkValue += r.value || 0; drinkCount++; }
+        else if (r.type === 'discount') { dish50Value += r.value || 0; dish50Count++; }
+      });
+    });
+    content = `
+      <div style="margin-bottom:12px;padding:12px;background:#fee2e2;border-radius:10px">
+        <div style="font-size:12px;color:#5c6982">รวมส่วนลดที่ลูกค้าได้รับ</div>
+        <div style="font-size:28px;font-weight:900;color:#dc2626">−${fmtBaht(totalDisc)}</div>
+        <div style="font-size:12px;color:#5c6982;margin-top:4px">${discountedOrders.length} ครั้ง</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+        <div style="padding:10px;background:#fef3c7;border-radius:10px;text-align:center">
+          <div style="font-size:11px;color:#5c6982">🥤 เครื่องดื่มฟรี</div>
+          <div style="font-size:18px;font-weight:800;color:#92400e">${fmtBaht(drinkValue)}</div>
+          <div style="font-size:10px;color:#9ca3af">${drinkCount} แก้ว</div>
+        </div>
+        <div style="padding:10px;background:#fee2e2;border-radius:10px;text-align:center">
+          <div style="font-size:11px;color:#5c6982">💰 ลด 50฿</div>
+          <div style="font-size:18px;font-weight:800;color:#dc2626">${fmtBaht(dish50Value)}</div>
+          <div style="font-size:10px;color:#9ca3af">${dish50Count} ครั้ง</div>
+        </div>
+      </div>
+      <h4 style="margin:8px 0">📋 รายการที่มีส่วนลด</h4>
+      ${discountedOrders.sort((a,b) => new Date(b._useDate) - new Date(a._useDate)).map(o => {
+        const c = getCustomer(o.customer_id);
+        const name = c?.name || o.customer_name || '?';
+        const reds = (o.redemptions || []).map(r => r.type === 'drink' ? `🥤 ${r.label}` : `💰 ${r.label}`).join(' · ');
+        return `<div class="order-item" onclick="closeDrill();editOrder('${o.id}')">
+          <div style="flex:1"><b>${name}</b> · <span style="color:#dc2626;font-weight:700">−${fmtBaht(o._discount)}</span><div style="font-size:11px;color:#6b7280">${fmtDate(o._useDate)}${reds?` · ${reds}`:''}</div></div></div>`;
+      }).join('') || '<div class="empty">— ยังไม่มี —</div>'}
     `;
   }
 

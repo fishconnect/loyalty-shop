@@ -268,6 +268,29 @@
 <!-- Print receipt area (hidden until print) -->
 <div id="printArea"></div>
 
+<!-- 💵💳 Payment-method picker — must select before order can be marked done -->
+<div id="payModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:300;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(4px)">
+  <div style="background:#fff;width:100%;max-width:460px;border-radius:20px;padding:22px;animation:popIn .25s ease-out">
+    <h3 style="font-size:20px;color:#0a1530;margin:0 0 6px;text-align:center">💰 รับเงินจากลูกค้าแล้ว?</h3>
+    <div id="payCustomerInfo" style="font-size:13px;color:#5c6982;text-align:center;margin-bottom:18px"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+      <button onclick="confirmPayment('cash')" style="padding:24px 10px;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border:none;border-radius:14px;font-size:16px;font-weight:800;cursor:pointer;font-family:inherit;display:flex;flex-direction:column;align-items:center;gap:6px;box-shadow:0 4px 12px rgba(22,163,74,.3)">
+        <span style="font-size:36px;line-height:1">💵</span>
+        <span>เงินสด</span>
+      </button>
+      <button onclick="confirmPayment('transfer')" style="padding:24px 10px;background:linear-gradient(135deg,#1652F0,#0738C9);color:#fff;border:none;border-radius:14px;font-size:16px;font-weight:800;cursor:pointer;font-family:inherit;display:flex;flex-direction:column;align-items:center;gap:6px;box-shadow:0 4px 12px rgba(22,82,240,.3)">
+        <span style="font-size:36px;line-height:1">💳</span>
+        <span>เงินโอน</span>
+      </button>
+    </div>
+    <button onclick="closePayModal()" style="width:100%;padding:12px;background:#f3f4f6;color:#6b7280;border:none;border-radius:10px;font-weight:700;cursor:pointer;font-family:inherit">ยกเลิก</button>
+  </div>
+</div>
+
+<style>
+@keyframes popIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
+</style>
+
 <!-- Order edit modal -->
 <div id="editModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;align-items:flex-end;justify-content:center">
   <div style="background:#fff;width:100%;max-width:520px;border-radius:20px 20px 0 0;max-height:92vh;overflow-y:auto;padding:20px">
@@ -563,7 +586,7 @@ function render() {
           </div>
         ` : `
           <div class="order-actions">
-            <span style="color:#16a34a;font-weight:700;padding:14px;text-align:center;flex:1">✅ เสร็จแล้ว${o.completed_at?` เมื่อ ${fmtTime(o.completed_at)}`:''}</span>
+            <span style="color:#16a34a;font-weight:700;padding:14px;text-align:center;flex:1">✅ เสร็จแล้ว${o.completed_at?` เมื่อ ${fmtTime(o.completed_at)}`:''}${o.payment_method ? ` · ${o.payment_method === 'cash' ? '💵 เงินสด' : '💳 เงินโอน'}` : ''}</span>
             <button onclick="printOrderReceipt('${o.id}')" style="background:#fef3c7;color:#92400e;border:1.5px solid #f59e0b;flex:0;max-width:80px" title="พิมพ์ใบเสร็จ">🖨️ พิมพ์</button>
           </div>
         `}
@@ -579,18 +602,10 @@ async function advanceStatus(orderId, nextStatus) {
   const order = orderSrc.find(o => o.id === orderId);
   if (!order) return;
 
-  // Final stage = delivered → award points (skip if factory)
+  // Final stage = delivered → MUST pick payment method first → then award points
   if (nextStatus === 'delivered') {
-    const isFactoryOrder = order.source === 'factory';
-    const baseAmount = order.original_total || order.total;
-    const points = isFactoryOrder ? 0 : window.calcPointsFromAmount(baseAmount);
-
-    const redemptionStr = (order.redemptions || []).length
-      ? `\nใช้แต้ม: ${(order.redemptions || []).map(r => r.type === 'drink' ? `🥤 ${r.label}` : `💰 ลด ฿${r.value}`).join(', ')}`
-      : '';
-    const ptsLine = isFactoryOrder ? '\n🏭 Order โรงงาน — ไม่บวกแต้ม' : `\nลูกค้าจะได้ +${points} แต้ม`;
-    if (!confirm(`ยืนยันจัดส่งสำเร็จ?\n\n${order.customer_name} · ลูกค้าจ่าย ฿${order.total}${redemptionStr}${ptsLine}`)) return;
-    await finalizeOrder(orderId);
+    // Show payment-method picker; finalize is called from inside the modal handler.
+    openPaymentPicker(orderId);
     return;
   }
 
@@ -608,6 +623,36 @@ async function advanceStatus(orderId, nextStatus) {
 }
 
 async function markDone(orderId) { return advanceStatus(orderId, 'delivered'); }
+
+// 💰 Payment-method picker — populated when kitchen taps "✓ จัดส่งสำเร็จ"
+let _payOrderId = null;
+function openPaymentPicker(orderId) {
+  const db = loadDB();
+  const orderSrc = cloudOrders !== null ? cloudOrders : db.pendingOrders;
+  const order = orderSrc.find(o => o.id === orderId);
+  if (!order) return;
+  _payOrderId = orderId;
+  const isFactoryOrder = order.source === 'factory';
+  const baseAmount = order.original_total || order.total;
+  const points = isFactoryOrder ? 0 : window.calcPointsFromAmount(baseAmount);
+  const redemptionStr = (order.redemptions || []).length
+    ? ` · 🎁 ${(order.redemptions || []).map(r => r.type === 'drink' ? `${r.label} ฟรี` : `ลด ฿${r.value}`).join(', ')}`
+    : '';
+  const ptsStr = isFactoryOrder ? ' · 🏭 ไม่บวกแต้ม' : ` · +${points}pt`;
+  document.getElementById('payCustomerInfo').innerHTML =
+    `<b style="color:#0a1530">${order.customer_name}</b> · ฿${order.total}${redemptionStr}${ptsStr}`;
+  document.getElementById('payModal').style.display = 'flex';
+}
+function closePayModal() {
+  _payOrderId = null;
+  document.getElementById('payModal').style.display = 'none';
+}
+async function confirmPayment(method) {
+  const id = _payOrderId;
+  closePayModal();
+  if (!id) return;
+  await finalizeOrder(id, method);
+}
 
 // Compute customer's points — used to show redemption buttons
 function getCustomerForOrder(order) {
@@ -1008,11 +1053,13 @@ async function removeRedemption(orderId, idx) {
   render();
 }
 
-async function finalizeOrder(orderId) {
+async function finalizeOrder(orderId, paymentMethod) {
   const db = loadDB();
   const orderSrc = cloudOrders !== null ? cloudOrders : db.pendingOrders;
   const order = orderSrc.find(o => o.id === orderId);
   if (!order) return;
+  // Default payment method to 'cash' if not provided (legacy callers / safety)
+  const payMethod = (paymentMethod === 'cash' || paymentMethod === 'transfer') ? paymentMethod : 'cash';
 
   // Get / create customer
   let customer = db.customers[order.customer_id];
@@ -1058,6 +1105,7 @@ async function finalizeOrder(orderId) {
     discount: order.discount || 0,
     redemptions: order.redemptions || [],
     points_awarded: pointsToAward,
+    payment_method: payMethod,
     note: order.note || '',
     source: order.source || 'online'
   });
@@ -1065,7 +1113,8 @@ async function finalizeOrder(orderId) {
   const updates = {
     status: 'done',
     completed_at: new Date().toISOString(),
-    points_awarded: pointsToAward
+    points_awarded: pointsToAward,
+    payment_method: payMethod
   };
   const localOrder = db.pendingOrders.find(o => o.id === orderId);
   if (localOrder) Object.assign(localOrder, updates);
@@ -1087,9 +1136,10 @@ async function finalizeOrder(orderId) {
 
   render();
 
+  const payIcon = payMethod === 'cash' ? '💵 เงินสด' : '💳 เงินโอน';
   const summary = isFactoryOrder
-    ? `${customer.name} (🏭 โรงงาน · ไม่บวกแต้ม)`
-    : `${customer.name} +${pointsToAward} แต้ม (รวม ${customer.points})`;
+    ? `${customer.name} (🏭 โรงงาน · ไม่บวกแต้ม) · ${payIcon}`
+    : `${customer.name} +${pointsToAward} แต้ม · ${payIcon}`;
   toast(`✓ เสร็จ! ${summary}`);
 }
 
@@ -1214,6 +1264,7 @@ function buildReceiptHTML(order) {
       <div class="rc-row"><span>🎁 ส่วนลด</span><span>-฿${order.discount}</span></div>
     ` : ''}
     <div class="rc-total">รวม ฿${order.total}</div>
+    ${order.payment_method ? `<div class="rc-row" style="margin-top:4px"><span>ชำระโดย</span><span><b>${order.payment_method === 'cash' ? '💵 เงินสด' : '💳 เงินโอน'}</b></span></div>` : ''}
     <hr class="rc-divider">
     <div class="rc-foot">ขอบคุณที่อุดหนุน</div>
     <div class="rc-qr-wrap">
