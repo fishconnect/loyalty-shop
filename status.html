@@ -218,6 +218,23 @@ function render() {
   return renderActive(order, status);
 }
 
+// Compute my queue position (count pending orders ahead with date < mine, excl scheduled)
+function computeQueueInfo(order, allOrders) {
+  if (order.status !== 'pending') return null;
+  const myDate = new Date(order.date).getTime();
+  // Pending orders ahead (older, not scheduled, not me)
+  const ahead = (allOrders || []).filter(o =>
+    o.id !== order.id &&
+    o.status === 'pending' &&
+    !o.scheduled_at &&
+    new Date(o.date).getTime() < myDate
+  );
+  const myPos = ahead.length + 1;
+  // ETA: 15 min base + 5 min per order ahead
+  const etaMin = 15 + ahead.length * 5;
+  return { position: myPos, etaMin };
+}
+
 function renderActive(order, status) {
   const stat = window.STATUSES[status] || window.STATUSES.pending;
   const stages = ['pending','confirmed','cooking','ready','delivering','delivered'];
@@ -242,11 +259,35 @@ function renderActive(order, status) {
     </div>
   `;
 
+  // Scheduled time banner
+  const schedBanner = order.scheduled_at ? `
+    <div style="background:linear-gradient(135deg,#1652F0,#0738C9);color:#fff;padding:14px;border-radius:12px;margin-bottom:14px;text-align:center">
+      <div style="font-size:13px;opacity:.85;margin-bottom:4px">📅 อาหารพร้อมเวลา</div>
+      <div style="font-size:24px;font-weight:900">${new Date(order.scheduled_at).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})} น.</div>
+      <div style="font-size:12px;opacity:.85;margin-top:4px">${new Date(order.scheduled_at).toLocaleDateString('th-TH',{weekday:'long',day:'numeric',month:'long'})}</div>
+    </div>` : '';
+
+  // Queue position + ETA (only for ASAP pending orders)
+  const queueInfo = !order.scheduled_at ? computeQueueInfo(order, window._allOrders || []) : null;
+  const queueBanner = queueInfo ? `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+      <div style="background:linear-gradient(135deg,#fef3c7,#fde68a);color:#92400e;padding:12px;border-radius:12px;text-align:center">
+        <div style="font-size:11px;opacity:.85;margin-bottom:2px">คิวของคุณ</div>
+        <div style="font-size:26px;font-weight:900">#${queueInfo.position}</div>
+      </div>
+      <div style="background:linear-gradient(135deg,#dcfce7,#bbf7d0);color:#166534;padding:12px;border-radius:12px;text-align:center">
+        <div style="font-size:11px;opacity:.85;margin-bottom:2px">รอประมาณ</div>
+        <div style="font-size:26px;font-weight:900">~${queueInfo.etaMin}'</div>
+      </div>
+    </div>` : '';
+
   document.getElementById('content').innerHTML = `
     <div class="status-card">
       <div class="status-icon ${status==='cooking'?'cooking':''}" style="font-size:64px">${stat.icon}</div>
       <div class="status-title">${stat.custLabel}</div>
       <div class="status-sub">Order #${order.id.slice(-6)} · เวลา ${fmtTime(order.date)}</div>
+      ${schedBanner}
+      ${queueBanner}
       ${progressHtml}
       ${order.free_boxes_used ? `<div style="background:#dcfce7;color:#166534;padding:10px;border-radius:10px;margin-bottom:10px;font-weight:700">🎁 ได้ข้าวฟรี ${order.free_boxes_used} กล่อง · ลด ฿${order.discount}</div>` : ''}
       ${renderItemsHTML(order)}
@@ -431,6 +472,11 @@ whenCloudReady(() => {
           saveDB(db);
         }
       }
+      render();
+    });
+    // Subscribe to ALL orders so we can compute queue position + ETA
+    window.cloud.onOrders(orders => {
+      window._allOrders = orders || [];
       render();
     });
   }

@@ -594,8 +594,19 @@
 
 <nav class="cats" id="cats"></nav>
 
+<!-- 🔍 Search bar -->
+<div id="searchBox" style="padding:10px 14px;background:#f7f8fb;border-bottom:1px solid #e5e7eb">
+  <input type="text" id="menuSearch" placeholder="🔍 ค้นหาเมนู เช่น กะเพรา ชานม ต้มยำ..." oninput="onMenuSearch()" style="width:100%;padding:11px 14px;border:1.5px solid #d1ddff;border-radius:999px;font-size:14px;font-family:inherit;background:#fff;box-shadow:0 1px 3px rgba(22,82,240,.05)">
+</div>
+
+<!-- 🔁 Reorder last order card (returning customers) -->
+<div id="reorderCard" style="display:none"></div>
+
 <!-- Returning customer widget -->
 <div class="user-widget" id="userWidget"></div>
+
+<!-- 💬 Floating chat button -->
+<a id="chatFloat" href="tel:0619623696" style="position:fixed;bottom:90px;right:14px;z-index:80;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;width:54px;height:54px;border-radius:50%;display:grid;place-items:center;font-size:26px;box-shadow:0 6px 18px rgba(22,163,74,.45);text-decoration:none">💬</a>
 
 <script>
   // Embed/shop mode adjustments
@@ -696,6 +707,23 @@
         <label>👤 ชื่อ (เฉพาะลูกค้าใหม่)</label>
         <input type="text" class="cust-input" id="custFullName" placeholder="คุณ...">
 
+        <!-- 🎂 วันเกิด (สำหรับลูกค้าใหม่ — ใส่ครั้งเดียว แก้ไม่ได้ + รับ 5 แต้มทุกปี) -->
+        <div id="birthDateField" style="display:none">
+          <label>🎂 วันเดือนเกิด (ใส่ครั้งเดียวเท่านั้น · ทุกวันเกิดรับ +5 แต้ม)</label>
+          <div style="display:flex;gap:6px">
+            <select class="cust-input" id="birthDay" style="flex:1"><option value="">วันที่</option></select>
+            <select class="cust-input" id="birthMonth" style="flex:2"><option value="">เดือน</option></select>
+          </div>
+          <div style="font-size:11px;color:#9ca3af;margin-top:4px">⚠️ บันทึกแล้วแก้ไขไม่ได้ — ห้ามใส่ผิด</div>
+        </div>
+
+        <!-- 🤝 รหัสแนะนำ (ลูกค้าใหม่เท่านั้น) -->
+        <div id="referralField" style="display:none">
+          <label>🤝 รหัสแนะนำ (ถ้ามี · เพื่อน 5 แต้ม · คุณ 5 แต้ม)</label>
+          <input type="text" class="cust-input" id="referralCode" placeholder="ใส่เบอร์ของเพื่อน หรือ รหัสแนะนำ" style="text-transform:uppercase">
+          <div id="referralStatus" style="font-size:12px;margin-top:4px"></div>
+        </div>
+
         <!-- 🚚 รับที่ร้าน / ส่งถึงที่ -->
         <label style="margin-top:12px;font-weight:800;color:#0a1530">🚀 ต้องการรับอาหารแบบไหน?</label>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;margin-bottom:8px">
@@ -719,11 +747,45 @@
           <div id="deliveryLocationStatus" style="font-size:12px;color:#5c6982;margin-top:6px"></div>
         </div>
 
+        <!-- ⏰ เวลาที่ต้องการ (จัดส่งเลย / จองเวลา) -->
+        <label style="margin-top:12px;font-weight:800;color:#0a1530">⏰ ต้องการอาหารตอนไหน?</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;margin-bottom:8px">
+          <div id="schedASAP" class="order-type-btn active" onclick="setSchedule('asap')">
+            <div style="font-size:24px">🚀</div>
+            <div style="font-weight:800;font-size:14px">เอาเลย</div>
+            <div style="font-size:11px;color:#5c6982">รอตามคิวร้าน</div>
+          </div>
+          <div id="schedLater" class="order-type-btn" onclick="setSchedule('later')">
+            <div style="font-size:24px">📅</div>
+            <div style="font-weight:800;font-size:14px">จองเวลา</div>
+            <div style="font-size:11px;color:#5c6982">วันนี้ในชั่วโมง...</div>
+          </div>
+        </div>
+        <div id="schedSlotBox" style="display:none;margin-bottom:8px">
+          <label>เลือกช่วงเวลา (ทุก 30 นาที)</label>
+          <select class="cust-input" id="schedSlot" onchange="onSchedSlotChange()">
+            <option value="">— เลือกเวลา —</option>
+          </select>
+          <div id="schedHint" style="font-size:11px;color:#5c6982;margin-top:4px"></div>
+        </div>
+
         <!-- 🎁 Rewards selection — visible only when customer has redemption-eligible points -->
         <div id="rewardsBox" style="display:none"></div>
 
-        <!-- Order summary breakdown (totals + discount) -->
+        <!-- Order summary breakdown (totals + discount + points-to-earn) -->
         <div id="orderBreakdown" style="margin-top:14px;padding:12px 14px;background:#f7f8fb;border-radius:12px;font-size:14px"></div>
+
+        <!-- 💸 อัพโหลดสลิปโอนเงิน (PromptPay / โอนแล้ว) -->
+        <div id="slipUploadBox" style="margin-top:10px">
+          <label style="display:flex;align-items:center;gap:8px">
+            💸 สลิปโอนเงิน <span style="font-size:11px;color:#9ca3af;font-weight:500">(ถ้าโอนแล้ว · ครัวจะเห็นสลิป)</span>
+          </label>
+          <input type="file" id="paymentSlipInput" accept="image/*" style="display:none" onchange="onSlipSelected(event)">
+          <button type="button" onclick="document.getElementById('paymentSlipInput').click()" style="width:100%;padding:10px;background:#fff;color:#1652F0;border:1.5px dashed #1652F0;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer">
+            📷 แนบสลิป (เลือกรูป)
+          </button>
+          <div id="slipPreview" style="display:none;margin-top:8px;text-align:center"></div>
+        </div>
 
         <button class="btn btn-confirm" onclick="submitOrder()" style="margin-top:14px">
           ✅ ยืนยันสั่งอาหาร <span id="confirmTotal" style="font-weight:900"></span>
@@ -844,15 +906,35 @@ function findItem(id) {
 }
 
 // ============ Render Menu ============
+// Search state — filters menu items by name (case/space insensitive)
+let menuSearchQ = '';
+function onMenuSearch() {
+  menuSearchQ = (document.getElementById('menuSearch')?.value || '').trim().toLowerCase();
+  renderMenu();
+}
+
 function renderMenu() {
   const cats = document.getElementById('cats');
   const main = document.getElementById('menuMain');
   // All categories are visible (no separate add-on category in new menu)
-  const visibleCats = EFFECTIVE_MENU.filter(c => !c.isAddOn);
+  let visibleCats = EFFECTIVE_MENU.filter(c => !c.isAddOn);
+
+  // Apply search filter (filter items by name; hide empty cats)
+  if (menuSearchQ) {
+    const q = menuSearchQ;
+    visibleCats = visibleCats
+      .map(c => ({ ...c, items: c.items.filter(it => (it.name || '').toLowerCase().includes(q)) }))
+      .filter(c => c.items.length > 0);
+  }
 
   cats.innerHTML = '<div class="cats-inner">' +
     visibleCats.map((c, i) => `<button class="cat-btn ${i===0?'active':''}" onclick="scrollToCat('cat-${i}')">${c.emoji} ${c.cat}</button>`).join('') +
     '</div>';
+
+  if (menuSearchQ && !visibleCats.length) {
+    main.innerHTML = `<div style="text-align:center;padding:40px 20px;color:#9ca3af"><div style="font-size:48px;margin-bottom:8px">🔍</div><div style="font-size:15px;font-weight:700;color:#5c6982">ไม่พบเมนู "${menuSearchQ}"</div><div style="font-size:13px;margin-top:6px">ลองค้นหาอย่างอื่น หรือลบคำค้นหา</div></div>`;
+    return;
+  }
 
   main.innerHTML = visibleCats.map((c, i) => {
     const isCheap = c.items.every(it => it.price <= 30);
@@ -1355,6 +1437,132 @@ let cartRewards = {
 let orderType = 'pickup';
 let deliveryLocation = null; // { lat, lng } from geolocation API
 
+// Schedule mode — 'asap' (default) or 'later' (with scheduled_at ISO string)
+let scheduleMode = 'asap';
+let scheduledAt = null;          // ISO string when scheduleMode === 'later'
+
+// Payment slip — base64 data URL
+let paymentSlipData = null;
+
+// SHOP HOURS — used to validate schedule slots
+const SHOP_HOURS = { openH: 9, openM: 30, closeH: 17, closeM: 30 };
+const SHOP_CLOSED_DAYS = [0]; // 0 = Sunday
+
+function setSchedule(mode) {
+  scheduleMode = mode;
+  document.getElementById('schedASAP').classList.toggle('active', mode === 'asap');
+  document.getElementById('schedLater').classList.toggle('active', mode === 'later');
+  document.getElementById('schedSlotBox').style.display = (mode === 'later') ? 'block' : 'none';
+  if (mode === 'asap') { scheduledAt = null; renderOrderBreakdown(); return; }
+  buildSchedSlots();
+}
+
+// Build available 30-min slots within shop hours, ≥1hr from now, today only
+function buildSchedSlots() {
+  const sel = document.getElementById('schedSlot');
+  const hint = document.getElementById('schedHint');
+  if (!sel) return;
+  const now = new Date();
+  // Round up to next 30-min slot ≥ now+1hr
+  const earliestMs = now.getTime() + 60 * 60 * 1000;
+  let slot = new Date(earliestMs);
+  // Round up to next 30-min boundary
+  if (slot.getMinutes() <= 30) slot.setMinutes(30, 0, 0);
+  else { slot.setHours(slot.getHours() + 1); slot.setMinutes(0, 0, 0); }
+
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const dayCloseMs = (() => {
+    const d = new Date(today);
+    d.setHours(SHOP_HOURS.closeH, SHOP_HOURS.closeM, 0, 0);
+    return d.getTime();
+  })();
+  const dayOpenMs = (() => {
+    const d = new Date(today);
+    d.setHours(SHOP_HOURS.openH, SHOP_HOURS.openM, 0, 0);
+    return d.getTime();
+  })();
+
+  // Closed today?
+  if (SHOP_CLOSED_DAYS.includes(now.getDay())) {
+    sel.innerHTML = `<option value="">— วันนี้ร้านปิด (อาทิตย์) —</option>`;
+    hint.textContent = '🔴 วันนี้ร้านปิด ไม่สามารถจองเวลาวันนี้ได้';
+    hint.style.color = '#dc2626';
+    return;
+  }
+  // Past closing time?
+  if (slot.getTime() > dayCloseMs) {
+    sel.innerHTML = `<option value="">— เลยเวลาทำการแล้ว —</option>`;
+    hint.textContent = `🔴 ร้านปิดเวลา ${SHOP_HOURS.closeH}:${String(SHOP_HOURS.closeM).padStart(2,'0')} น. — ลองเลือก "เอาเลย" แทน`;
+    hint.style.color = '#dc2626';
+    return;
+  }
+  // Adjust if before opening
+  if (slot.getTime() < dayOpenMs) slot = new Date(dayOpenMs);
+
+  // Build slot options
+  const opts = ['<option value="">— เลือกเวลา —</option>'];
+  while (slot.getTime() <= dayCloseMs) {
+    const t = `${String(slot.getHours()).padStart(2,'0')}:${String(slot.getMinutes()).padStart(2,'0')}`;
+    opts.push(`<option value="${slot.toISOString()}">${t} น.</option>`);
+    slot = new Date(slot.getTime() + 30 * 60 * 1000);
+  }
+  sel.innerHTML = opts.join('');
+  hint.textContent = `เลือกเวลาที่อยากให้ครัวเริ่มทำ — ขั้นต่ำ 1 ชม. จากตอนนี้ · ทุก 30 นาที`;
+  hint.style.color = '#5c6982';
+}
+function onSchedSlotChange() {
+  const sel = document.getElementById('schedSlot');
+  scheduledAt = sel.value || null;
+  renderOrderBreakdown();
+}
+
+// ============ Slip Upload ============
+async function onSlipSelected(ev) {
+  const file = ev.target.files?.[0];
+  if (!file) return;
+  if (file.size > 5 * 1024 * 1024) { toast('⚠️ ไฟล์ใหญ่เกิน 5MB', true); return; }
+  // Compress to ~800px wide JPG
+  const img = new Image();
+  const reader = new FileReader();
+  reader.onload = () => { img.src = reader.result; };
+  img.onload = () => {
+    const maxW = 800;
+    const ratio = Math.min(1, maxW / img.width);
+    const c = document.createElement('canvas');
+    c.width = img.width * ratio;
+    c.height = img.height * ratio;
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    paymentSlipData = c.toDataURL('image/jpeg', 0.7);
+    const prev = document.getElementById('slipPreview');
+    prev.style.display = 'block';
+    prev.innerHTML = `
+      <div style="display:inline-block;position:relative;border-radius:10px;overflow:hidden;border:2px solid #16a34a;max-width:200px">
+        <img src="${paymentSlipData}" style="width:100%;display:block">
+        <button type="button" onclick="clearSlip()" style="position:absolute;top:4px;right:4px;background:#dc2626;color:#fff;border:none;border-radius:50%;width:24px;height:24px;font-size:14px;cursor:pointer">×</button>
+      </div>
+      <div style="font-size:12px;color:#16a34a;font-weight:700;margin-top:4px">✓ แนบสลิปแล้ว</div>
+    `;
+  };
+  reader.readAsDataURL(file);
+}
+function clearSlip() {
+  paymentSlipData = null;
+  document.getElementById('paymentSlipInput').value = '';
+  const prev = document.getElementById('slipPreview');
+  prev.style.display = 'none'; prev.innerHTML = '';
+}
+
+// Birth-day select options (lazy-init when cart opens)
+function ensureBirthDateOptions() {
+  const dSel = document.getElementById('birthDay');
+  if (!dSel || dSel.options.length > 1) return;
+  for (let d = 1; d <= 31; d++) dSel.add(new Option(d, d));
+  const months = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+  const mSel = document.getElementById('birthMonth');
+  months.forEach((n, i) => mSel.add(new Option(n, i + 1)));
+}
+
 function setOrderType(type) {
   // Warn user about delivery distance limit when switching TO delivery
   // (skip warning if already on delivery — re-applying via reset/init)
@@ -1441,8 +1649,12 @@ function checkCustomer() {
   const phone = normPhone(document.getElementById('custPhone').value);
   const found = document.getElementById('custFound');
   const nameInput = document.getElementById('custFullName');
+  const birthBox = document.getElementById('birthDateField');
+  const refBox = document.getElementById('referralField');
   if (phone.length < 9) {
     found.innerHTML = '';
+    if (birthBox) birthBox.style.display = 'none';
+    if (refBox) refBox.style.display = 'none';
     resetCartRewards();
     renderRewardsBox();
     renderOrderBreakdown();
@@ -1452,10 +1664,22 @@ function checkCustomer() {
   const c = db.customers[phone];
   if (c) {
     const pts = c.points || 0;
-    found.innerHTML = `<div class="customer-found ok">✅ ลูกค้าเดิม: <b>${c.name}</b> · 🌟 ${pts} แต้ม</div>`;
+    let extras = '';
+    if (c.birth_day && c.birth_month) {
+      const monthNames = ['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+      extras += ` · 🎂 ${c.birth_day} ${monthNames[c.birth_month]}`;
+    }
+    if (c.referral_code) extras += ` · 🤝 รหัสคุณ: <b>${c.referral_code}</b>`;
+    found.innerHTML = `<div class="customer-found ok">✅ ลูกค้าเดิม: <b>${c.name}</b> · 🌟 ${pts} แต้ม${extras}</div>`;
     nameInput.value = c.name === 'ไม่ระบุชื่อ' ? '' : c.name;
+    // Returning customer — hide birth + referral inputs (locked)
+    if (birthBox) birthBox.style.display = 'none';
+    if (refBox) refBox.style.display = 'none';
   } else {
     found.innerHTML = `<div class="customer-found new">🆕 ลูกค้าใหม่ — สมัครรับ +5 แต้มฟรี!</div>`;
+    // Show optional birth + referral fields
+    if (birthBox) { birthBox.style.display = 'block'; ensureBirthDateOptions(); }
+    if (refBox) refBox.style.display = 'block';
     resetCartRewards();
   }
   renderRewardsBox();
@@ -1604,11 +1828,20 @@ function renderOrderBreakdown() {
   // Subtotal (cart only) + drink (free) - discount
   const finalTotal = Math.max(0, cartSubtotal - discountValue);
 
+  // Points to earn (only on cart subtotal — discount doesn't reduce points)
+  const ptsEarn = (typeof window.calcPointsFromAmount === 'function') ? window.calcPointsFromAmount(cartSubtotal) : Math.floor(cartSubtotal / 50);
+  // Scheduled time line
+  const schedLine = (scheduleMode === 'later' && scheduledAt)
+    ? `<div class="breakdown-row" style="color:#1652F0;font-weight:700"><span>📅 จองเวลา</span><span>${new Date(scheduledAt).toLocaleString('th-TH', { hour:'2-digit', minute:'2-digit' })} น.</span></div>`
+    : '';
+
   el.innerHTML = `
+    ${schedLine}
     <div class="breakdown-row subtotal"><span>ค่าอาหาร</span><span>฿${cartSubtotal}</span></div>
     ${cartRewards.useDrink && drinkValue > 0 ? `<div class="breakdown-row free"><span>+ ฟรี ${drinkName}</span><span>ฟรี (฿${drinkValue})</span></div>` : ''}
     ${cartRewards.useDiscount ? `<div class="breakdown-row discount"><span>− ส่วนลด (15 แต้ม)</span><span>−฿${discountValue}</span></div>` : ''}
     <div class="breakdown-row total"><span>ยอดที่ต้องจ่าย</span><span>฿${finalTotal}</span></div>
+    ${ptsEarn > 0 ? `<div class="breakdown-row" style="margin-top:6px;padding-top:8px;border-top:1px dashed #d1d5db;color:#16a34a;font-weight:700"><span>⭐ แต้มที่จะได้รับ</span><span>+${ptsEarn} แต้ม</span></div>` : ''}
   `;
   document.getElementById('confirmTotal').textContent = ` · ฿${finalTotal}`;
 }
@@ -1782,6 +2015,80 @@ async function submitOrder() {
   }
   const deliveryAddress = document.getElementById('deliveryAddress')?.value.trim() || '';
 
+  // ⏰ Schedule validation — if 'later' but no slot picked, prompt
+  let effectiveScheduledAt = null;
+  if (scheduleMode === 'later') {
+    if (!scheduledAt) { toast('⚠️ กรุณาเลือกเวลาที่ต้องการ หรือเลือก "เอาเลย"', true); return; }
+    const minMs = Date.now() + 60 * 60 * 1000;
+    if (new Date(scheduledAt).getTime() < minMs) {
+      // Less than 1hr → degrade to ASAP per spec
+      toast('⏰ เวลาน้อยกว่า 1 ชม. — ระบบจะส่งเป็นออเดอร์ปกติ (ตามคิว)');
+    } else {
+      effectiveScheduledAt = scheduledAt;
+    }
+  }
+
+  // 🤝 Referral handling — only for NEW customer (not in db before this order)
+  // and only if referralCode field is present + value matches another customer
+  let referrerCustomer = null;
+  const isNewCustomer = signupBonusGiven; // signupBonusGiven flag = true ⇒ this is the first order
+  if (isNewCustomer && !isShopMode && !isFactoryMode) {
+    const refField = document.getElementById('referralCode');
+    const refRaw = (refField?.value || '').trim();
+    if (refRaw) {
+      // Match by phone first, then by referral_code field on any customer
+      const refNorm = normPhone(refRaw);
+      referrerCustomer = (refNorm && db.customers[refNorm]) || null;
+      if (!referrerCustomer) {
+        referrerCustomer = Object.values(db.customers).find(c =>
+          c.id !== customerId && (c.referral_code || '').toUpperCase() === refRaw.toUpperCase()
+        );
+      }
+      if (referrerCustomer) {
+        // +5pt to BOTH
+        customer.points = (customer.points || 0) + LOYALTY.SIGNUP_BONUS;
+        customer.lifetime_points = (customer.lifetime_points || 0) + LOYALTY.SIGNUP_BONUS;
+        customer.referred_by = referrerCustomer.id;
+        referrerCustomer.points = (referrerCustomer.points || 0) + LOYALTY.SIGNUP_BONUS;
+        referrerCustomer.lifetime_points = (referrerCustomer.lifetime_points || 0) + LOYALTY.SIGNUP_BONUS;
+        referrerCustomer.total_referrals = (referrerCustomer.total_referrals || 0) + 1;
+        db.customers[customerId] = customer;
+        db.customers[referrerCustomer.id] = referrerCustomer;
+      }
+    }
+    // Auto-assign customer's own referral code = last 6 of phone
+    if (phone && !customer.referral_code) {
+      customer.referral_code = phone.slice(-6).toUpperCase();
+    }
+  }
+
+  // 🎂 Birthday handling — lock-once on signup, +5pt if order placed on birthday
+  if (isNewCustomer && !isShopMode && !isFactoryMode) {
+    const bd = document.getElementById('birthDay')?.value;
+    const bm = document.getElementById('birthMonth')?.value;
+    if (bd && bm) {
+      customer.birth_day = parseInt(bd);
+      customer.birth_month = parseInt(bm);
+      customer.birth_locked = true;
+      db.customers[customerId] = customer;
+    }
+  }
+  // Birthday bonus award (every year, max once per year)
+  let birthdayBonusGiven = false;
+  if (customer.birth_day && customer.birth_month) {
+    const today = new Date();
+    if (today.getDate() === customer.birth_day && (today.getMonth() + 1) === customer.birth_month) {
+      const yearKey = today.getFullYear();
+      if (customer.last_birthday_bonus_year !== yearKey) {
+        customer.points = (customer.points || 0) + LOYALTY.SIGNUP_BONUS;
+        customer.lifetime_points = (customer.lifetime_points || 0) + LOYALTY.SIGNUP_BONUS;
+        customer.last_birthday_bonus_year = yearKey;
+        birthdayBonusGiven = true;
+        db.customers[customerId] = customer;
+      }
+    }
+  }
+
   const orderId = 'PO' + Date.now();
   const orderRecord = {
     id: orderId,
@@ -1800,6 +2107,13 @@ async function submitOrder() {
       delivery_address: deliveryAddress,
       ...(deliveryLocation ? { delivery_location: deliveryLocation } : {}),
     } : {}),
+    // ⏰ Scheduled time (null = ASAP, ISO = scheduled)
+    ...(effectiveScheduledAt ? { scheduled_at: effectiveScheduledAt } : {}),
+    // 💸 Payment slip (base64 data URL)
+    ...(paymentSlipData ? { payment_slip: paymentSlipData } : {}),
+    // 🎁 Bonuses applied
+    ...(birthdayBonusGiven ? { birthday_bonus_given: true } : {}),
+    ...(referrerCustomer ? { referred_by: referrerCustomer.id, referrer_bonus_given: true } : {}),
   };
   // Preserve original for points calculation
   if (redemptions.length > 0) {
@@ -1829,6 +2143,7 @@ async function submitOrder() {
     whenCloudReady(async () => {
       try {
         await window.cloud.saveCustomer(customer);
+        if (referrerCustomer) await window.cloud.saveCustomer(referrerCustomer);
         await window.cloud.saveOrder(orderObj);
       } catch (e) { console.warn('cloud sync failed', e); }
       resolve();
@@ -1846,6 +2161,10 @@ async function submitOrder() {
   const _da = document.getElementById('deliveryAddress'); if (_da) _da.value = '';
   const _dls = document.getElementById('deliveryLocationStatus'); if (_dls) _dls.innerHTML = '';
   if (typeof setOrderType === 'function') setOrderType('pickup');
+  // Reset schedule + slip state
+  scheduleMode = 'asap'; scheduledAt = null;
+  if (typeof setSchedule === 'function') setSchedule('asap');
+  if (typeof clearSlip === 'function') clearSlip();
 
   if (isShopMode) {
     // Stay on menu, clear form, show toast
@@ -1855,7 +2174,7 @@ async function submitOrder() {
     closeCart();
     renderMenu();
     updateCartBar();
-    toast(`✓ ส่งครัวแล้ว! ${customer.name} · ฿${total}${signupBonusGiven?' · 🎁 +5 แต้มสมัครใหม่!':''}`);
+    toast(`✓ ส่งครัวแล้ว! ${customer.name} · ฿${total}${signupBonusGiven?' · 🎁 +5 แต้มสมัครใหม่!':''}${birthdayBonusGiven?' · 🎂 สุขสันต์วันเกิด +5 แต้ม!':''}${referrerCustomer?' · 🤝 +5 แต้มจากการแนะนำ!':''}`);
   } else {
     setTimeout(() => {
       window.location.href = `status.html?order=${orderId}&phone=${phone || customerId}`;
@@ -1913,6 +2232,58 @@ function renderUserWidget(customer, pendingOrder, recentDoneOrder) {
   }
 }
 
+// 🔁 Reorder Last Order — show card on top of menu for returning customers
+function renderReorderCard(orders) {
+  const card = document.getElementById('reorderCard');
+  if (!card) return;
+  // Find most recent COMPLETED order with items (skip pending/cancelled)
+  const last = (orders || [])
+    .filter(o => (o.status === 'done' || o.status === 'delivered') && o.items?.length)
+    .sort((a, b) => new Date(b.completed_at || b.date) - new Date(a.completed_at || a.date))[0];
+  if (!last) { card.style.display = 'none'; card.innerHTML = ''; return; }
+  const summary = last.items.filter(it => !it.isReward).slice(0, 3).map(it => `${it.qty}× ${it.mainName || it.name}`).join(', ');
+  const more = last.items.length > 3 ? ` +อีก ${last.items.length - 3}` : '';
+  card.style.display = 'block';
+  card.innerHTML = `
+    <div style="margin:10px 14px;padding:14px;background:linear-gradient(135deg,#fff7ed,#fde68a);border:1.5px solid #fbbf24;border-radius:14px;cursor:pointer;display:flex;align-items:center;gap:12px;box-shadow:0 2px 8px rgba(245,158,11,.15)" onclick="reorderLastOrder('${last.id}')">
+      <div style="font-size:30px">🔁</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:800;color:#92400e;font-size:14px">สั่งเหมือนครั้งล่าสุด</div>
+        <div style="font-size:12px;color:#78350f;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${summary}${more}</div>
+        <div style="font-size:11px;color:#9a6404;margin-top:2px">฿${last.original_total || last.total} · ${new Date(last.completed_at || last.date).toLocaleDateString('th-TH', { day:'numeric', month:'short' })}</div>
+      </div>
+      <div style="background:#92400e;color:#fff;padding:8px 14px;border-radius:999px;font-size:13px;font-weight:800;flex-shrink:0">+ ตะกร้า</div>
+    </div>
+  `;
+}
+
+function reorderLastOrder(orderId) {
+  const db = loadDB();
+  const order = (db.pendingOrders || []).find(o => o.id === orderId);
+  if (!order) return toast('⚠️ ไม่พบ order เดิม', true);
+  // Build cart lines from order items (skip reward/free items)
+  const baseItems = (order.original_items || order.items || []).filter(it => !it.isReward);
+  let added = 0;
+  baseItems.forEach(it => {
+    const found = findItem(it.id);
+    if (!found) return;  // item no longer in menu
+    cart.push({
+      cartId: 'c' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+      mainId: it.id,
+      qty: it.qty || 1,
+      options: it.options ? JSON.parse(JSON.stringify(it.options)) : [],
+      note: it.note || ''
+    });
+    added++;
+  });
+  if (!added) return toast('⚠️ เมนูเดิมหายจากร้าน — กรุณาเลือกใหม่', true);
+  saveCart();
+  renderMenu();
+  renderCartLines();
+  updateCartBar();
+  toast(`✓ เพิ่ม ${added} รายการเดิมลงตะกร้า`);
+}
+
 function initReturningCustomer() {
   if (!lastPhone || isShopMode) return;
   const db = loadDB();
@@ -1933,6 +2304,8 @@ function initReturningCustomer() {
   if (customer || localPending || localRecentDone) {
     renderUserWidget(customer, localPending, localRecentDone);
   }
+  // Render reorder card from local cache too
+  renderReorderCard(localOrders);
 
   whenCloudReady(async () => {
     // Get fresh customer data
@@ -1956,6 +2329,7 @@ function initReturningCustomer() {
           .sort((a, b) => new Date(b.completed_at || b.date) - new Date(a.completed_at || a.date))[0];
       }
       renderUserWidget(cloudCust || customer, pending, recentDone);
+      renderReorderCard(myOrders);
     });
   });
 }
