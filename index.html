@@ -777,6 +777,13 @@
         ✅ ปลอดภัย — จะลบเฉพาะ override ของ <b>ชื่อ</b> เท่านั้น (ราคา, รูป, สถานะ "หมด" ยังอยู่)
       </div>
     </div>
+    <div style="margin-top:10px">
+      <button class="btn-secondary" onclick="forceCleanupCloudMenu()" style="width:100%;background:#fee2e2;color:#dc2626;border:1.5px solid #dc2626">🧹 ล้าง cloud (ลบ Firestore เกิน 1MB)</button>
+      <div class="hint" style="font-size:11px;margin-top:6px;line-height:1.5;color:#dc2626">
+        ⚠️ ใช้ครั้งเดียวเมื่อ alert "Document size exceeds 1MB" โผล่<br>
+        🔧 ลบรูปเก่าใน Firestore (รูปเก็บใน localStorage ของเครื่องนี้ปกติ — ไม่หายไป)
+      </div>
+    </div>
   </div>
 
   <!-- Item Editor Modal -->
@@ -3538,6 +3545,27 @@ function renderTrendChart(data) {
 
 // ========== Menu Manager ==========
 let menuConfig = JSON.parse(localStorage.getItem('menuConfig') || '{"overrides":{},"custom":[]}');
+
+// 🧹 Force-clean the Firestore menu doc — used when the doc has bloated past
+// 1MB from old image base64 fields that setDoc({merge:true}) won't strip.
+// Sends a freshly-stripped local config with NO merge → replaces the whole doc.
+async function forceCleanupCloudMenu() {
+  if (!confirm(
+    '🧹 ล้าง Firestore menu doc?\n\n' +
+    'ใช้เมื่อเจอ error "Document size exceeds 1,048,576 bytes" ตอน save\n\n' +
+    '✅ รูปทั้งหมดใน localStorage เครื่องนี้จะยังอยู่\n' +
+    '✅ ชื่อ/ราคา/หมวด/availability จะ sync เข้า cloud ใหม่\n' +
+    '⚠️ เครื่องอื่นที่เคยอัพโหลดรูปไว้ จะไม่ได้รับรูปจากเครื่องนี้\n\n' +
+    'กด OK = ล้างและ sync ใหม่'
+  )) return;
+  try {
+    if (!window.cloud?.saveMenuConfig) return alert('⚠️ Cloud ยังไม่พร้อม');
+    await window.cloud.saveMenuConfig(menuConfig); // already strips images + replaces (no merge)
+    toast('✅ ล้าง cloud สำเร็จ — ตอนนี้ save รูปใหม่ได้แล้ว');
+  } catch (e) {
+    alert('❌ ล้าง cloud ล้มเหลว: ' + (e?.message || e));
+  }
+}
 
 // 🔄 Reset menu NAME overrides — keeps price/image/availability, drops only "name"
 // so dishes renamed in menu-data.js show their new names instead of stale overrides.

@@ -130,16 +130,15 @@ window.cloud = {
   },
 
   // Menu config (overrides + custom items)
-  // 🔧 Image base64 strings are heavy (~30-50KB each) and a Firestore doc
-  // can't exceed 1MB. With many menu items, the doc would silently reject
-  // every save → admin sees their image edit "not saving". Strip images
-  // before pushing — keep them in localStorage on the device that uploaded.
-  // (Per-device images is fine for a single-shop app; saves on Firestore
-  // bandwidth too.)
+  // 🔧 Image base64 strings are heavy. Firestore doc limit = 1MB.
+  // CRITICAL: setDoc({merge:true}) deep-merges sub-maps which means
+  // existing image fields stay even if we send stripped data — so the
+  // doc keeps growing. Use setDoc WITHOUT merge to fully replace the
+  // doc with our (stripped) version. Images live only in localStorage.
   async saveMenuConfig(config) {
     try {
       const stripped = _stripImagesFromMenuConfig(config);
-      await setDoc(doc(fdb, 'settings', 'menu'), stripped, { merge: true });
+      await setDoc(doc(fdb, 'settings', 'menu'), stripped);  // no merge: replace entire doc
     } catch (e) { console.warn('[cloud] saveMenuConfig', e); throw e; }
   },
   async getMenuConfig() {
@@ -154,9 +153,12 @@ window.cloud = {
     });
   },
 
-  // 🏭 Factory menu config (separate from regular menu)
+  // 🏭 Factory menu config (separate from regular menu) — same image issue
   async saveFactoryConfig(config) {
-    try { await setDoc(doc(fdb, 'settings', 'factory'), config, { merge: true }); }
+    try {
+      const stripped = _stripImagesFromMenuConfig(config);
+      await setDoc(doc(fdb, 'settings', 'factory'), stripped);  // no merge: replace
+    }
     catch (e) { console.warn('[cloud] saveFactoryConfig', e); }
   },
   async getFactoryConfig() {
