@@ -575,9 +575,19 @@ function render() {
               <button onclick="editOrderModal('${o.id}')" style="background:#ebf0ff;color:#1652F0;border:1.5px solid #1652F0;flex:0;max-width:60px">✏️</button>
             ` : ''}
             <button onclick="printOrderReceipt('${o.id}')" style="background:#fef3c7;color:#92400e;border:1.5px solid #f59e0b;flex:0;max-width:60px" title="พิมพ์ใบเสร็จ">🖨️</button>
-            ${stat.next ? `
-              <button class="btn-done" style="background:${stat.color}" onclick="advanceStatus('${o.id}','${stat.next}')">${stat.nextLabel}</button>
-            ` : ''}
+            ${(() => {
+              // 🔀 Conditional flow:
+              //  • Pickup / phone / no-type orders: ready → "ลูกค้ารับแล้ว" (skip delivering)
+              //  • Delivery orders: ready → delivering → delivered as before
+              const isPickup = o.order_type !== 'delivery';
+              if (status === 'ready' && isPickup) {
+                return `<button class="btn-done" style="background:#16a34a" onclick="openPaymentPicker('${o.id}')">✓ ลูกค้ารับแล้ว</button>`;
+              }
+              if (stat.next) {
+                return `<button class="btn-done" style="background:${stat.color}" onclick="advanceStatus('${o.id}','${stat.next}')">${stat.nextLabel}</button>`;
+              }
+              return '';
+            })()}
           </div>
         ` : status === 'cancelled' ? `
           <div class="order-actions">
