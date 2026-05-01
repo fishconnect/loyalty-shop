@@ -770,6 +770,13 @@
     <p class="hint">กดที่เมนูเพื่อแก้ — ตั้งราคา ใส่รูป ตั้ง "หมด" ลูกค้าเห็นทันที</p>
     <div id="menuManager"></div>
     <button class="btn-primary" onclick="openNewItemEditor()" style="width:100%;margin-top:12px">➕ เพิ่มเมนูใหม่ (พร้อมรูป)</button>
+    <div style="margin-top:14px;padding-top:14px;border-top:1px dashed #d1d5db">
+      <button class="btn-secondary" onclick="resetMenuNameOverrides()" style="width:100%;background:#fef3c7;color:#92400e;border:1.5px solid #fbbf24">🔄 รีเซ็ตชื่อเมนูกลับเป็น default (จาก code)</button>
+      <div class="hint" style="font-size:11px;margin-top:6px;line-height:1.5">
+        💡 ใช้เมื่อชื่อเมนูเก่าถูก override ค้างอยู่หลังจาก rename ใน code<br>
+        ✅ ปลอดภัย — จะลบเฉพาะ override ของ <b>ชื่อ</b> เท่านั้น (ราคา, รูป, สถานะ "หมด" ยังอยู่)
+      </div>
+    </div>
   </div>
 
   <!-- Item Editor Modal -->
@@ -3518,6 +3525,41 @@ function renderTrendChart(data) {
 
 // ========== Menu Manager ==========
 let menuConfig = JSON.parse(localStorage.getItem('menuConfig') || '{"overrides":{},"custom":[]}');
+
+// 🔄 Reset menu NAME overrides — keeps price/image/availability, drops only "name"
+// so dishes renamed in menu-data.js show their new names instead of stale overrides.
+async function resetMenuNameOverrides() {
+  const overrides = menuConfig.overrides || {};
+  const ids = Object.keys(overrides).filter(id => overrides[id] && overrides[id].name);
+  if (!ids.length) {
+    return alert('✅ ไม่มี name override อยู่แล้ว — ชื่อเมนูเป็น default จาก code อยู่แล้ว');
+  }
+  // Show what will change
+  const baseMenu = window.MENU || [];
+  const flatBase = {};
+  baseMenu.forEach(cat => cat.items.forEach(it => { flatBase[it.id] = it.name; }));
+  const lines = ids.slice(0, 10).map(id => {
+    const oldName = overrides[id].name;
+    const baseName = flatBase[id] || '(ไม่อยู่ใน code · จะถูกลบ override)';
+    return `  ${id}: "${oldName}" → "${baseName}"`;
+  }).join('\n');
+  const more = ids.length > 10 ? `\n  ...อีก ${ids.length - 10} รายการ` : '';
+  if (!confirm(
+    `🔄 รีเซ็ตชื่อเมนูทั้งหมด ${ids.length} รายการกลับเป็น default?\n\n` +
+    `ตัวอย่าง:\n${lines}${more}\n\n` +
+    `✅ ราคา / รูป / สถานะ "หมด" จะคงอยู่เหมือนเดิม\n` +
+    `กด OK = รีเซ็ตชื่อทั้งหมด\nกด Cancel = ยกเลิก`
+  )) return;
+  // Clear name field from each override
+  ids.forEach(id => { delete overrides[id].name; });
+  menuConfig.overrides = overrides;
+  localStorage.setItem('menuConfig', JSON.stringify(menuConfig));
+  if (window.cloud?.saveMenuConfig) {
+    try { await window.cloud.saveMenuConfig(menuConfig); } catch (e) { console.warn('cloud', e); }
+  }
+  toast(`✅ รีเซ็ตชื่อ ${ids.length} เมนูแล้ว — refresh หน้าลูกค้าเพื่อดู`);
+  renderMenuManager();
+}
 
 function renderMenuManager() {
   const wrap = document.getElementById('menuManager');
