@@ -3891,9 +3891,11 @@ function generateInvoice() {
     return;
   }
 
+  const dayDiff = Math.round((to.getTime() - from.getTime()) / 86400000) + 1;
   const dateRangeLabel = fromStr === toStr
-    ? formatThaiDate(from)
-    : `${formatThaiDate(from)} ถึง ${formatThaiDate(to)}`;
+    ? `วันที่ ${formatThaiDate(from)}`
+    : `ตั้งแต่ ${formatThaiDate(from)} ถึง ${formatThaiDate(to)} (รวม ${dayDiff} วัน)`;
+  console.log('[invoice]', invoiceMode, 'from:', fromStr, 'to:', toStr, 'orders:', orders.length);
 
   if (invoiceMode === 'daily') {
     renderInvoiceDaily(orders, dateRangeLabel);
@@ -3979,7 +3981,7 @@ function renderInvoiceDaily(orders, dateRangeLabel) {
   `, () => exportInvoiceDailyCSV(grouping));
 }
 
-// 📅 Format 2: รายสัปดาห์ — รวมทุก order ต่อวัน 1 row
+// 📅 Format 2: รายสัปดาห์ — รวมทุก order ต่อวัน 1 row (รวมวันที่ไม่มี order ด้วย)
 function renderInvoiceWeekly(orders, dateRangeLabel) {
   const byDay = {};
   orders.forEach(o => {
@@ -3994,19 +3996,29 @@ function renderInvoiceWeekly(orders, dateRangeLabel) {
     });
   });
 
-  const dateKeys = Object.keys(byDay).sort();
+  // Build a complete list of every date in [from, to] so days with zero orders still show up
+  const fromStr = document.getElementById('invoiceFrom').value;
+  const toStr = document.getElementById('invoiceTo').value;
+  const start = new Date(fromStr); start.setHours(0,0,0,0);
+  const end = new Date(toStr); end.setHours(0,0,0,0);
+  const allDates = [];
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    allDates.push(d.toISOString().slice(0, 10));
+  }
+
   let grandCount = 0, grandTotal = 0, grandOrders = 0, bodyRows = '';
-  dateKeys.forEach(dateKey => {
-    const d = byDay[dateKey];
+  allDates.forEach(dateKey => {
+    const d = byDay[dateKey] || { count: 0, total: 0, orders: 0 };
     grandCount += d.count;
     grandTotal += d.total;
     grandOrders += d.orders;
+    const isEmpty = d.orders === 0;
     bodyRows += `
-      <tr>
+      <tr${isEmpty ? ' style="color:#9ca3af"' : ''}>
         <td style="padding:10px 8px;border:1px solid #d1d5db;font-size:13px;white-space:nowrap">${formatThaiDate(new Date(dateKey))}</td>
-        <td style="padding:10px 8px;border:1px solid #d1d5db;font-size:14px;font-weight:700">${INVOICE_WEEKLY_LABEL}</td>
+        <td style="padding:10px 8px;border:1px solid #d1d5db;font-size:14px;font-weight:700">${isEmpty ? 'ไม่มีรายการ' : INVOICE_WEEKLY_LABEL}</td>
         <td style="padding:10px 8px;border:1px solid #d1d5db;text-align:right;font-weight:700">${d.count}</td>
-        <td style="padding:10px 8px;border:1px solid #d1d5db;text-align:right;font-weight:700;color:#1652F0">${d.total.toLocaleString('th-TH')}</td>
+        <td style="padding:10px 8px;border:1px solid #d1d5db;text-align:right;font-weight:700;color:${isEmpty ? '#9ca3af' : '#1652F0'}">${d.total.toLocaleString('th-TH')}</td>
       </tr>`;
   });
 
