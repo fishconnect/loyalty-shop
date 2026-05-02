@@ -69,19 +69,29 @@
   header.hero .info-chip.open { background: rgba(34,197,94,.95); border-color: #16a34a; color: #052e16; }
   header.hero .info-chip.closed { background: rgba(239,68,68,.95); border-color: #dc2626; color: #fff; }
 
-  /* ============ Promo Chips Strip ============ */
+  /* ============ Promo Chips Strip (auto-marquee) ============ */
   .promo-strip {
     background: #fff;
-    padding: 12px 14px 14px;
+    padding: 12px 0 14px;
     border-bottom: 1px solid #e5e7eb;
-    overflow-x: auto; -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
+    overflow: hidden;       /* hide overflow so marquee loops cleanly */
     margin-top: -8px;
     position: relative; z-index: 5;
     border-radius: 18px 18px 0 0;
   }
-  .promo-strip::-webkit-scrollbar { display: none; }
-  .promo-strip-inner { display: flex; gap: 10px; min-width: max-content; }
+  .promo-strip-inner {
+    display: flex; gap: 10px;
+    width: max-content;
+    padding-left: 14px;
+    animation: promo-scroll 32s linear infinite;
+  }
+  /* Pause on hover/touch so people can read */
+  .promo-strip:hover .promo-strip-inner,
+  .promo-strip:active .promo-strip-inner { animation-play-state: paused; }
+  @keyframes promo-scroll {
+    from { transform: translateX(0); }
+    to   { transform: translateX(-50%); }   /* loop point — content is duplicated */
+  }
   .promo-card {
     background: linear-gradient(135deg, #fff7ed, #fef3c7);
     border: 1.5px solid #fbbf24;
@@ -1205,14 +1215,32 @@ function toggleSearchBox() {
 // against any future modular refactor)
 window.toggleSearchBox = toggleSearchBox;
 
-// Render hero info chips (rating · open/closed · delivery time · points-rate)
-// 🔄 Re-render on cloud onMenuConfig so admin's "ร้านเปิด/ปิด" toggle reflects live.
+// 🟢 / 🔴 Shop-open status — combines admin manual override (cfg.shopOpen)
+// with auto schedule (SHOP_HOURS 9:30-17:30, SHOP_CLOSED_DAYS = Sun).
+// Either can close the shop. To OPEN, both must allow it.
+function isShopOpenNow() {
+  // Admin manual close → always closed
+  try {
+    const cfg = JSON.parse(localStorage.getItem('menuConfig') || '{}');
+    if (cfg.shopOpen === false) return false;
+  } catch (e) {}
+  // Auto-schedule check
+  const now = new Date();
+  if (typeof SHOP_CLOSED_DAYS !== 'undefined' && SHOP_CLOSED_DAYS.includes(now.getDay())) return false;
+  if (typeof SHOP_HOURS === 'undefined') return true;     // no schedule defined → always open
+  const minute = now.getHours() * 60 + now.getMinutes();
+  const open  = SHOP_HOURS.openH  * 60 + SHOP_HOURS.openM;
+  const close = SHOP_HOURS.closeH * 60 + SHOP_HOURS.closeM;
+  return minute >= open && minute <= close;
+}
+
+// Render hero info chips (open/closed · delivery time · points-rate)
+// 🔄 Re-render on cloud onMenuConfig so admin's toggle reflects live,
+// and on a 30-second timer so we cross 17:30 without a refresh.
 function renderHeroChips() {
   const wrap = document.getElementById('heroInfoChips');
   if (!wrap) return;
-  // Show open/closed status from menuConfig (set by admin in backend)
-  const cfg = JSON.parse(localStorage.getItem('menuConfig') || '{}');
-  const isOpen = cfg.shopOpen !== false;
+  const isOpen = isShopOpenNow();
   const chips = [
     isOpen
       ? `<span class="info-chip open">🟢 ร้านเปิด</span>`
@@ -1239,7 +1267,9 @@ function renderPromoStrip() {
     `<div class="promo-card purple"><div class="ic">💰</div><div class="body"><div class="title">15 แต้ม = ลด 50฿</div><div class="desc">แลกส่วนลดได้ทันที</div></div></div>`,
     `<div class="promo-card green"><div class="ic">✨</div><div class="body"><div class="title">ร้านสะอาด อาหารสะอาด</div><div class="desc">มาตรฐานสุขอนามัย</div></div></div>`,
   ];
-  wrap.innerHTML = cards.join('');
+  // Duplicate the cards so the CSS marquee can loop seamlessly (translateX -50%
+  // hits the end of the first copy exactly when the second copy is in position).
+  wrap.innerHTML = cards.join('') + cards.join('');
 }
 
 // 📌 POPULAR_PINS — manual overrides for specific positions in the
@@ -1442,41 +1472,51 @@ whenCloudReady(() => {
   }
 });
 
-// 🔴 Show overlay if shop is closed (admin can toggle in settings)
+// 🔴 Sticky red banner when shop is closed.
+// Customers can still BROWSE the menu (so they see what's available later)
+// but the cart submit button is blocked — see submitOrder() guard.
+// Triggered by admin override OR auto-schedule (outside 9:30-17:30, or Sunday).
 function checkShopClosedOverlay() {
-  // Skip in shop walk-in mode (admin operating the device — they can still order)
-  // Show overlay only on customer-facing online mode
-  const cfg = JSON.parse(localStorage.getItem('menuConfig') || '{}');
-  const isOpen = cfg.shopOpen !== false; // default open
-  let overlay = document.getElementById('shopClosedOverlay');
-  if (isOpen) {
-    if (overlay) overlay.remove();
+  // Don't block admin shop mode (walk-in orders allowed even after hours)
+  if (new URLSearchParams(location.search).get('mode') === 'shop') return;
+  const closed = !isShopOpenNow();
+  let banner = document.getElementById('shopClosedBanner');
+  if (!closed) {
+    if (banner) banner.remove();
     return;
   }
-  // Don't block admin shop mode (the shop staff can still take walk-in orders)
-  if (new URLSearchParams(location.search).get('mode') === 'shop') return;
-  if (!overlay) {
-    overlay = document.createElement('div');
-    overlay.id = 'shopClosedOverlay';
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.96);z-index:99998;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px;text-align:center;font-family:inherit;color:#fff';
-    overlay.innerHTML = `
-      <div style="font-size:88px;margin-bottom:10px">🔴</div>
-      <div style="font-size:28px;font-weight:900;margin-bottom:6px">#ครัวผู้ใหญ่ปอง</div>
-      <div style="font-size:24px;font-weight:800;margin-bottom:14px">ร้านปิดอยู่</div>
-      <div style="background:rgba(255,255,255,.1);border:1.5px solid rgba(255,255,255,.25);border-radius:14px;padding:16px 20px;max-width:340px;margin-bottom:14px">
-        <div style="font-size:13px;opacity:.7;margin-bottom:4px;letter-spacing:.05em">⏰ เวลาทำการ</div>
-        <div style="font-size:20px;font-weight:800;margin-bottom:6px;color:#fbbf24">9:30 - 17:30 น.</div>
-        <div style="font-size:14px;opacity:.85">จันทร์ - เสาร์</div>
-        <div style="font-size:13px;opacity:.7;margin-top:6px;border-top:1px solid rgba(255,255,255,.2);padding-top:6px">หยุดทุกวันอาทิตย์</div>
-      </div>
-      <div style="font-size:13px;opacity:.7;margin-bottom:18px">ขออภัยในความไม่สะดวก กลับมาใหม่ในเวลาทำการนะคะ</div>
-      <a href="tel:0619623696" style="background:#fff;color:#0a1530;padding:14px 28px;border-radius:999px;font-weight:800;text-decoration:none;font-size:15px">📞 โทร 061-962-3696</a>
-    `;
-    document.body.appendChild(overlay);
+  // Build descriptive subline based on what made us closed
+  const cfg = JSON.parse(localStorage.getItem('menuConfig') || '{}');
+  const adminClosed = cfg.shopOpen === false;
+  const now = new Date();
+  const isSunday = now.getDay() === 0;
+  let subline;
+  if (adminClosed)      subline = 'ร้านปิดชั่วคราว · กลับมาเปิดเร็วๆ นี้';
+  else if (isSunday)    subline = 'วันอาทิตย์ร้านหยุด · เปิดอีกครั้งจันทร์ 9.30 น.';
+  else                  subline = 'นอกเวลาทำการ · เปิดทุกวัน 9.30 - 17.30 น.';
+
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'shopClosedBanner';
+    banner.style.cssText = 'position:sticky;top:0;z-index:50;background:linear-gradient(135deg,#dc2626,#991b1b);color:#fff;padding:10px 14px;text-align:center;font-weight:700;font-size:14px;box-shadow:0 2px 10px rgba(220,38,38,.35);font-family:inherit';
+    document.body.insertBefore(banner, document.body.firstChild);
   }
+  banner.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;line-height:1.4">
+      <span style="font-size:18px">🔴</span>
+      <span><b>ร้านปิดอยู่</b> · ${subline}</span>
+    </div>
+    <div style="font-size:11.5px;opacity:.95;margin-top:2px">📖 ดูเมนูได้ตามปกติ — แต่ยังสั่งซื้อไม่ได้ในตอนนี้</div>
+  `;
 }
-// Run on initial load (after page setup)
+// Run on initial load (after page setup) + every 30 seconds so we cross
+// 17:30 / midnight without needing a refresh.
 window.addEventListener('load', () => setTimeout(checkShopClosedOverlay, 200));
+setInterval(() => {
+  checkShopClosedOverlay();
+  renderHeroChips();
+  if (typeof refreshSubmitButtonClosedState === 'function') refreshSubmitButtonClosedState();
+}, 30000);
 
 function scrollToCat(id) {
   const el = document.getElementById(id);
@@ -2242,7 +2282,29 @@ function selectRewardDrink(drinkId) {
 }
 
 // Render order breakdown (subtotal, discount, total)
+// Reflect closed-shop state on the cart submit button (gray + new text).
+// Called whenever the cart is updated and inside renderOrderBreakdown.
+function refreshSubmitButtonClosedState() {
+  const isShopMode = new URLSearchParams(location.search).get('mode') === 'shop';
+  if (isShopMode || isFactoryMode) return;
+  const btn = document.getElementById('submitOrderBtn');
+  const txt = document.getElementById('submitOrderText');
+  if (!btn || !txt) return;
+  if (!isShopOpenNow()) {
+    btn.disabled = true;
+    btn.style.opacity = '.55';
+    btn.style.cursor = 'not-allowed';
+    txt.textContent = '🔴 ร้านปิดอยู่ — สั่งไม่ได้';
+  } else {
+    btn.disabled = false;
+    btn.style.opacity = '';
+    btn.style.cursor = '';
+    if (txt.textContent.includes('ร้านปิด')) txt.textContent = '✅ ยืนยันสั่งอาหาร';
+  }
+}
+
 function renderOrderBreakdown() {
+  refreshSubmitButtonClosedState();
   const el = document.getElementById('orderBreakdown');
   if (!el) return;
   const cartSubtotal = cart.reduce((s, line) => s + calcLineTotal(line), 0);
@@ -2292,6 +2354,21 @@ async function submitOrder() {
   const phone = normPhone(document.getElementById('custPhone').value);
   const name = document.getElementById('custFullName').value.trim();
   if (!cart.length) return toast('⚠️ ตะกร้าว่าง', true);
+
+  // 🔴 Block ordering when shop is closed (admin override OR outside hours).
+  // Walk-in / phone / factory modes can still order — staff is operating those.
+  if (!isShopMode && !isFactoryMode && !isShopOpenNow()) {
+    const cfg = JSON.parse(localStorage.getItem('menuConfig') || '{}');
+    const adminClosed = cfg.shopOpen === false;
+    const now = new Date();
+    const isSunday = now.getDay() === 0;
+    let why;
+    if (adminClosed)   why = 'ร้านปิดชั่วคราว · กลับมาเปิดเร็วๆ นี้';
+    else if (isSunday) why = 'วันอาทิตย์ร้านหยุด · เปิดอีกครั้งจันทร์ 9.30 น.';
+    else               why = 'นอกเวลาทำการ · เปิดทุกวัน 9.30 - 17.30 น.';
+    toast(`🔴 ร้านปิดอยู่ — ${why}`, true);
+    return;
+  }
 
   // Validation per mode:
   //   Walk-in shop: no phone/name needed (anonymous order)
