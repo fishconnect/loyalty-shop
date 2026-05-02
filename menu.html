@@ -369,11 +369,24 @@
   /* ============ Customize Modal ============ */
   .cust-hero {
     background: linear-gradient(135deg, #f7f8fb, #c5d3ff);
-    padding: 24px 20px; text-align: center;
+    padding: 0; text-align: center;
     border-bottom: 1px solid #d1ddff;
+    position: relative;
+    overflow: hidden;
+  }
+  /* Full-width hero image (Grab-style product detail page) */
+  .cust-hero .cust-photo {
+    width: 100%; aspect-ratio: 1/1; max-height: 320px;
+    object-fit: cover; display: block;
+    cursor: zoom-in;
+  }
+  .cust-hero .cust-meta {
+    padding: 16px 20px 18px; text-align: center;
   }
   .cust-emoji {
     font-size: 60px; line-height: 1; margin-bottom: 8px;
+    /* When showing emoji fallback (no photo), show as old centered design */
+    padding: 24px 20px 0;
   }
   .cust-name {
     font-size: 20px; font-weight: 800; color: #0a1530;
@@ -383,6 +396,31 @@
   .cust-price {
     font-size: 22px; font-weight: 900; color: #1652F0; margin-top: 8px;
   }
+
+  /* ============ Image Lightbox (tap-to-zoom) ============ */
+  .img-lightbox {
+    position: fixed; inset: 0; z-index: 1000;
+    background: rgba(0,0,0,.92);
+    display: none; align-items: center; justify-content: center;
+    padding: 20px;
+    cursor: zoom-out;
+  }
+  .img-lightbox.show { display: flex; animation: fadeIn .2s ease; }
+  .img-lightbox img {
+    max-width: 100%; max-height: 90vh;
+    object-fit: contain;
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0,0,0,.5);
+  }
+  .img-lightbox .close-x {
+    position: absolute; top: 14px; right: 14px;
+    background: rgba(255,255,255,.15); color: #fff;
+    width: 44px; height: 44px; border-radius: 50%;
+    border: none; font-size: 22px;
+    display: grid; place-items: center; cursor: pointer;
+    backdrop-filter: blur(10px);
+  }
+  @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
 
   .cust-body { padding: 20px; }
 
@@ -767,8 +805,11 @@
 </div>
 
 <!-- 🔍 Search bar (collapsible — shown when 🔍 icon tapped) -->
-<div id="searchBox" style="display:none;padding:10px 14px;background:#fff;border-bottom:1px solid #e5e7eb">
-  <input type="text" id="menuSearch" placeholder="🔍 ค้นหาเมนู เช่น กะเพรา ชานม ต้มยำ..." oninput="onMenuSearch()" style="width:100%;padding:11px 14px;border:1.5px solid #d1ddff;border-radius:999px;font-size:14px;font-family:inherit;background:#f7f8fb">
+<div id="searchBox" style="display:none;padding:10px 14px;background:#fff;border-bottom:1px solid #e5e7eb;position:sticky;top:0;z-index:11">
+  <div style="display:flex;align-items:center;gap:8px">
+    <input type="text" id="menuSearch" placeholder="🔍 ค้นหาเมนู เช่น กะเพรา ชานม ต้มยำ..." oninput="onMenuSearch()" style="flex:1;padding:11px 14px;border:1.5px solid #d1ddff;border-radius:999px;font-size:14px;font-family:inherit;background:#f7f8fb">
+    <button onclick="toggleSearchBox()" aria-label="ปิด" style="background:#f3f4f6;border:none;width:38px;height:38px;border-radius:50%;font-size:18px;color:#6b7280;cursor:pointer">×</button>
+  </div>
 </div>
 
 <nav class="cats" id="cats"></nav>
@@ -812,6 +853,12 @@
 
 <main id="menuMain"></main>
 
+<!-- 🔍 Image lightbox (tap-to-zoom) -->
+<div class="img-lightbox" id="imgLightbox" onclick="closeLightbox()">
+  <button class="close-x" onclick="closeLightbox(event)" aria-label="ปิด">×</button>
+  <img id="lightboxImg" src="" alt="">
+</div>
+
 <!-- Bottom info banner — shows points/loyalty teaser -->
 <div class="info-banner" id="infoBanner">
   <div class="left-info" id="infoBannerLeft">⭐ สมัครฟรี · รับ 5 แต้มสมัครใหม่</div>
@@ -830,11 +877,15 @@
 <div class="modal-bg" id="modalCust">
   <div class="modal">
     <button class="close" onclick="closeCustomize()">×</button>
-    <div class="cust-hero">
-      <div class="cust-emoji" id="custEmoji">🍚</div>
-      <div class="cust-name" id="custName">—</div>
-      <div class="cust-note" id="custNoteText"></div>
-      <div class="cust-price" id="custPrice">฿0</div>
+    <div class="cust-hero" id="custHero">
+      <!-- One of these renders depending on whether item has a real photo -->
+      <div class="cust-emoji" id="custEmoji" style="display:none">🍚</div>
+      <img class="cust-photo" id="custPhoto" src="" alt="" style="display:none" onclick="openLightbox(this.src)">
+      <div class="cust-meta">
+        <div class="cust-name" id="custName">—</div>
+        <div class="cust-note" id="custNoteText"></div>
+        <div class="cust-price" id="custPrice">฿0</div>
+      </div>
     </div>
     <div class="cust-body">
       <div class="cust-section">
@@ -1088,7 +1139,7 @@ function findItem(id) {
 // 🔄 MENU_IMG_VERSION — bump on every commit that changes assets/menu/*.jpg
 // so browsers re-fetch instead of using their 10-min cached copy. Without
 // this, replacing a photo wouldn't appear to the customer for up to 10 min.
-const MENU_IMG_VERSION = '20260503-5';
+const MENU_IMG_VERSION = '20260503-6';
 function imgSrc(it) {
   if (it.image) return it.image;            // base64 doesn't need versioning
   return `assets/menu/${it.id}.jpg?v=${MENU_IMG_VERSION}`;
@@ -1107,42 +1158,74 @@ function onMenuSearch() {
 
 // ============ Hero / Promo / Popular renderers ============
 
+// 🔍 Image lightbox — tap a menu item photo to view it full-screen
+function openLightbox(src) {
+  if (!src) return;
+  const lb = document.getElementById('imgLightbox');
+  const img = document.getElementById('lightboxImg');
+  if (!lb || !img) return;
+  img.src = src;
+  lb.classList.add('show');
+  document.body.style.overflow = 'hidden';
+}
+function closeLightbox(ev) {
+  if (ev) ev.stopPropagation();
+  const lb = document.getElementById('imgLightbox');
+  if (!lb) return;
+  lb.classList.remove('show');
+  document.body.style.overflow = '';
+}
+window.openLightbox = openLightbox;
+window.closeLightbox = closeLightbox;
+
 // Toggle the collapsible search box (triggered by 🔍 icon in tabs)
 function toggleSearchBox() {
   const box = document.getElementById('searchBox');
   if (!box) return;
-  const showing = box.style.display !== 'none';
-  box.style.display = showing ? 'none' : 'block';
-  if (!showing) {
-    setTimeout(() => document.getElementById('menuSearch')?.focus(), 50);
+  // Use computed style — inline `style.display` may have been cleared
+  const cs = window.getComputedStyle(box).display;
+  const isHidden = cs === 'none';
+  if (isHidden) {
+    box.style.display = 'block';
+    // Make sure user actually sees it — scroll into view (it's between hero & cats)
+    box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setTimeout(() => {
+      const inp = document.getElementById('menuSearch');
+      if (inp) inp.focus();
+    }, 200);
   } else {
-    document.getElementById('menuSearch').value = '';
+    box.style.display = 'none';
+    const inp = document.getElementById('menuSearch');
+    if (inp) inp.value = '';
     menuSearchQ = '';
     renderMenu();
   }
 }
+// Also expose globally so the inline onclick definitely sees it (defense
+// against any future modular refactor)
+window.toggleSearchBox = toggleSearchBox;
 
-// Render hero info chips (rating placeholder · open/closed · points-rate)
+// Render hero info chips (rating · open/closed · delivery time · points-rate)
+// 🔄 Re-render on cloud onMenuConfig so admin's "ร้านเปิด/ปิด" toggle reflects live.
 function renderHeroChips() {
   const wrap = document.getElementById('heroInfoChips');
   if (!wrap) return;
-  // Compute simple "rating" from total order count (gamified, max 5.0)
-  const db = loadDB();
-  const orderCount = (db.pendingOrders || []).length + (db.orders || []).length;
-  // Show open/closed status from menuConfig
+  // Show open/closed status from menuConfig (set by admin in backend)
   const cfg = JSON.parse(localStorage.getItem('menuConfig') || '{}');
   const isOpen = cfg.shopOpen !== false;
-  const chips = [];
-  if (orderCount >= 3) chips.push(`<span class="info-chip rating">⭐ 4.9</span>`);
-  chips.push(isOpen
-    ? `<span class="info-chip open">🟢 ร้านเปิด</span>`
-    : `<span class="info-chip closed">🔴 ร้านปิด</span>`);
-  chips.push(`<span class="info-chip">⏱️ 30-45 น.</span>`);
-  chips.push(`<span class="info-chip">💎 1฿ = 1 แต้ม</span>`);
+  const chips = [
+    `<span class="info-chip rating">⭐ 4.9</span>`,
+    isOpen
+      ? `<span class="info-chip open">🟢 ร้านเปิด</span>`
+      : `<span class="info-chip closed">🔴 ร้านปิด</span>`,
+    `<span class="info-chip">🛵 จัดส่งใน 30 นาที - 1 ชม.</span>`,
+    `<span class="info-chip">💎 50฿ = 1 แต้ม</span>`,
+  ];
   wrap.innerHTML = chips.join('');
 }
 
-// Render promo / loyalty cards strip
+// Render promo / loyalty cards strip — based on ACTUAL LOYALTY constants
+// (10 แต้ม = ฟรีเครื่องดื่ม, 15 แต้ม = ลด 50฿, 50฿ = 1 แต้ม)
 function renderPromoStrip() {
   const wrap = document.getElementById('promoStripInner');
   if (!wrap) return;
@@ -1152,9 +1235,9 @@ function renderPromoStrip() {
   }
   const cards = [
     `<div class="promo-card green"><div class="ic">🎁</div><div class="body"><div class="title">+5 แต้มสมัครใหม่</div><div class="desc">ฟรี · กรอกเบอร์ครั้งแรก</div></div></div>`,
-    `<div class="promo-card"><div class="ic">🥤</div><div class="body"><div class="title">50 แต้ม = ดื่มฟรี</div><div class="desc">แลกเครื่องดื่มได้</div></div></div>`,
-    `<div class="promo-card purple"><div class="ic">💰</div><div class="body"><div class="title">100 แต้ม = ลด ฿20</div><div class="desc">แลกส่วนลดได้ทันที</div></div></div>`,
-    `<div class="promo-card green"><div class="ic">🤝</div><div class="body"><div class="title">แนะนำเพื่อน +5 แต้ม</div><div class="desc">เพื่อนสมัครก็ได้ +5</div></div></div>`,
+    `<div class="promo-card"><div class="ic">🥤</div><div class="body"><div class="title">10 แต้ม = ฟรี 1 แก้ว</div><div class="desc">ชานมไข่มุก / เครื่องดื่มแก้วโอ่ง</div></div></div>`,
+    `<div class="promo-card purple"><div class="ic">💰</div><div class="body"><div class="title">15 แต้ม = ลด 50฿</div><div class="desc">แลกส่วนลดได้ทันที</div></div></div>`,
+    `<div class="promo-card green"><div class="ic">✨</div><div class="body"><div class="title">ร้านสะอาด อาหารสะอาด</div><div class="desc">มาตรฐานสุขอนามัย</div></div></div>`,
   ];
   wrap.innerHTML = cards.join('');
 }
@@ -1353,6 +1436,7 @@ whenCloudReady(() => {
       EFFECTIVE_MENU = window.applyMenuConfig(menuConfig);
       renderMenu();
       updateCartBar();
+      renderHeroChips();        // 🟢/🔴 ร้านเปิด/ปิด อัพเดททันทีจาก admin
       checkShopClosedOverlay();
     });
   }
@@ -1428,10 +1512,24 @@ function openCustomize(itemId, cartId) {
     custCurrent = { mainId: itemId, qty: 1, options: {}, note: '' };
   }
 
-  const custEmojiEl = document.getElementById('custEmoji');
-  // Try cascading image: admin upload → assets/menu/<id>.jpg → emoji fallback
+  // Try cascading image: admin upload → assets/menu/<id>.jpg → emoji fallback.
+  // Use a probe Image() so we can decide between full-width photo OR emoji
+  // BEFORE swapping the visible element (no flicker).
+  const photoEl = document.getElementById('custPhoto');
+  const emojiEl = document.getElementById('custEmoji');
   const _src = imgSrc(item);
-  custEmojiEl.innerHTML = `<img src="${_src}" style="width:120px;height:120px;border-radius:16px;object-fit:cover;box-shadow:0 6px 18px rgba(0,0,0,.15)" onerror="this.style.display='none';this.parentElement.textContent='${cat.emoji}'">`;
+  // Default to emoji shown while probe runs
+  emojiEl.textContent = cat.emoji;
+  emojiEl.style.display = 'block';
+  photoEl.style.display = 'none';
+  const probe = new Image();
+  probe.onload = () => {
+    photoEl.src = _src;
+    photoEl.style.display = 'block';
+    emojiEl.style.display = 'none';
+  };
+  probe.onerror = () => { /* keep emoji visible */ };
+  probe.src = _src;
   document.getElementById('custName').textContent = item.name;
   document.getElementById('custNoteText').textContent = item.note || '';
   document.getElementById('custPrice').textContent = '฿' + item.price;
