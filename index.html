@@ -2871,7 +2871,7 @@ function applyCustomRange() {
   if (from > to) return toast('⚠️ วันที่เริ่มต้องอยู่ก่อนวันที่จบ', true);
   customRange.from = from;
   customRange.to = to;
-  const dayDiff = Math.round((to.getTime() - from.getTime()) / 86400000) + 1;
+  const dayDiff = _daysBetweenInclusive(from, to);
   document.getElementById('customRangeStatus').innerHTML =
     `✅ <b>${formatThaiDate(from)} ถึง ${formatThaiDate(to)}</b> (${dayDiff} วัน)`;
   setRange('custom');
@@ -2894,7 +2894,7 @@ function rangeBounds(range) {
     return { start: s, end: now, label: today.toLocaleDateString('th-TH', {month:'long',year:'numeric'}) };
   }
   if (range === 'custom' && customRange.from && customRange.to) {
-    const dayDiff = Math.round((customRange.to.getTime() - customRange.from.getTime()) / 86400000) + 1;
+    const dayDiff = _daysBetweenInclusive(customRange.from, customRange.to);
     const sameDay = customRange.from.toDateString() === customRange.to.toDateString();
     const label = sameDay
       ? formatThaiDate(customRange.from)
@@ -3969,7 +3969,7 @@ function generateInvoice() {
     return;
   }
 
-  const dayDiff = Math.round((to.getTime() - from.getTime()) / 86400000) + 1;
+  const dayDiff = _daysBetweenInclusive(from, to);
   const dateRangeLabel = fromStr === toStr
     ? `วันที่ ${formatThaiDate(from)}`
     : `ตั้งแต่ ${formatThaiDate(from)} ถึง ${formatThaiDate(to)} (รวม ${dayDiff} วัน)`;
@@ -4228,6 +4228,16 @@ function _localDateKey(d) {
   return d.getFullYear() + '-' +
     String(d.getMonth() + 1).padStart(2, '0') + '-' +
     String(d.getDate()).padStart(2, '0');
+}
+
+// Inclusive day count between two dates — both are normalized to local midnight
+// first so end-of-day timestamps don't bias the subtraction. Picking 1 May → 2 May
+// returns 2 (1 May + 2 May), not 3 like the naive (to-from)/86400000 + 1 did when
+// `to` was 23:59:59.999.
+function _daysBetweenInclusive(d1, d2) {
+  const a = new Date(d1.getFullYear(), d1.getMonth(), d1.getDate());
+  const b = new Date(d2.getFullYear(), d2.getMonth(), d2.getDate());
+  return Math.round((b.getTime() - a.getTime()) / 86400000) + 1;
 }
 
 function printInvoice() {
