@@ -237,6 +237,56 @@ window.cloud = {
     });
   },
 
+  // 🔒 PDPA consent log — every time a customer accepts/rejects a policy version,
+  // we write an immutable record to /consent_logs so we can prove later that
+  // consent was obtained (which version, when, what device, what they agreed to).
+  async saveConsentLog(log) {
+    if (!log?.id) log.id = 'cl-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+    log.timestamp = log.timestamp || new Date().toISOString();
+    try {
+      await setDoc(doc(fdb, 'consent_logs', String(log.id)), log);
+      return log.id;
+    } catch (e) { console.warn('[cloud] saveConsentLog', e); return null; }
+  },
+  async getConsentLogsForCustomer(phoneOrId) {
+    try {
+      const q = query(collection(fdb, 'consent_logs'), where('customer_id', '==', String(phoneOrId)));
+      const snap = await getDocs(q);
+      const out = [];
+      snap.forEach(d => out.push(d.data()));
+      return out.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    } catch (e) { console.warn('[cloud] getConsentLogsForCustomer', e); return []; }
+  },
+  onConsentLogs(cb) {
+    return onSnapshot(collection(fdb, 'consent_logs'), snap => {
+      const out = [];
+      snap.forEach(d => out.push(d.data()));
+      cb(out.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)));
+    }, err => console.warn('[cloud] onConsentLogs', err));
+  },
+
+  // 🔒 PDPA: soft-delete request (right to erasure / right to be forgotten).
+  // We don't hard-delete because we may need the order history for accounting,
+  // but we mark the customer as deleted + redact their PII.
+  async requestAccountDeletion(phoneOrId, reason) {
+    if (!phoneOrId) return;
+    try {
+      await updateDoc(doc(fdb, 'customers', String(phoneOrId)), {
+        deletion_requested: true,
+        deletion_requested_at: new Date().toISOString(),
+        deletion_reason: reason || '',
+      });
+      // Log it as a PDPA event too
+      await this.saveConsentLog({
+        type: 'account_deletion_request',
+        customer_id: String(phoneOrId),
+        customer_phone: String(phoneOrId),
+        accepted: false,
+        details: { reason: reason || '' },
+      });
+    } catch (e) { console.warn('[cloud] requestAccountDeletion', e); }
+  },
+
   // Telegram bot config (shared across devices)
   async saveTelegramConfig(cfg) {
     try { await setDoc(doc(fdb, 'settings', 'telegram'), cfg, { merge: true }); }

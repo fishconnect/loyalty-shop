@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#1652F0">
+<title>🔒 นโยบายความเป็นส่วนตัว · ครัวผู้ใหญ่ปอง</title>
+<link rel="icon" href="logo.jpg">
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", "Sarabun", sans-serif;
+    background: #f7f8fb; color: #1f2937;
+    padding-bottom: 60px;
+    line-height: 1.65;
+  }
+  header {
+    background: linear-gradient(160deg, #1652F0 0%, #0738C9 100%);
+    padding: 22px 18px 28px;
+    color: #fff;
+    border-radius: 0 0 22px 22px;
+    box-shadow: 0 4px 16px rgba(22,82,240,.25);
+  }
+  header .back {
+    color: #fff; opacity: .9; text-decoration: none; font-size: 13px;
+    display: inline-block; margin-bottom: 8px; font-weight: 600;
+  }
+  header h1 {
+    font-size: 24px; font-weight: 900; line-height: 1.2;
+  }
+  header .sub {
+    font-size: 13px; opacity: .9; margin-top: 6px; font-weight: 600;
+  }
+  header .meta {
+    background: rgba(255,255,255,.18);
+    border: 1px solid rgba(255,255,255,.28);
+    backdrop-filter: blur(8px);
+    padding: 10px 14px; border-radius: 12px;
+    margin-top: 14px;
+    font-size: 12.5px; line-height: 1.6;
+  }
+  header .meta b { display: block; font-size: 13.5px; margin-bottom: 4px; }
+
+  main { max-width: 720px; margin: 0 auto; padding: 18px 16px; }
+
+  .toc {
+    background: #fff; border-radius: 16px; padding: 14px 18px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.05); margin-bottom: 18px;
+  }
+  .toc h3 { font-size: 14px; color: #0a1530; margin-bottom: 10px; }
+  .toc ol { padding-left: 22px; font-size: 13.5px; line-height: 1.9; color: #1652F0; }
+  .toc ol a { color: #1652F0; text-decoration: none; font-weight: 600; }
+  .toc ol a:hover { text-decoration: underline; }
+
+  .section {
+    background: #fff; border-radius: 16px; padding: 20px 22px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.05); margin-bottom: 14px;
+    scroll-margin-top: 16px;
+  }
+  .section h2 {
+    font-size: 18px; color: #0a1530; font-weight: 900;
+    margin-bottom: 12px; padding-bottom: 8px;
+    border-bottom: 2px solid #ebf0ff;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .section h2 .num {
+    background: linear-gradient(135deg, #1652F0, #0738C9);
+    color: #fff; font-size: 13px;
+    width: 28px; height: 28px; border-radius: 50%;
+    display: grid; place-items: center; flex-shrink: 0;
+  }
+  .section h3 {
+    font-size: 14.5px; color: #0a1530; font-weight: 800;
+    margin-top: 14px; margin-bottom: 6px;
+  }
+  .section p { font-size: 14px; color: #1f2a44; margin-bottom: 8px; }
+  .section ul { padding-left: 20px; font-size: 14px; color: #1f2a44; margin-bottom: 8px; }
+  .section ul li { margin-bottom: 4px; }
+  .section .highlight {
+    background: linear-gradient(135deg, #fef3c7, #fde68a);
+    border-left: 4px solid #f59e0b;
+    padding: 10px 14px; border-radius: 0 10px 10px 0;
+    font-size: 13.5px; color: #78350f; font-weight: 600;
+    margin: 10px 0;
+  }
+  .section .info {
+    background: #ebf0ff; border-left: 4px solid #1652F0;
+    padding: 10px 14px; border-radius: 0 10px 10px 0;
+    font-size: 13px; color: #1f2a44; margin: 10px 0;
+  }
+
+  .contact-card {
+    background: linear-gradient(135deg, #1652F0, #0738C9);
+    color: #fff; border-radius: 16px; padding: 20px;
+    margin-top: 14px; text-align: center;
+  }
+  .contact-card h3 { font-size: 17px; margin-bottom: 8px; color: #fff; border: none; }
+  .contact-card .row { font-size: 14px; margin: 6px 0; opacity: .95; }
+  .contact-card a { color: #fff; font-weight: 700; text-decoration: underline; }
+
+  .footer-actions {
+    display: flex; gap: 10px; margin-top: 18px;
+  }
+  .footer-actions a {
+    flex: 1; text-align: center; padding: 14px;
+    border-radius: 12px; text-decoration: none;
+    font-weight: 800; font-size: 14px;
+  }
+  .footer-actions .primary {
+    background: linear-gradient(135deg, #1652F0, #0738C9);
+    color: #fff;
+  }
+  .footer-actions .ghost {
+    background: #fff; color: #1652F0;
+    border: 1.5px solid #c5d3ff;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <a href="javascript:history.back()" class="back">‹ กลับ</a>
+  <h1>🔒 นโยบายความเป็นส่วนตัว</h1>
+  <div class="sub">ครัวผู้ใหญ่ปอง · พัฒนาโดย Fish Connect</div>
+  <div class="meta">
+    <b>📋 ข้อมูลเบื้องต้น</b>
+    ปรับปรุงล่าสุด: พฤษภาคม 2569 (เวอร์ชัน 1.0)<br>
+    มีผลผูกพันทางกฎหมาย ตาม พ.ร.บ. คุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562 (PDPA)
+  </div>
+</header>
+
+<main>
+
+<div class="section">
+  <p><b>ขอต้อนรับสู่ระบบสั่งอาหาร "ครัวผู้ใหญ่ปอง"</b> ("แพลตฟอร์ม")
+  ซึ่งให้บริการโดย <b>ครัวผู้ใหญ่ปอง</b> ("ร้าน" หรือ "เรา") พัฒนาและดูแลระบบโดย
+  <b>บริษัท ฟิช คอนเนคท์ จำกัด (Fish Connect)</b> ในฐานะผู้ประมวลผลข้อมูลแทนร้าน</p>
+  <p>นโยบายฉบับนี้ ("นโยบายฯ") จัดทำขึ้นเพื่อกำหนดหลักเกณฑ์ วิธีการ และวัตถุประสงค์ในการเก็บรวบรวม
+  ใช้ เปิดเผย หรือประมวลผลข้อมูลส่วนบุคคลของท่าน ที่เกิดขึ้นจากการเข้าถึงและใช้บริการของเรา
+  ซึ่งรวมถึงเว็บไซต์ แอปพลิเคชันสั่งอาหาร โปรแกรมสะสมแต้ม และบริการที่เกี่ยวข้อง</p>
+  <div class="highlight">
+    💡 โดยการใช้บริการของเรา ท่านถือว่าได้อ่าน ทำความเข้าใจ และยินยอมให้เราประมวลผลข้อมูลส่วนบุคคลของท่านตามที่ระบุไว้ในนโยบายฉบับนี้
+  </div>
+</div>
+
+<div class="toc">
+  <h3>📑 สารบัญ</h3>
+  <ol>
+    <li><a href="#s1">ข้อมูลที่ท่านให้แก่เรา</a></li>
+    <li><a href="#s2">ข้อมูลที่เก็บรวบรวมโดยอัตโนมัติ</a></li>
+    <li><a href="#s3">วัตถุประสงค์ในการใช้ข้อมูล</a></li>
+    <li><a href="#s4">การแบ่งปันข้อมูลกับบุคคลที่สาม</a></li>
+    <li><a href="#s5">ระยะเวลาในการเก็บรักษาข้อมูล</a></li>
+    <li><a href="#s6">สิทธิของเจ้าของข้อมูล</a></li>
+    <li><a href="#s7">ความมั่นคงปลอดภัยของข้อมูล</a></li>
+    <li><a href="#s8">การคุ้มครองข้อมูลของผู้เยาว์</a></li>
+    <li><a href="#s9">การปรับปรุงนโยบาย</a></li>
+    <li><a href="#s10">ช่องทางการติดต่อ (DPO)</a></li>
+  </ol>
+</div>
+
+<div class="section" id="s1">
+  <h2><span class="num">1</span> ข้อมูลที่ท่านให้แก่เรา</h2>
+
+  <h3>1.1 ข้อมูลบัญชีและโปรไฟล์</h3>
+  <p>เมื่อท่านสมัครสมาชิกหรือสั่งอาหารผ่านแพลตฟอร์ม เราจะเก็บข้อมูลส่วนบุคคล ได้แก่:</p>
+  <ul>
+    <li>📱 <b>หมายเลขโทรศัพท์</b> (จำเป็น — ใช้เป็น ID หลักของบัญชี)</li>
+    <li>👤 <b>ชื่อ-นามสกุล</b> (จำเป็น — สำหรับเรียกชื่อตอนเตรียมอาหาร)</li>
+    <li>📷 <b>รูปโปรไฟล์</b> (ไม่บังคับ — ท่านอัพโหลดเอง)</li>
+    <li>🎂 <b>วันเดือนเกิด</b> (ไม่บังคับ — ใช้สำหรับมอบสิทธิประโยชน์ในวันเกิด)</li>
+    <li>📍 <b>ที่อยู่จัดส่ง</b> + พิกัด GPS (เฉพาะเมื่อท่านเลือกจัดส่ง)</li>
+  </ul>
+
+  <h3>1.2 ข้อมูลการสั่งซื้อและธุรกรรม</h3>
+  <ul>
+    <li>🍽️ รายการอาหารที่สั่ง · จำนวน · ตัวเลือก/หมายเหตุ</li>
+    <li>💰 ยอดเงิน · แต้มสะสม · แต้มที่แลก · ส่วนลด</li>
+    <li>📅 วันเวลาที่สั่ง · เวลาที่ต้องการรับ (ถ้าจองเวลา)</li>
+    <li>🚚 ประเภทการรับ (รับที่ร้าน / จัดส่ง) + ที่อยู่จัดส่ง</li>
+  </ul>
+
+  <h3>1.3 ข้อมูลการติดต่อและข้อเสนอแนะ</h3>
+  <p>เก็บข้อมูลที่ท่านส่งให้เรา เช่น คำถาม คำร้องเรียน หรือข้อเสนอแนะผ่านช่องทางต่างๆ
+  เพื่อใช้ในการตอบกลับและปรับปรุงคุณภาพบริการ</p>
+</div>
+
+<div class="section" id="s2">
+  <h2><span class="num">2</span> ข้อมูลที่เก็บรวบรวมโดยอัตโนมัติ</h2>
+
+  <h3>2.1 ข้อมูลการใช้งาน</h3>
+  <ul>
+    <li>📈 ประวัติการสั่งซื้อ · เมนูที่กดดู · เมนูยอดนิยม</li>
+    <li>⏱️ เวลาที่เข้าใช้งานครั้งล่าสุด</li>
+  </ul>
+
+  <h3>2.2 คุกกี้และเทคโนโลยีจัดเก็บข้อมูลในเบราว์เซอร์</h3>
+  <p>เราใช้ <b>localStorage</b> และ <b>sessionStorage</b> ของเบราว์เซอร์ในการ:</p>
+  <ul>
+    <li>จดจำเบอร์โทรของท่าน เพื่อไม่ต้องกรอกใหม่ทุกครั้ง</li>
+    <li>เก็บตะกร้าสินค้าระหว่างเลือกเมนู</li>
+    <li>เก็บการตั้งค่าและการยินยอมของท่าน (PDPA consent)</li>
+  </ul>
+  <div class="info">
+    ℹ️ <b>เราไม่ใช้คุกกี้บุคคลที่สาม (3rd-party cookies)</b> เช่น Google Analytics, Facebook Pixel หรือเครื่องมือโฆษณาอื่น
+    ข้อมูลทั้งหมดเก็บไว้บนเซิร์ฟเวอร์ของเราและในเบราว์เซอร์ของท่านเท่านั้น
+  </div>
+
+  <h3>2.3 ข้อมูลตำแหน่งที่ตั้ง (Location)</h3>
+  <p>เมื่อท่านกด "📍 ใช้ตำแหน่งปัจจุบัน" หรือ "📍 ปักหมุดตำแหน่ง"
+  เราจะขออนุญาตเข้าถึง GPS ของอุปกรณ์ และเก็บพิกัด lat/lng เพื่อใช้ในการจัดส่ง
+  ท่านสามารถปฏิเสธการเข้าถึง GPS ได้ผ่านการตั้งค่าเบราว์เซอร์</p>
+</div>
+
+<div class="section" id="s3">
+  <h2><span class="num">3</span> วัตถุประสงค์ในการใช้ข้อมูล</h2>
+  <p>เราใช้ข้อมูลส่วนบุคคลของท่านเพื่อวัตถุประสงค์ดังต่อไปนี้:</p>
+  <ul>
+    <li>🍽️ <b>ดำเนินการสั่งซื้อและจัดส่งอาหาร</b> — ส่งออเดอร์ให้ครัว · จัดเตรียม · จัดส่ง · เรียกรับ</li>
+    <li>⭐ <b>โปรแกรมสะสมแต้ม (Loyalty)</b> — คำนวณแต้ม · มอบรางวัล · ส่วนลด · สิทธิประโยชน์ในวันเกิด</li>
+    <li>📞 <b>ติดต่อสื่อสาร</b> — โทรยืนยันออเดอร์ · แจ้งสถานะ · ตอบคำถาม</li>
+    <li>📊 <b>ปรับปรุงคุณภาพบริการ</b> — วิเคราะห์เมนูยอดนิยม · ปรับปรุงเมนู · บริการที่ดีขึ้น</li>
+    <li>🔒 <b>ความปลอดภัย</b> — ตรวจจับการใช้งานผิดปกติ · ป้องกันการฉ้อโกง</li>
+    <li>📋 <b>ปฏิบัติตามกฎหมาย</b> — รายงานบัญชี · เก็บหลักฐานทางการเงิน</li>
+  </ul>
+  <div class="highlight">
+    ⚠️ <b>เราจะไม่ใช้ข้อมูลของท่านเพื่อวัตถุประสงค์อื่นนอกเหนือจากที่ระบุ</b> โดยไม่ได้รับความยินยอมเพิ่มเติม
+  </div>
+</div>
+
+<div class="section" id="s4">
+  <h2><span class="num">4</span> การแบ่งปันข้อมูลกับบุคคลที่สาม</h2>
+  <p>เราอาจแบ่งปันข้อมูลของท่านกับบุคคลภายนอกเฉพาะกรณีดังต่อไปนี้:</p>
+
+  <h3>4.1 ผู้ให้บริการเทคโนโลยี (Data Processor)</h3>
+  <ul>
+    <li><b>Google Firebase / Firestore</b> — ระบบฐานข้อมูลคลาวด์สำหรับเก็บข้อมูลออเดอร์และลูกค้า (ภายใต้สัญญา DPA กับ Google)</li>
+    <li><b>GitHub Pages</b> — เซิร์ฟเวอร์โฮสต์เว็บไซต์</li>
+    <li><b>บริษัท ฟิช คอนเนคท์ จำกัด (Fish Connect)</b> — ผู้พัฒนาและดูแลระบบ</li>
+  </ul>
+
+  <h3>4.2 พนักงานขนส่งอาหาร (Delivery)</h3>
+  <p>เฉพาะกรณีท่านเลือกจัดส่ง — เราจะส่ง <b>ชื่อ · เบอร์โทร · ที่อยู่ + พิกัด GPS</b>
+  ให้ผู้ขับขี่เพื่อใช้ในการจัดส่งเท่านั้น</p>
+
+  <h3>4.3 หน่วยงานรัฐ / ตามกฎหมาย</h3>
+  <p>เราอาจเปิดเผยข้อมูลของท่านเมื่อมีคำสั่งศาล · หมายค้น · หรือตามกฎหมายกำหนด</p>
+
+  <div class="info">
+    ℹ️ <b>เราจะไม่ขายข้อมูลของท่านให้บุคคลที่สาม</b> ภายใต้ทุกกรณี ไม่ว่าจะเป็นการตลาด
+    การโฆษณา หรือวัตถุประสงค์เชิงพาณิชย์อื่น
+  </div>
+</div>
+
+<div class="section" id="s5">
+  <h2><span class="num">5</span> ระยะเวลาในการเก็บรักษาข้อมูล</h2>
+  <ul>
+    <li><b>ข้อมูลบัญชีลูกค้า</b> (ชื่อ · เบอร์ · แต้ม) — ตลอดเวลาที่บัญชียังใช้งาน +
+      <b>3 ปี</b> หลังเลิกใช้งาน เพื่อรองรับการกลับมาใช้บริการ</li>
+    <li><b>ข้อมูลออเดอร์</b> (รายการอาหาร · ยอดเงิน) — <b>5 ปี</b> ตามกฎหมายภาษี/บัญชี</li>
+    <li><b>ข้อมูลตำแหน่ง GPS</b> — เก็บเฉพาะออเดอร์ที่ active · ลบหลังจัดส่งเสร็จ 90 วัน</li>
+    <li><b>Consent logs</b> — <b>10 ปี</b> ตาม PDPA เพื่อใช้พิสูจน์ว่าได้รับการยินยอม</li>
+  </ul>
+  <p>หลังพ้นระยะเวลาดังกล่าว เราจะลบหรือทำให้ข้อมูลไม่สามารถระบุตัวตนได้ (anonymize)</p>
+</div>
+
+<div class="section" id="s6">
+  <h2><span class="num">6</span> สิทธิของเจ้าของข้อมูล</h2>
+  <p>ตาม PDPA ท่านมีสิทธิดังต่อไปนี้:</p>
+  <ul>
+    <li>📥 <b>สิทธิเข้าถึงและขอสำเนาข้อมูล</b> — ดูข้อมูลทั้งหมดที่เราเก็บเกี่ยวกับท่าน + ดาวน์โหลดเป็นไฟล์ได้</li>
+    <li>✏️ <b>สิทธิแก้ไขข้อมูล</b> — แก้ชื่อ · เบอร์ · ที่อยู่ · วันเกิด ผ่านหน้าโปรไฟล์</li>
+    <li>🗑️ <b>สิทธิขอให้ลบ (Right to Erasure)</b> — ขอให้ลบบัญชีและข้อมูลทั้งหมด</li>
+    <li>🚫 <b>สิทธิคัดค้านการประมวลผล</b> — แจ้งระงับการใช้ข้อมูลเพื่อการตลาดได้</li>
+    <li>📤 <b>สิทธิโอนย้ายข้อมูล (Data Portability)</b> — ขอข้อมูลในรูปแบบมาตรฐาน (JSON) เพื่อนำไปใช้ที่อื่น</li>
+    <li>📞 <b>สิทธิร้องเรียน</b> — ต่อ <b>สำนักงานคณะกรรมการคุ้มครองข้อมูลส่วนบุคคล (PDPC)</b>
+      ได้ที่ <a href="https://www.pdpc.or.th" target="_blank" style="color:#1652F0">www.pdpc.or.th</a></li>
+  </ul>
+  <div class="highlight">
+    💡 ท่านสามารถใช้สิทธิเหล่านี้ผ่านหน้า <a href="points.html" style="color:#78350f;font-weight:800;text-decoration:underline">⭐ แต้มของฉัน</a>
+    (เลื่อนหา "🔒 ข้อมูลส่วนตัวของฉัน") หรือติดต่อ DPO ตามช่องทางด้านล่าง
+  </div>
+</div>
+
+<div class="section" id="s7">
+  <h2><span class="num">7</span> ความมั่นคงปลอดภัยของข้อมูล</h2>
+  <ul>
+    <li>🔐 <b>การเข้ารหัสในการส่งข้อมูล</b> — HTTPS/TLS ทุกช่องทาง</li>
+    <li>🛡️ <b>Firebase Security Rules</b> — ลูกค้าเข้าถึงได้เฉพาะข้อมูลของตัวเอง</li>
+    <li>🔑 <b>การควบคุมการเข้าถึงของพนักงาน</b> — มีรหัส admin · บันทึกการแก้ไข</li>
+    <li>🔄 <b>สำรองข้อมูลอัตโนมัติ</b> — ผ่าน Firebase + GitHub</li>
+    <li>📋 <b>ตรวจสอบการเข้าถึง (Audit log)</b> — บันทึกทุกการแก้ไขที่สำคัญ</li>
+  </ul>
+  <p>หากเกิดเหตุการละเมิดข้อมูลส่วนบุคคล (Data Breach) เราจะแจ้งให้ท่านและสำนักงาน PDPC
+  ทราบภายใน <b>72 ชั่วโมง</b> ตามที่กฎหมายกำหนด</p>
+</div>
+
+<div class="section" id="s8">
+  <h2><span class="num">8</span> การคุ้มครองข้อมูลของผู้เยาว์</h2>
+  <p>บริการของเราเหมาะสำหรับผู้บริโภคทั่วไปที่อายุ <b>13 ปีขึ้นไป</b>
+  หากท่านอายุต่ำกว่า 20 ปี กรุณาขออนุญาตจากผู้ปกครองก่อนใช้บริการ
+  หากเราพบว่าเก็บข้อมูลของผู้เยาว์โดยไม่มีความยินยอมจากผู้ปกครอง
+  เราจะดำเนินการลบข้อมูลทันที</p>
+</div>
+
+<div class="section" id="s9">
+  <h2><span class="num">9</span> การปรับปรุงนโยบาย</h2>
+  <p>เราอาจปรับปรุงนโยบายฉบับนี้เป็นระยะ การเปลี่ยนแปลงที่มีนัยสำคัญจะแจ้งให้ท่านทราบล่วงหน้าผ่าน:</p>
+  <ul>
+    <li>ข้อความบนหน้าแอปพลิเคชัน</li>
+    <li>SMS หรือโทรแจ้ง (สำหรับลูกค้าที่มีบัญชี)</li>
+  </ul>
+  <p>เวอร์ชันปัจจุบัน: <b>1.0 (พฤษภาคม 2569)</b><br>
+  หากมีการเปลี่ยนแปลง เราจะขอความยินยอมใหม่จากท่าน</p>
+</div>
+
+<div class="section" id="s10">
+  <h2><span class="num">10</span> ช่องทางการติดต่อ</h2>
+  <p>หากท่านมีคำถาม ข้อสงสัย หรือต้องการใช้สิทธิของเจ้าของข้อมูล กรุณาติดต่อ:</p>
+</div>
+
+<div class="contact-card">
+  <h3>📋 เจ้าหน้าที่คุ้มครองข้อมูลส่วนบุคคล (DPO)</h3>
+  <div class="row"><b>ครัวผู้ใหญ่ปอง</b> (Data Controller)</div>
+  <div class="row">📞 <a href="tel:0619623696">061-962-3696</a></div>
+  <div class="row" style="opacity:.85;font-size:12px;margin-top:10px;border-top:1px solid rgba(255,255,255,.2);padding-top:10px">
+    <b>Fish Connect</b> · ผู้พัฒนาระบบ (Data Processor)<br>
+    📧 <a href="mailto:rodsak.kongsakul@gmail.com">rodsak.kongsakul@gmail.com</a>
+  </div>
+</div>
+
+<div class="footer-actions">
+  <a href="javascript:history.back()" class="ghost">‹ กลับ</a>
+  <a href="tos.html" class="primary">📋 อ่านข้อตกลงบริการ ›</a>
+</div>
+
+</main>
+
+</body>
+</html>

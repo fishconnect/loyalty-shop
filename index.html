@@ -1017,6 +1017,25 @@
     <div class="hint">⬆️ คลิกเพื่อ copy link ส่งให้ลูกค้า</div>
   </div>
 
+  <!-- 🔒 PDPA Panel -->
+  <div class="card" style="border:2px solid #1652F0">
+    <h2>🔒 PDPA · ข้อมูลส่วนบุคคล</h2>
+    <p class="hint">การจัดการตามกฎหมายคุ้มครองข้อมูลส่วนบุคคล (พ.ร.บ. PDPA พ.ศ. 2562)</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+      <a href="privacy.html" target="_blank" style="padding:12px;background:#ebf0ff;color:#1652F0;border:1.5px solid #c5d3ff;border-radius:10px;text-decoration:none;font-weight:700;font-size:13px;text-align:center;font-family:inherit">📖 นโยบายความเป็นส่วนตัว</a>
+      <a href="tos.html" target="_blank" style="padding:12px;background:#ebf0ff;color:#1652F0;border:1.5px solid #c5d3ff;border-radius:10px;text-decoration:none;font-weight:700;font-size:13px;text-align:center;font-family:inherit">📋 เงื่อนไขบริการ</a>
+    </div>
+    <div style="background:linear-gradient(135deg,#fef3c7,#fde68a);border:1.5px solid #f59e0b;color:#78350f;padding:12px;border-radius:10px;margin-top:10px;font-size:12.5px;line-height:1.6">
+      <b style="display:block;margin-bottom:4px">📋 เจ้าหน้าที่คุ้มครองข้อมูลส่วนบุคคล (DPO)</b>
+      Data Controller: <b>ครัวผู้ใหญ่ปอง</b> · 📞 061-962-3696<br>
+      Data Processor: <b>Fish Connect</b> · 📧 rodsak.kongsakul@gmail.com
+    </div>
+    <button class="btn-primary" onclick="showConsentLogs()" style="width:100%;margin-top:10px">📜 ดู Consent Logs (บันทึกการยินยอม)</button>
+    <button class="btn-primary" onclick="showDeletionRequests()" style="width:100%;margin-top:6px;background:linear-gradient(135deg,#dc2626,#991b1b)">🗑️ คำขอลบบัญชีค้างอยู่</button>
+    <button class="btn-primary" onclick="showRopaTemplate()" style="width:100%;margin-top:6px;background:linear-gradient(135deg,#6b7280,#374151)">📋 RoPA · บันทึกกิจกรรมประมวลผล</button>
+    <div id="pdpaPanelOutput" style="margin-top:10px;font-size:13px"></div>
+  </div>
+
   <div class="card">
     <h2>📋 จัดการเมนู</h2>
     <p class="hint">กดที่เมนูเพื่อแก้ — ตั้งราคา ใส่รูป ตั้ง "หมด" ลูกค้าเห็นทันที</p>
@@ -1716,6 +1735,83 @@ function downloadImageIdsCsv() {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
   toast('📄 ดาวน์โหลด menu-image-ids.csv แล้ว');
 }
+
+// =================================================================
+// 🔒 PDPA admin panel — view consent logs, deletion requests, RoPA
+// =================================================================
+async function showConsentLogs() {
+  const out = document.getElementById('pdpaPanelOutput');
+  out.innerHTML = '<div style="padding:14px;color:#5c6982;text-align:center">⏳ กำลังโหลด consent logs...</div>';
+  try {
+    if (!window.cloud?.onConsentLogs) { out.innerHTML = '<div style="color:#dc2626">⚠️ Cloud not ready</div>'; return; }
+    window.cloud.onConsentLogs(logs => {
+      if (!logs.length) { out.innerHTML = '<div style="padding:14px;color:#9ca3af;text-align:center">ยังไม่มี consent logs</div>'; return; }
+      const types = { signup_privacy_acceptance: '🆕 สมัครสมาชิก', cookies_and_privacy: '🍪 Cookie banner', data_access_request: '📥 ขอข้อมูล', account_deletion_request: '🗑️ ขอลบบัญชี' };
+      out.innerHTML = `
+        <div style="background:#f7f8fb;padding:10px;border-radius:8px;margin-bottom:8px;font-weight:700;color:#0a1530">📜 Consent Logs (${logs.length} รายการล่าสุด)</div>
+        <div style="max-height:400px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:10px">
+          ${logs.slice(0, 100).map(l => `
+            <div style="padding:10px 12px;border-bottom:1px solid #f3f4f6;font-size:12.5px">
+              <div style="font-weight:700;color:#0a1530">${types[l.type] || l.type} ${l.accepted ? '✅' : '❌'}</div>
+              <div style="color:#5c6982;margin-top:2px">📱 ${l.customer_phone || l.customer_id || '?'} · 🕒 ${new Date(l.timestamp).toLocaleString('th-TH')}</div>
+              ${l.version ? `<div style="color:#9ca3af;font-size:11px;margin-top:2px">เวอร์ชัน ${l.version}</div>` : ''}
+            </div>
+          `).join('')}
+        </div>
+      `;
+    });
+  } catch (e) { out.innerHTML = '<div style="color:#dc2626">⚠️ ' + e.message + '</div>'; }
+}
+
+async function showDeletionRequests() {
+  const out = document.getElementById('pdpaPanelOutput');
+  out.innerHTML = '<div style="padding:14px;color:#5c6982;text-align:center">⏳ กำลังโหลด...</div>';
+  try {
+    if (!window.cloud?.getAllCustomers) { out.innerHTML = '<div style="color:#dc2626">⚠️ Cloud not ready</div>'; return; }
+    const all = await window.cloud.getAllCustomers();
+    const pending = Object.values(all).filter(c => c.deletion_requested && !c.deletion_completed);
+    if (!pending.length) { out.innerHTML = '<div style="padding:14px;color:#16a34a;text-align:center;font-weight:700">✅ ไม่มีคำขอค้างอยู่</div>'; return; }
+    out.innerHTML = `
+      <div style="background:#fee2e2;padding:10px;border-radius:8px;margin-bottom:8px;font-weight:700;color:#991b1b">🗑️ คำขอลบบัญชี (${pending.length} รายการ)</div>
+      <div style="max-height:400px;overflow-y:auto;border:1px solid #fecaca;border-radius:10px">
+        ${pending.map(c => `
+          <div style="padding:12px;border-bottom:1px solid #fee2e2;font-size:12.5px">
+            <div style="font-weight:800;color:#991b1b">${c.name} · ${c.phone}</div>
+            <div style="color:#5c6982;margin-top:3px">🕒 ขอเมื่อ ${new Date(c.deletion_requested_at).toLocaleString('th-TH')}</div>
+            ${c.deletion_reason ? `<div style="color:#5c6982;margin-top:3px;font-style:italic">เหตุผล: "${c.deletion_reason}"</div>` : ''}
+            <div style="font-size:11px;color:#9ca3af;margin-top:4px">⚠️ ดำเนินการลบใน Firebase Console + แจ้งลูกค้า</div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  } catch (e) { out.innerHTML = '<div style="color:#dc2626">⚠️ ' + e.message + '</div>'; }
+}
+
+function showRopaTemplate() {
+  const out = document.getElementById('pdpaPanelOutput');
+  out.innerHTML = `
+    <div style="background:#f7f8fb;padding:14px;border-radius:10px;border:1px solid #e5e7eb;font-size:12px;line-height:1.7">
+      <b style="font-size:13px;color:#0a1530;display:block;margin-bottom:8px">📋 RoPA — บันทึกกิจกรรมประมวลผล</b>
+      <table style="width:100%;border-collapse:collapse;font-size:11.5px">
+        <thead style="background:#ebf0ff">
+          <tr><th style="padding:6px;text-align:left">กิจกรรม</th><th style="padding:6px;text-align:left">ฐานกฎหมาย</th><th style="padding:6px;text-align:left">เก็บนาน</th></tr>
+        </thead>
+        <tbody>
+          <tr style="border-top:1px solid #e5e7eb"><td style="padding:6px">รับออเดอร์ + จัดส่ง</td><td style="padding:6px">สัญญา (Contract)</td><td style="padding:6px">5 ปี</td></tr>
+          <tr style="border-top:1px solid #e5e7eb"><td style="padding:6px">โปรแกรมสะสมแต้ม</td><td style="padding:6px">ความยินยอม (Consent)</td><td style="padding:6px">3 ปี หลังเลิกใช้</td></tr>
+          <tr style="border-top:1px solid #e5e7eb"><td style="padding:6px">บันทึกบัญชี / ภาษี</td><td style="padding:6px">กฎหมาย (Legal)</td><td style="padding:6px">5 ปี</td></tr>
+          <tr style="border-top:1px solid #e5e7eb"><td style="padding:6px">ส่งข่าวโปรโมชั่น</td><td style="padding:6px">ความยินยอม (Consent)</td><td style="padding:6px">จนกว่ายกเลิก</td></tr>
+          <tr style="border-top:1px solid #e5e7eb"><td style="padding:6px">Consent logs</td><td style="padding:6px">กฎหมาย (Legal)</td><td style="padding:6px">10 ปี</td></tr>
+        </tbody>
+      </table>
+      <div style="margin-top:10px;color:#5c6982;font-size:11px">💡 ตามมาตรา 39 PDPA ผู้ควบคุมข้อมูลฯต้องจัดทำ RoPA หรือบันทึกการประมวลผลข้อมูล (มาตรา 39 ของ พ.ร.บ.)</div>
+    </div>
+  `;
+}
+
+window.showConsentLogs = showConsentLogs;
+window.showDeletionRequests = showDeletionRequests;
+window.showRopaTemplate = showRopaTemplate;
 
 function getEffectiveRegularMenu() {
   const cfg = JSON.parse(localStorage.getItem('menuConfig') || '{"overrides":{},"custom":[]}');

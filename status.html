@@ -545,6 +545,53 @@ function closeReorderModalStatus() {
 }
 window.openReorderModalStatus = openReorderModalStatus;
 window.closeReorderModalStatus = closeReorderModalStatus;
+
+// 🔒 PDPA cookie banner
+const PDPA_VERSION = '1.0';
+function maybeShowPdpaBanner() {
+  try {
+    const c = JSON.parse(localStorage.getItem('pdpa_consent') || 'null');
+    if (c && c.version === PDPA_VERSION) return;
+  } catch (e) {}
+  const b = document.getElementById('pdpaBanner');
+  if (b) b.style.display = 'block';
+}
+async function acceptPdpa(accepted) {
+  const consent = { version: PDPA_VERSION, accepted: !!accepted, accepted_at: new Date().toISOString(), user_agent: navigator.userAgent, language: navigator.language };
+  localStorage.setItem('pdpa_consent', JSON.stringify(consent));
+  document.getElementById('pdpaBanner').style.display = 'none';
+  whenCloudReady(async () => {
+    try {
+      await window.cloud.saveConsentLog?.({
+        type: 'cookies_and_privacy', customer_id: phone || 'anon', customer_phone: phone || null,
+        version: PDPA_VERSION, accepted: !!accepted,
+        details: { source: 'cookie_banner_status', user_agent: navigator.userAgent.slice(0, 200) },
+      });
+    } catch (e) {}
+  });
+}
+window.acceptPdpa = acceptPdpa;
+window.addEventListener('load', () => setTimeout(maybeShowPdpaBanner, 800));
 </script>
+
+<!-- 🔒 PDPA cookie/consent banner -->
+<div id="pdpaBanner" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:200;background:linear-gradient(135deg,#0a1530,#1f2a44);color:#fff;padding:18px 16px 16px;box-shadow:0 -6px 24px rgba(0,0,0,.3);font-family:-apple-system,'Segoe UI','Sarabun',sans-serif">
+  <div style="max-width:720px;margin:0 auto">
+    <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:12px">
+      <div style="font-size:24px;flex-shrink:0">🔒</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:800;font-size:15px;margin-bottom:4px">เราเคารพความเป็นส่วนตัวของคุณ</div>
+        <div style="font-size:12.5px;opacity:.92;line-height:1.5">
+          อ่าน <a href="privacy.html" style="color:#fbbf24;text-decoration:underline;font-weight:700">นโยบายความเป็นส่วนตัว</a>
+          · <a href="tos.html" style="color:#fbbf24;text-decoration:underline;font-weight:700">เงื่อนไขบริการ</a>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button onclick="acceptPdpa(true)" style="flex:1;padding:12px;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border:none;border-radius:10px;font-weight:800;font-size:13.5px;cursor:pointer;font-family:inherit">✅ ยอมรับ</button>
+      <button onclick="acceptPdpa(false)" style="padding:12px 16px;background:rgba(255,255,255,.15);color:#fff;border:1.5px solid rgba(255,255,255,.3);border-radius:10px;font-weight:700;font-size:13.5px;cursor:pointer;font-family:inherit">ปฏิเสธ</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
