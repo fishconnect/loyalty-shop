@@ -1084,6 +1084,27 @@ function gateOrRender(customer, allOrders) {
   return true;
 }
 
+// 🔒 PII masking — show only first/last chars of name + phone so the lock
+// screen tells the visitor "this is some account, prove it's yours" without
+// revealing who it actually belongs to.
+//   "แปรง"      → "แxxxง"
+//   "0815495552" → "081xxxxx52"
+//   "John Smith" → "Jxxxh"
+function maskName(name) {
+  const s = String(name || '').trim();
+  if (!s) return '???';
+  if (s.length === 1) return s + 'xxx';
+  if (s.length === 2) return s[0] + 'xx' + s[1];
+  return s[0] + 'xxx' + s[s.length - 1];
+}
+function maskPhone(phone) {
+  const p = String(phone || '').replace(/\D/g, '');
+  if (p.length < 7) return p.replace(/\d/g, 'x');
+  return p.slice(0, 3) + 'xxxxx' + p.slice(-2);
+}
+window.maskName = maskName;
+window.maskPhone = maskPhone;
+
 function showVerifyGate(customer, allOrders) {
   const hasBirthday = !!(customer.birth_day && customer.birth_month);
   const months = ['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
@@ -1099,8 +1120,9 @@ function showVerifyGate(customer, allOrders) {
       <h2 style="font-size:20px;font-weight:900;color:#0a1530;margin:8px 0 4px">ยืนยันตัวตน</h2>
       <p style="font-size:13px;color:#5c6982;line-height:1.5;margin-bottom:14px">บัญชีนี้ยังไม่เคยใช้งานจากอุปกรณ์นี้<br>เพื่อความปลอดภัย กรุณายืนยันก่อนดูข้อมูล</p>
       <div style="background:#f7f8fb;border-radius:12px;padding:12px;margin-bottom:18px">
-        <div style="font-weight:800;color:#0a1530">👤 ${customer.name || customer.phone}</div>
-        <div style="font-size:12px;color:#5c6982;margin-top:2px">📱 ${customer.phone || phone}</div>
+        <div style="font-weight:800;color:#0a1530">👤 ${maskName(customer.name || customer.phone)}</div>
+        <div style="font-size:12px;color:#5c6982;margin-top:2px">📱 ${maskPhone(customer.phone || phone)}</div>
+        <div style="font-size:10px;color:#9ca3af;margin-top:6px">🔒 ปกปิดข้อมูลเพื่อความปลอดภัย — เห็นเต็มเมื่อยืนยันตัวตนสำเร็จ</div>
       </div>
       ${hasBirthday ? `
         <label style="font-weight:700;color:#0a1530;font-size:13px;display:block;margin-bottom:8px;text-align:left">🎂 วันเกิดของท่าน (ที่ลงทะเบียนไว้)</label>

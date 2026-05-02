@@ -2543,6 +2543,24 @@ function resetCartRewards() {
   cartRewards = { useDiscount: false, useDrink: false, selectedDrinkId: null };
 }
 
+// 🔒 PII masking — show only first/last char of name + middle of phone
+// so the verify modal tells the visitor "some account exists" without
+// revealing whose. Same logic as points.html.
+function maskName(name) {
+  const s = String(name || '').trim();
+  if (!s) return '???';
+  if (s.length === 1) return s + 'xxx';
+  if (s.length === 2) return s[0] + 'xx' + s[1];
+  return s[0] + 'xxx' + s[s.length - 1];
+}
+function maskPhone(phone) {
+  const p = String(phone || '').replace(/\D/g, '');
+  if (p.length < 7) return p.replace(/\d/g, 'x');
+  return p.slice(0, 3) + 'xxxxx' + p.slice(-2);
+}
+window.maskName = maskName;
+window.maskPhone = maskPhone;
+
 // 🔒 PDPA — Device verification modal. Customer enters birthday → if it
 // matches the customer doc, this device is added to linked_devices in cloud
 // (one-time verification, persists). Used to gate access to existing accounts
@@ -2587,8 +2605,9 @@ function verifyDeviceWithBirthday(customer, onSuccess, onCancel) {
       </div>
       <div style="padding:18px 20px">
         <div style="background:#f7f8fb;border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:13px;color:#0a1530">
-          <div>👤 <b>${customer.name || customer.phone}</b></div>
-          <div style="color:#5c6982;font-size:12px;margin-top:2px">📱 ${customer.phone}</div>
+          <div>👤 <b>${maskName(customer.name || customer.phone)}</b></div>
+          <div style="color:#5c6982;font-size:12px;margin-top:2px">📱 ${maskPhone(customer.phone)}</div>
+          <div style="font-size:10px;color:#9ca3af;margin-top:4px">🔒 ปกปิดข้อมูลเพื่อความปลอดภัย</div>
         </div>
         ${hasBirthday ? `
           <label style="font-weight:700;color:#0a1530;font-size:13px;display:block;margin-bottom:8px">
