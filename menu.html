@@ -777,8 +777,8 @@
 
         <!-- (สลิปโอนเงินย้ายไปหน้า status.html — ลูกค้าอัพโหลดได้หลังจากสั่งซื้อ ไม่บังคับ) -->
 
-        <button class="btn btn-confirm" onclick="submitOrder()" style="margin-top:14px">
-          ✅ ยืนยันสั่งอาหาร <span id="confirmTotal" style="font-weight:900"></span>
+        <button id="submitOrderBtn" class="btn btn-confirm" onclick="submitOrder()" style="margin-top:14px">
+          <span id="submitOrderText">✅ ยืนยันสั่งอาหาร</span> <span id="confirmTotal" style="font-weight:900"></span>
         </button>
       </div>
 
@@ -2138,6 +2138,11 @@ async function submitOrder() {
   }
 
   // Sync to cloud — AWAIT to guarantee write before redirect
+  // 🔒 Lock the submit button + change text so customer sees the click registered
+  const submitBtn = document.getElementById('submitOrderBtn');
+  const submitText = document.getElementById('submitOrderText');
+  if (submitBtn) submitBtn.disabled = true;
+  if (submitText) submitText.textContent = '⏳ กำลังส่งครัว...';
   toast('⏳ กำลังส่งครัว...');
   await new Promise(resolve => {
     whenCloudReady(async () => {
@@ -2171,14 +2176,23 @@ async function submitOrder() {
     document.getElementById('custPhone').value = '';
     document.getElementById('custFullName').value = '';
     document.getElementById('custFound').innerHTML = '';
+    // Reset submit button so the next walk-in/phone order can submit
+    if (submitBtn) submitBtn.disabled = false;
+    if (submitText) submitText.textContent = '✅ ยืนยันสั่งอาหาร';
     closeCart();
     renderMenu();
     updateCartBar();
     toast(`✓ ส่งครัวแล้ว! ${customer.name} · ฿${total}${signupBonusGiven?' · 🎁 +5 แต้มสมัครใหม่!':''}${birthdayBonusGiven?' · 🎂 สุขสันต์วันเกิด +5 แต้ม!':''}${referrerCustomer?' · 🤝 +5 แต้มจากการแนะนำ!':''}`);
   } else {
+    // Customer-side: clearly tell them the click went through, then redirect.
+    if (submitText) submitText.textContent = '✅ ท่านได้กดสั่งอาหารแล้ว';
+    if (submitBtn) {
+      submitBtn.style.background = 'linear-gradient(135deg,#16a34a,#15803d)';
+      submitBtn.style.cursor = 'default';
+    }
     setTimeout(() => {
       window.location.href = `status.html?order=${orderId}&phone=${phone || customerId}`;
-    }, 400);
+    }, 1200);
   }
 }
 

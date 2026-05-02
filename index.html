@@ -669,8 +669,9 @@
   <!-- 🍽 ร้าน vs 🏭 โรงงาน mode toggle -->
   <div class="card" style="padding:8px;margin-bottom:10px;background:#f7f8fb">
     <div style="display:flex;gap:6px">
-      <button class="rep-mode-btn active" data-mode="shop" onclick="setReportMode('shop')" style="flex:1;padding:12px;border-radius:10px;font-weight:800;font-size:14px;font-family:inherit;cursor:pointer;border:1.5px solid transparent;background:linear-gradient(135deg,#1652F0,#0738C9);color:#fff">🍽 ร้าน (รับเงินจริง)</button>
-      <button class="rep-mode-btn" data-mode="factory" onclick="setReportMode('factory')" style="flex:1;padding:12px;border-radius:10px;font-weight:800;font-size:14px;font-family:inherit;cursor:pointer;border:1.5px solid #e2e7ef;background:#fff;color:#5c6982">🏭 โรงงาน (เครดิต 15 วัน)</button>
+      <button class="rep-mode-btn active" data-mode="combined" onclick="setReportMode('combined')" style="flex:1;padding:10px;border-radius:10px;font-weight:800;font-size:13px;font-family:inherit;cursor:pointer;border:1.5px solid transparent;background:linear-gradient(135deg,#1652F0,#0738C9);color:#fff">📊 ทั้งร้าน</button>
+      <button class="rep-mode-btn" data-mode="shop" onclick="setReportMode('shop')" style="flex:1;padding:10px;border-radius:10px;font-weight:800;font-size:13px;font-family:inherit;cursor:pointer;border:1.5px solid #e2e7ef;background:#fff;color:#5c6982">🍽 ร้าน</button>
+      <button class="rep-mode-btn" data-mode="factory" onclick="setReportMode('factory')" style="flex:1;padding:10px;border-radius:10px;font-weight:800;font-size:13px;font-family:inherit;cursor:pointer;border:1.5px solid #e2e7ef;background:#fff;color:#5c6982">🏭 โรงงาน</button>
     </div>
   </div>
 
@@ -2812,8 +2813,10 @@ function dayKey(iso) { return new Date(iso).toLocaleDateString('en-CA'); }
 function startOfDay(d) { d.setHours(0,0,0,0); return d; }
 
 // (currentRange declared at top of script to avoid TDZ)
-// 🍽 ร้าน vs 🏭 โรงงาน — separate dashboards
-let reportMode = 'shop';
+// 📊 ทั้งร้าน (combined revenue + all expenses for true P&L)
+// 🍽 ร้าน — shop-only revenue (drill view)
+// 🏭 โรงงาน — factory dashboard (credit aging)
+let reportMode = 'combined';
 function setReportMode(mode) {
   reportMode = mode;
   document.querySelectorAll('.rep-mode-btn').forEach(b => {
@@ -2825,7 +2828,9 @@ function setReportMode(mode) {
     b.style.color = active ? '#fff' : '#5c6982';
     b.style.borderColor = active ? 'transparent' : '#e2e7ef';
   });
-  document.getElementById('shopDashboard').style.display    = mode === 'shop'    ? 'block' : 'none';
+  // shop dashboard handles both 'shop' and 'combined' modes (renders either way);
+  // factory dashboard is only shown in 'factory' mode.
+  document.getElementById('shopDashboard').style.display    = mode === 'factory' ? 'none' : 'block';
   document.getElementById('factoryDashboard').style.display = mode === 'factory' ? 'block' : 'none';
   renderReports();
 }
@@ -2920,16 +2925,20 @@ function renderReports() {
   const endMs = end ? end.getTime() : Date.now();
 
   // Source of truth: completed orders from pendingOrders (cloud-synced) + legacy db.orders
-  // ⛔ EXCLUDE factory orders — they have their own dashboard (credit, not paid revenue)
+  // 📊 'combined' mode → include factory revenue too (so P&L reflects whole shop)
+  // 🍽 'shop' mode    → exclude factory (drill view, only paying customers)
   const isFact = o => o.source === 'factory' || o.is_factory === true ||
     (typeof o.customer_id === 'string' && o.customer_id.startsWith('factory-'));
+  const includeFactory = reportMode === 'combined';
+  const passFilter = o => includeFactory || !isFact(o);
+
   const allCompleted = [
-    ...(db.pendingOrders || []).filter(o => o.status === 'done' && !isFact(o)).map(o => ({
+    ...(db.pendingOrders || []).filter(o => o.status === 'done' && passFilter(o)).map(o => ({
       ...o,
       _useDate: o.completed_at || o.date,
       boxes: o.boxes || (window.countMainDishes ? window.countMainDishes(o.items || []) : 0)
     })),
-    ...((db.orders || []).filter(o => !isFact(o) && !(db.pendingOrders || []).some(po =>
+    ...((db.orders || []).filter(o => passFilter(o) && !(db.pendingOrders || []).some(po =>
       po.status === 'done' && po.customer_id === o.customer_id && po.completed_at === o.completed_at
     )).map(o => ({ ...o, _useDate: o.completed_at || o.date })))
   ];
