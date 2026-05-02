@@ -6,9 +6,8 @@ window.SHOP_INFO = {
   logo: "logo.jpg",
   defaultImage: "assets/menu-placeholder.jpg",
   // 📍 Shop coordinates — used for distance validation on delivery orders.
-  // Update these to your real coordinates (Google Maps → right-click → "What's here?")
-  lat: 14.0833,        // <-- TODO: set real shop latitude
-  lng: 100.6167,       // <-- TODO: set real shop longitude
+  lat: 13.667149,
+  lng: 100.188090,
   deliveryRadiusKm: 7, // hard limit — orders beyond this distance are blocked
 };
 
