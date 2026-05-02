@@ -3786,21 +3786,19 @@ async function markFactoryPaid(orderId) {
 // ============================================
 const INVOICE_CATEGORIES = [
   { key: 'lunch', emoji: '🍱', name: 'มื้อกลางวัน',
-    description: 'รายการ order ที่เข้ามาช่วง 8.00 น. - 15.00 น. ลงรายการเป็น "มื้อกลางวัน" เฉพาะราคา 50 บาท',
     test: (orderHour, item, isDrink) =>
       !isDrink && orderHour >= 8 && orderHour < 15 && Number(item.price) === 50 },
   { key: 'drink', emoji: '🥤', name: 'เครื่องดื่ม',
-    description: 'รายการ order ที่เป็นน้ำ ลงรายการเป็น "เครื่องดื่ม"',
     test: (orderHour, item, isDrink) => isDrink },
   { key: 'ot', emoji: '🌙', name: 'มื้อโอที',
-    description: 'รายการ order ที่เข้ามาช่วง 15.00 น. เป็นต้นไป ลงรายการเป็น "มื้อโอที"',
     test: (orderHour, item, isDrink) =>
       !isDrink && orderHour >= 15 && orderHour < 24 },
   { key: 'aart', emoji: '🍚', name: 'ข้าวพี่อาท',
-    description: 'รายการ order ที่เข้ามาช่วง 8.00 น. - 24.00 น. ลงรายการเป็น "ข้าวพี่อาท" เฉพาะราคา 60 บาท',
     test: (orderHour, item, isDrink) =>
       !isDrink && orderHour >= 8 && orderHour < 24 && Number(item.price) === 60 },
 ];
+// Label shown in the weekly summary's รายการ column
+const INVOICE_WEEKLY_LABEL = 'รายการอาหารและเครื่องดื่ม';
 
 // 🥤 Drink detection — strict whitelist from MENU + FACTORY_MENU (no regex
 // false-positives like "ผัดน้ำมันหอย" / "ผัดน้ำพริกเผา").
@@ -3938,7 +3936,7 @@ function renderInvoiceDaily(orders, dateRangeLabel) {
       bodyRows += `
         <tr>
           <td style="padding:10px 8px;border:1px solid #d1d5db;font-size:13px;white-space:nowrap;vertical-align:top">${dateLabel}</td>
-          <td style="padding:10px 8px;border:1px solid #d1d5db;font-size:13px;line-height:1.5">${cat.description}</td>
+          <td style="padding:10px 8px;border:1px solid #d1d5db;font-size:14px;font-weight:700">${cat.emoji} ${cat.name}</td>
           <td style="padding:10px 8px;border:1px solid #d1d5db;text-align:right;font-weight:700;vertical-align:top">${data.count}</td>
           <td style="padding:10px 8px;border:1px solid #d1d5db;text-align:right;font-weight:700;color:#1652F0;vertical-align:top">${fmtBaht(data.total)}</td>
         </tr>`;
@@ -4007,7 +4005,7 @@ function renderInvoiceWeekly(orders, dateRangeLabel) {
     bodyRows += `
       <tr>
         <td style="padding:10px 8px;border:1px solid #d1d5db;font-size:13px;white-space:nowrap">${formatThaiDate(new Date(dateKey))}</td>
-        <td style="padding:10px 8px;border:1px solid #d1d5db;font-size:13px">รายการ order ทุก Order ในวันนี้ <span style="color:#9ca3af;font-size:11px">(${d.orders} ออเดอร์)</span></td>
+        <td style="padding:10px 8px;border:1px solid #d1d5db;font-size:14px;font-weight:700">${INVOICE_WEEKLY_LABEL} <span style="color:#9ca3af;font-size:11px;font-weight:500">(${d.orders} ออเดอร์)</span></td>
         <td style="padding:10px 8px;border:1px solid #d1d5db;text-align:right;font-weight:700">${d.count}</td>
         <td style="padding:10px 8px;border:1px solid #d1d5db;text-align:right;font-weight:700;color:#1652F0">${fmtBaht(d.total)}</td>
       </tr>`;
@@ -4067,9 +4065,7 @@ function exportInvoiceDailyCSV(grouping) {
       const data = grouping[dateKey][cat.key];
       if (!data) return;
       const dateLabel = formatThaiDate(new Date(dateKey));
-      // Escape any double-quotes in the description for CSV safety
-      const desc = cat.description.replace(/"/g, '""');
-      lines.push(`"${dateLabel}","${desc}",${data.count},${data.total}`);
+      lines.push(`"${dateLabel}","${cat.name}",${data.count},${data.total}`);
     });
   });
   _downloadCSV(lines, 'invoice-daily');
@@ -4080,7 +4076,7 @@ function exportInvoiceWeeklyCSV(byDay) {
   Object.keys(byDay).sort().forEach(dateKey => {
     const d = byDay[dateKey];
     const dateLabel = formatThaiDate(new Date(dateKey));
-    lines.push(`"${dateLabel}","รายการ order ทุก Order ในวันนี้ (${d.orders} ออเดอร์)",${d.count},${d.total}`);
+    lines.push(`"${dateLabel}","${INVOICE_WEEKLY_LABEL}",${d.count},${d.total}`);
   });
   _downloadCSV(lines, 'invoice-weekly');
 }
