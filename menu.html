@@ -1214,7 +1214,6 @@ function renderHeroChips() {
   const cfg = JSON.parse(localStorage.getItem('menuConfig') || '{}');
   const isOpen = cfg.shopOpen !== false;
   const chips = [
-    `<span class="info-chip rating">⭐ 4.9</span>`,
     isOpen
       ? `<span class="info-chip open">🟢 ร้านเปิด</span>`
       : `<span class="info-chip closed">🔴 ร้านปิด</span>`,
