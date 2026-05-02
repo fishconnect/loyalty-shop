@@ -435,12 +435,16 @@
   <div style="display:flex;background:#f7f8fb;border-bottom:1px solid #e5e7eb;overflow-x:auto">
     <button class="m-subtab active" onclick="setMenuView('items')" id="mtab-items" style="flex:1;min-width:110px;padding:10px;border:none;background:transparent;font-weight:700;color:#1652F0;border-bottom:3px solid #1652F0;cursor:pointer;font-family:inherit">📋 รายการ</button>
     <button class="m-subtab" onclick="setMenuView('addons')" id="mtab-addons" style="flex:1;min-width:110px;padding:10px;border:none;background:transparent;font-weight:700;color:#6b7280;border-bottom:3px solid transparent;cursor:pointer;font-family:inherit">🧂 Add-on</button>
+    <button class="m-subtab" onclick="setMenuView('imgids')" id="mtab-imgids" style="flex:1;min-width:110px;padding:10px;border:none;background:transparent;font-weight:700;color:#6b7280;border-bottom:3px solid transparent;cursor:pointer;font-family:inherit">🖼️ ชื่อไฟล์รูป</button>
   </div>
   <div id="menu-items-view" style="padding:14px;max-height:calc(100vh - 180px);overflow-y:auto">
     <div id="regularItemList"></div>
   </div>
   <div id="menu-addons-view" style="padding:14px;display:none;max-height:calc(100vh - 180px);overflow-y:auto">
     <div id="regularAddOnList"></div>
+  </div>
+  <div id="menu-imgids-view" style="padding:14px;display:none;max-height:calc(100vh - 180px);overflow-y:auto">
+    <div id="imageIdsList"></div>
   </div>
 </div>
 
@@ -1588,9 +1592,10 @@ function setMenuView(v) {
   const views = {
     items:  document.getElementById('menu-items-view'),
     addons: document.getElementById('menu-addons-view'),
+    imgids: document.getElementById('menu-imgids-view'),
   };
   Object.keys(views).forEach(k => { views[k].style.display = (k === v) ? 'block' : 'none'; });
-  ['items', 'addons'].forEach(k => {
+  ['items', 'addons', 'imgids'].forEach(k => {
     const tab = document.getElementById('mtab-' + k);
     if (!tab) return;
     const active = k === v;
@@ -1599,6 +1604,117 @@ function setMenuView(v) {
   });
   if (v === 'items')  renderRegularItemList();
   if (v === 'addons') renderRegularAddOns();
+  if (v === 'imgids') renderImageIdsList();
+}
+
+// 🖼️ Image IDs view — lists every menu item with the filename you should
+// drop into assets/menu/ to give it a real photo. Probes each path with
+// new Image() to show ✅ (file present) vs ❌ (missing) live.
+function renderImageIdsList() {
+  const wrap = document.getElementById('imageIdsList');
+  if (!wrap) return;
+  const cfg = JSON.parse(localStorage.getItem('menuConfig') || '{"overrides":{},"custom":[]}');
+  const menu = window.applyMenuConfig ? window.applyMenuConfig(cfg) : (window.MENU || []);
+  const factoryCfg = JSON.parse(localStorage.getItem('factoryConfig') || '{"overrides":{},"custom":[]}');
+  const factoryMenu = window.applyFactoryConfig ? window.applyFactoryConfig(factoryCfg) : (window.FACTORY_MENU || []);
+
+  const blocks = [
+    { title: '🍽️ เมนูร้าน', cats: menu },
+    { title: '🏭 เมนูโรงงาน', cats: factoryMenu },
+  ];
+
+  // Flatten all items
+  const flatItems = [];
+  blocks.forEach(b => b.cats.forEach(c => (c.items || []).forEach(it => {
+    if (it.id) flatItems.push({ ...it, _cat: c.cat, _emoji: c.emoji, _block: b.title });
+  })));
+  const allIds = flatItems.map(it => `assets/menu/${it.id}.jpg`).join('\n');
+
+  wrap.innerHTML = `
+    <div style="background:linear-gradient(135deg,#fef3c7,#fde68a);border:1.5px solid #f59e0b;padding:14px;border-radius:12px;margin-bottom:14px;font-size:13px;line-height:1.6">
+      <b style="font-size:14px">📁 วิธีใช้</b><br>
+      1. ตั้งชื่อไฟล์ภาพตาม <b>ID เมนู</b> ในรายการด้านล่าง เช่น <code>rd-001.jpg</code><br>
+      2. วางไฟล์ทั้งหมดในโฟลเดอร์ <code>assets/menu/</code><br>
+      3. Commit + push → ลูกค้าทุกคนเห็นรูปทันที (sync ผ่าน GitHub Pages)<br>
+      <span style="color:#92400e">⚡ JPEG, ขนาด ~400px กว้าง, สี่เหลี่ยมจัตุรัส (1:1)</span>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+      <button class="btn-primary" onclick="copyAllImageIds()" style="padding:10px 14px">📋 Copy ID ทั้งหมด</button>
+      <button class="btn-primary" onclick="downloadImageIdsCsv()" style="padding:10px 14px;background:linear-gradient(135deg,#16a34a,#15803d)">📄 Download .csv</button>
+      <button class="btn-primary" onclick="renderImageIdsList()" style="padding:10px 14px;background:linear-gradient(135deg,#6b7280,#374151)">🔄 Re-check</button>
+    </div>
+    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden">
+      ${blocks.map(b => {
+        const blockItems = flatItems.filter(it => it._block === b.title);
+        if (!blockItems.length) return '';
+        return `
+          <div style="background:#f7f8fb;padding:8px 12px;font-weight:800;font-size:13px;border-bottom:1px solid #e5e7eb">${b.title} <span style="color:#6b7280;font-weight:600">(${blockItems.length} รายการ)</span></div>
+          ${blockItems.map(it => `
+            <div class="img-id-row" data-imgcheck="assets/menu/${it.id}.jpg" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid #f3f4f6">
+              <span class="img-status" style="font-size:14px;width:20px;text-align:center">⏳</span>
+              <div style="flex:1;min-width:0">
+                <div style="font-weight:700;font-size:13.5px;color:#0a1530">${it._emoji} ${it.name}</div>
+                <code style="font-size:12px;color:#6b7280">${it.id}.jpg</code> · <span style="font-size:11px;color:#9ca3af">${it._cat}</span>
+              </div>
+              <button onclick="copyToClipboard('${it.id}.jpg')" style="padding:6px 10px;background:#ebf0ff;color:#1652F0;border:1.5px solid #c5d3ff;border-radius:8px;font-weight:700;font-size:12px;cursor:pointer;font-family:inherit">📋 Copy</button>
+            </div>
+          `).join('')}
+        `;
+      }).join('')}
+    </div>
+  `;
+
+  // Probe each image path to mark ✅/❌ — runs after DOM insertion
+  setTimeout(() => {
+    document.querySelectorAll('.img-id-row').forEach(row => {
+      const path = row.dataset.imgcheck;
+      const status = row.querySelector('.img-status');
+      const probe = new Image();
+      probe.onload = () => { status.textContent = '✅'; status.style.color = '#16a34a'; };
+      probe.onerror = () => { status.textContent = '❌'; status.style.color = '#dc2626'; };
+      probe.src = path + '?t=' + Date.now();  // bust cache so re-check actually re-checks
+    });
+  }, 30);
+}
+
+function copyToClipboard(text) {
+  navigator.clipboard?.writeText(text).then(
+    () => toast(`📋 Copied "${text}"`),
+    () => toast('⚠️ Copy ไม่สำเร็จ — เลือกข้อความเองนะ', true)
+  );
+}
+
+function copyAllImageIds() {
+  const cfg = JSON.parse(localStorage.getItem('menuConfig') || '{"overrides":{},"custom":[]}');
+  const menu = window.applyMenuConfig ? window.applyMenuConfig(cfg) : (window.MENU || []);
+  const factoryCfg = JSON.parse(localStorage.getItem('factoryConfig') || '{"overrides":{},"custom":[]}');
+  const factoryMenu = window.applyFactoryConfig ? window.applyFactoryConfig(factoryCfg) : (window.FACTORY_MENU || []);
+  const ids = [];
+  [...menu, ...factoryMenu].forEach(c => (c.items || []).forEach(it => { if (it.id) ids.push(it.id + '.jpg'); }));
+  const text = ids.join('\n');
+  copyToClipboard(text);
+}
+
+function downloadImageIdsCsv() {
+  const cfg = JSON.parse(localStorage.getItem('menuConfig') || '{"overrides":{},"custom":[]}');
+  const menu = window.applyMenuConfig ? window.applyMenuConfig(cfg) : (window.MENU || []);
+  const factoryCfg = JSON.parse(localStorage.getItem('factoryConfig') || '{"overrides":{},"custom":[]}');
+  const factoryMenu = window.applyFactoryConfig ? window.applyFactoryConfig(factoryCfg) : (window.FACTORY_MENU || []);
+  const rows = [['filename', 'item_id', 'item_name', 'category', 'block']];
+  [
+    { block: 'shop', cats: menu },
+    { block: 'factory', cats: factoryMenu },
+  ].forEach(b => b.cats.forEach(c => (c.items || []).forEach(it => {
+    if (it.id) rows.push([`${it.id}.jpg`, it.id, it.name, c.cat, b.block]);
+  })));
+  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'menu-image-ids.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  toast('📄 ดาวน์โหลด menu-image-ids.csv แล้ว');
 }
 
 function getEffectiveRegularMenu() {

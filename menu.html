@@ -275,11 +275,14 @@
   .item .img img { width: 100%; height: 100%; object-fit: cover; }
   .item .img .overlay-emoji {
     position: absolute; inset: 0;
-    display: grid; place-items: center;
+    display: none;     /* hidden by default — only show when img falls back to placeholder */
+    place-items: center;
     font-size: 38px;
     background: linear-gradient(135deg, rgba(22,82,240,.4), rgba(251,146,60,.3));
     text-shadow: 0 2px 8px rgba(0,0,0,.2);
+    pointer-events: none;
   }
+  .item .img[data-placeholder="1"] .overlay-emoji { display: grid; }
   .item .qty-badge {
     position: absolute; top: -6px; right: -6px;
     background: #1652F0; color: #fff;
@@ -1075,6 +1078,19 @@ function findItem(id) {
   return null;
 }
 
+// 🖼️ Image source priority (cascading fallback):
+//   1. it.image (admin upload — base64 in localStorage, per-device)
+//   2. assets/menu/<id>.jpg (committed in repo, syncs to all devices via GitHub Pages)
+//   3. SHOP_INFO.defaultImage (placeholder — handled by onerror in template)
+// Just drop a JPG named after the item ID (e.g. "rd-001.jpg") into assets/menu/
+// and it will appear automatically on the menu — no admin upload, no Firestore needed.
+function imgSrc(it) {
+  return it.image || `assets/menu/${it.id}.jpg`;
+}
+// Standard onerror handler: swap to placeholder + tag the wrapper so we know
+// to show the emoji overlay (the dish doesn't have any real photo).
+const _imgFallback = `this.onerror=null;this.src='${SHOP_INFO?.defaultImage || 'assets/menu-placeholder.jpg'}';const w=this.closest('.img,.img-wrap,.cust-emoji');if(w)w.dataset.placeholder='1';`;
+
 // ============ Render Menu ============
 // Search state — filters menu items by name (case/space insensitive)
 let menuSearchQ = '';
@@ -1189,8 +1205,7 @@ function renderPopularSection() {
           return `
           <div class="popular-card ${qtyInCart>0?'has-qty':''}" onclick="openCustomize('${it.id}')">
             <div class="img-wrap">
-              <img src="${it.image || SHOP_INFO.defaultImage}" alt=""
-                   onerror="this.onerror=null;this.src='${SHOP_INFO.defaultImage}'">
+              <img src="${imgSrc(it)}" alt="" onerror="${_imgFallback}">
               <div class="pop-badge">Popular #${i+1}</div>
               ${qtyInCart > 0 ? `<div class="qty-badge-pop">${qtyInCart}</div>` : ''}
             </div>
@@ -1268,9 +1283,8 @@ function renderMenu() {
             return `
             <div class="item ${qtyInCart > 0 ? 'has-qty' : ''} ${isOut ? 'unavailable' : ''}" onclick="${isOut?'':`openCustomize('${it.id}')`}">
               <div class="img">
-                <img src="${it.image || SHOP_INFO.defaultImage}" alt=""
-                     onerror="this.onerror=null;this.src='${SHOP_INFO.defaultImage}';this.dataset.fallback='1';">
-                ${!it.image ? `<div class="overlay-emoji">${c.emoji}</div>` : ''}
+                <img src="${imgSrc(it)}" alt="" onerror="${_imgFallback}">
+                <div class="overlay-emoji">${c.emoji}</div>
                 ${qtyInCart > 0 ? `<div class="qty-badge">${qtyInCart}</div>` : ''}
                 ${isOut ? '<div class="out-badge">หมด</div>' : ''}
               </div>
@@ -1381,11 +1395,9 @@ function openCustomize(itemId, cartId) {
   }
 
   const custEmojiEl = document.getElementById('custEmoji');
-  if (item.image) {
-    custEmojiEl.innerHTML = `<img src="${item.image}" style="width:120px;height:120px;border-radius:16px;object-fit:cover;box-shadow:0 6px 18px rgba(0,0,0,.15)">`;
-  } else {
-    custEmojiEl.textContent = cat.emoji;
-  }
+  // Try cascading image: admin upload → assets/menu/<id>.jpg → emoji fallback
+  const _src = imgSrc(item);
+  custEmojiEl.innerHTML = `<img src="${_src}" style="width:120px;height:120px;border-radius:16px;object-fit:cover;box-shadow:0 6px 18px rgba(0,0,0,.15)" onerror="this.style.display='none';this.parentElement.textContent='${cat.emoji}'">`;
   document.getElementById('custName').textContent = item.name;
   document.getElementById('custNoteText').textContent = item.note || '';
   document.getElementById('custPrice').textContent = '฿' + item.price;
