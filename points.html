@@ -392,7 +392,7 @@ function renderCustomer(customer, allOrders) {
     })()}
 
     <div class="card">
-      <h3>📦 ประวัติการสั่งซื้อ</h3>
+      <h3>📦 ประวัติการสั่งซื้อ <span style="font-size:11px;color:#6b7280;font-weight:600">(แตะเพื่อสั่งซ้ำ)</span></h3>
       ${myOrders.length === 0 ? '<div class="empty">ยังไม่มีออเดอร์</div>' :
         myOrders.map(o => {
           const isDone = ['delivered','done'].includes(o.status);
@@ -409,7 +409,7 @@ function renderCustomer(customer, allOrders) {
           // Calculate points for completed orders
           const ptsEarned = isDone ? Math.floor((o.original_total || o.total) / 50) : 0;
           return `
-            <div class="order-row">
+            <div class="order-row" onclick="openReorderModal('${o.id}')" style="cursor:pointer;transition:background .15s" onmouseenter="this.style.background='#f7f8fb'" onmouseleave="this.style.background=''">
               <div class="left">
                 <div class="name">${o.items.map(i => `${i.qty}× ${i.mainName || i.name}`).join(', ').slice(0, 70)}</div>
                 <div class="meta">
@@ -419,7 +419,7 @@ function renderCustomer(customer, allOrders) {
                   ${(o.redemptions && o.redemptions.length) ? ` · <span style="color:#dc2626;font-weight:700">🎁 ใช้ ${o.redemptions.reduce((s,r)=>s+r.points_used,0)} แต้ม</span>` : ''}
                 </div>
               </div>
-              <div class="price">฿${o.total}</div>
+              <div class="price">฿${o.total} <span style="font-size:14px;color:#1652F0;margin-left:4px">›</span></div>
             </div>
           `;
         }).join('')
@@ -520,9 +520,75 @@ whenCloudReady(() => {
     const db = loadDB();
     db.pendingOrders = orders;
     saveDB(db);
+    window._allOrders = orders;       // expose for reorder modal lookup
     if (db.customers[phone]) renderCustomer(db.customers[phone], orders);
   });
 });
+
+// 🔁 Reorder modal — tap a row in order history → modal pops up showing
+// all items + a "สั่งซ้ำ + แก้ไข" button that hops to menu.html?reorder=<id>
+// (menu.html loads the items into the cart, opens cart for editing).
+function openReorderModal(orderId) {
+  const orders = window._allOrders || (loadDB().pendingOrders || []);
+  const order = orders.find(o => o.id === orderId);
+  if (!order) return alert('ไม่พบออเดอร์นี้');
+  const items = (order.original_items || order.items || []).filter(it => !it.isReward);
+  const itemsHtml = items.map(it => `
+    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;color:#0a1530">${it.qty}× ${it.name || it.mainName}</div>
+        ${it.note ? `<div style="font-size:11px;color:#5c6982;margin-top:2px">หมายเหตุ: ${it.note}</div>` : ''}
+      </div>
+      <div style="font-weight:800;color:#0a1530;flex-shrink:0;margin-left:10px">฿${it.price * it.qty}</div>
+    </div>
+  `).join('');
+  const dateLabel = new Date(order.date).toLocaleDateString('th-TH', { day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+
+  // Build modal element
+  let modal = document.getElementById('reorderModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'reorderModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px)';
+    modal.onclick = (e) => { if (e.target === modal) closeReorderModal(); };
+    document.body.appendChild(modal);
+  }
+  modal.innerHTML = `
+    <div style="background:#fff;width:100%;max-width:520px;border-radius:24px 24px 0 0;max-height:88vh;overflow:hidden;display:flex;flex-direction:column;font-family:inherit;animation:slideUp .25s ease">
+      <style>@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}</style>
+      <div style="padding:16px 20px;background:linear-gradient(135deg,#1652F0,#0738C9);color:#fff;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-weight:900;font-size:16px">📦 Order #${order.id.slice(-6)}</div>
+          <div style="font-size:11px;opacity:.85;margin-top:2px">${dateLabel}</div>
+        </div>
+        <button onclick="closeReorderModal()" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:34px;height:34px;border-radius:50%;font-size:18px;cursor:pointer">×</button>
+      </div>
+      <div style="padding:14px 20px;overflow-y:auto;flex:1">
+        ${itemsHtml || '<div style="color:#9ca3af;text-align:center;padding:20px">ไม่มีรายการ</div>'}
+        <div style="display:flex;justify-content:space-between;padding:12px 0 4px;border-top:2px dashed #d1ddff;margin-top:8px;font-weight:900;color:#1652F0;font-size:16px">
+          <span>รวม</span>
+          <span>฿${order.total}</span>
+        </div>
+        ${order.redemptions?.length ? `<div style="font-size:12px;color:#dc2626;font-weight:700;margin-top:4px">🎁 ใช้แต้ม ${order.redemptions.reduce((s,r)=>s+r.points_used,0)} แต้ม</div>` : ''}
+      </div>
+      <div style="padding:14px 20px;border-top:1px solid #e5e7eb;background:#f7f8fb">
+        <a href="menu.html?phone=${encodeURIComponent(phone)}&reorder=${encodeURIComponent(order.id)}" style="display:block;text-align:center;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;padding:14px;border-radius:12px;font-weight:800;font-size:15px;text-decoration:none;font-family:inherit">
+          🛒 สั่งซ้ำ + แก้ไขในตะกร้า
+        </a>
+        <button onclick="closeReorderModal()" style="display:block;width:100%;margin-top:8px;padding:10px;background:transparent;color:#6b7280;border:none;font-size:14px;cursor:pointer;font-family:inherit">ปิด</button>
+      </div>
+    </div>
+  `;
+  modal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+function closeReorderModal() {
+  const m = document.getElementById('reorderModal');
+  if (m) m.style.display = 'none';
+  document.body.style.overflow = '';
+}
+window.openReorderModal = openReorderModal;
+window.closeReorderModal = closeReorderModal;
 </script>
 </body>
 </html>
