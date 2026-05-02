@@ -426,6 +426,50 @@ function renderCustomer(customer, allOrders) {
       }
     </div>
 
+    <div class="card" style="margin-top:14px">
+      <h3>📋 โปรไฟล์ของฉัน</h3>
+      <div style="display:flex;align-items:center;gap:14px;margin-top:10px">
+        <div id="profilePhotoWrap" style="position:relative;flex-shrink:0">
+          ${customer.photo
+            ? `<img src="${customer.photo}" style="width:84px;height:84px;border-radius:50%;object-fit:cover;border:3px solid #1652F0;box-shadow:0 3px 10px rgba(22,82,240,.2)">`
+            : `<div style="width:84px;height:84px;border-radius:50%;background:linear-gradient(135deg,#c5d3ff,#1652F0);color:#fff;display:grid;place-items:center;font-size:38px;font-weight:900;border:3px solid #fff;box-shadow:0 3px 10px rgba(22,82,240,.2)">${(customer.name || '?').slice(0, 1)}</div>`}
+          <button onclick="document.getElementById('profilePhotoInput').click()" aria-label="เปลี่ยนรูป" style="position:absolute;bottom:-2px;right:-2px;background:#1652F0;color:#fff;border:2px solid #fff;width:28px;height:28px;border-radius:50%;font-size:13px;cursor:pointer;display:grid;place-items:center;font-family:inherit">📷</button>
+          <input type="file" id="profilePhotoInput" accept="image/jpeg,image/png,image/webp" style="display:none" onchange="onProfilePhotoSelected(event)">
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:800;color:#0a1530;font-size:15px">${customer.name}</div>
+          <div style="font-size:12px;color:#5c6982;margin-top:2px">📱 ${customer.phone || phone}</div>
+          <div style="font-size:12px;color:#5c6982;margin-top:2px">${customer.birth_day && customer.birth_month ? `🎂 ${customer.birth_day}/${customer.birth_month}` : '🎂 ยังไม่ได้ใส่วันเกิด'}</div>
+        </div>
+      </div>
+      <div id="profileSaveStatus" style="font-size:12px;color:#16a34a;font-weight:700;margin-top:8px;min-height:14px;text-align:center"></div>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <h3>📍 ที่อยู่จัดส่งของฉัน <span style="font-size:11px;color:#6b7280;font-weight:600">(บันทึกได้หลายที่)</span></h3>
+      <div id="addressList" style="margin-top:10px;display:flex;flex-direction:column;gap:8px">
+        ${(customer.delivery_addresses || []).length === 0
+          ? '<div style="color:#9ca3af;font-size:13px;text-align:center;padding:12px">ยังไม่มีที่อยู่บันทึกไว้</div>'
+          : (customer.delivery_addresses || []).map((a, i) => `
+            <div style="background:${a.isDefault?'#ebf0ff':'#f7f8fb'};border:1.5px solid ${a.isDefault?'#1652F0':'#e5e7eb'};border-radius:12px;padding:12px;display:flex;gap:10px;align-items:flex-start">
+              <div style="font-size:20px;flex-shrink:0">${a.label === 'บ้าน'?'🏠':a.label === 'ที่ทำงาน'?'💼':'📍'}</div>
+              <div style="flex:1;min-width:0">
+                <div style="font-weight:800;color:#0a1530;font-size:14px">${a.label} ${a.isDefault?'<span style="background:#1652F0;color:#fff;font-size:10px;padding:2px 7px;border-radius:999px;margin-left:4px">DEFAULT</span>':''}</div>
+                <div style="font-size:12px;color:#5c6982;margin-top:3px;line-height:1.4">${a.address}</div>
+                ${a.location?`<div style="font-size:11px;color:#16a34a;margin-top:3px">📍 มีพิกัด GPS</div>`:''}
+              </div>
+              <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
+                ${!a.isDefault?`<button onclick="setDefaultAddress('${a.id}')" style="background:#fff;color:#1652F0;border:1.5px solid #1652F0;border-radius:6px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">ตั้งหลัก</button>`:''}
+                <button onclick="deleteAddress('${a.id}')" style="background:#fff;color:#dc2626;border:1.5px solid #fecaca;border-radius:6px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">ลบ</button>
+              </div>
+            </div>
+          `).join('')}
+      </div>
+      <button onclick="openAddAddressModal()" style="width:100%;margin-top:10px;padding:11px;background:#fff;color:#16a34a;border:1.5px dashed #16a34a;border-radius:10px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit">
+        ➕ เพิ่มที่อยู่ใหม่
+      </button>
+    </div>
+
     <div class="actions">
       <a href="menu.html?phone=${phone}" class="btn btn-primary">🍽️ สั่งอาหารเพิ่ม</a>
       <button onclick="saveMyLink()" class="btn btn-ghost" style="background:#fef3c7;color:#92400e;border:1.5px solid #fbbf24">📤 บันทึก/แชร์ลิงก์ของฉัน</button>
@@ -434,6 +478,198 @@ function renderCustomer(customer, allOrders) {
     <div id="shareStatus" style="font-size:12px;color:#5c6982;text-align:center;margin-top:6px"></div>
   `;
 }
+
+// =======  📋 PROFILE MANAGEMENT (photo + addresses) =======
+
+// Compress to JPEG ≤ ~80KB so we stay under Firestore's 1MB-per-doc limit
+async function compressImageToBase64(file, maxW, quality) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onerror = () => reject(new Error('อ่านไฟล์ไม่ได้'));
+    r.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('ไฟล์ภาพไม่รองรับ'));
+      img.onload = () => {
+        const ratio = Math.min(1, (maxW || 320) / img.width);
+        const c = document.createElement('canvas');
+        c.width = img.width * ratio;
+        c.height = img.height * ratio;
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        resolve(c.toDataURL('image/jpeg', quality || 0.7));
+      };
+      img.src = r.result;
+    };
+    r.readAsDataURL(file);
+  });
+}
+
+async function onProfilePhotoSelected(ev) {
+  const file = ev.target.files?.[0];
+  if (!file) return;
+  if (file.size > 5 * 1024 * 1024) {
+    setProfileSaveStatus('⚠️ ไฟล์ใหญ่เกิน 5MB — เลือกไฟล์เล็กกว่า', '#dc2626');
+    return;
+  }
+  setProfileSaveStatus('⏳ กำลังบันทึกรูป...', '#1652F0');
+  try {
+    // 320px wide, 70% quality → typically 30-60KB JPEG
+    const dataUrl = await compressImageToBase64(file, 320, 0.7);
+    const db = loadDB();
+    if (!db.customers[phone]) return;
+    db.customers[phone].photo = dataUrl;
+    saveDB(db);
+    if (window.cloud?.saveCustomer) await window.cloud.saveCustomer(db.customers[phone]);
+    setProfileSaveStatus('✅ บันทึกรูปแล้ว', '#16a34a');
+    // Re-render so the new photo shows
+    renderCustomer(db.customers[phone], window._allOrders || []);
+  } catch (e) {
+    console.error(e);
+    setProfileSaveStatus('⚠️ บันทึกรูปไม่สำเร็จ — ลองใหม่', '#dc2626');
+  }
+}
+function setProfileSaveStatus(msg, color) {
+  const el = document.getElementById('profileSaveStatus');
+  if (el) { el.textContent = msg; el.style.color = color || '#16a34a'; }
+}
+
+// =======  📍 DELIVERY ADDRESSES =======
+
+function openAddAddressModal(existing) {
+  let modal = document.getElementById('addrModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'addrModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px)';
+    modal.onclick = (e) => { if (e.target === modal) closeAddAddressModal(); };
+    document.body.appendChild(modal);
+  }
+  const e = existing || {};
+  modal.innerHTML = `
+    <div style="background:#fff;width:100%;max-width:520px;border-radius:24px 24px 0 0;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;font-family:inherit">
+      <div style="padding:16px 20px;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;display:flex;justify-content:space-between;align-items:center">
+        <div style="font-weight:900;font-size:16px">${existing ? '✏️ แก้ไขที่อยู่' : '➕ เพิ่มที่อยู่ใหม่'}</div>
+        <button onclick="closeAddAddressModal()" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:34px;height:34px;border-radius:50%;font-size:18px;cursor:pointer">×</button>
+      </div>
+      <div style="padding:20px;overflow-y:auto;flex:1">
+        <div style="margin-bottom:12px">
+          <label style="font-weight:700;color:#0a1530;font-size:13px;display:block;margin-bottom:5px">🏷️ ชื่อสถานที่</label>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
+            <button type="button" onclick="document.getElementById('addrLabel').value='บ้าน'" style="padding:6px 12px;background:#f7f8fb;border:1.5px solid #d1ddff;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">🏠 บ้าน</button>
+            <button type="button" onclick="document.getElementById('addrLabel').value='ที่ทำงาน'" style="padding:6px 12px;background:#f7f8fb;border:1.5px solid #d1ddff;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">💼 ที่ทำงาน</button>
+            <button type="button" onclick="document.getElementById('addrLabel').value='อื่นๆ'" style="padding:6px 12px;background:#f7f8fb;border:1.5px solid #d1ddff;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">📍 อื่นๆ</button>
+          </div>
+          <input type="text" id="addrLabel" placeholder="เช่น บ้าน, ที่ทำงาน, คอนโด" value="${e.label || ''}" style="width:100%;padding:11px 14px;border:1.5px solid #d1ddff;border-radius:10px;font-size:14px;font-family:inherit">
+        </div>
+        <div style="margin-bottom:12px">
+          <label style="font-weight:700;color:#0a1530;font-size:13px;display:block;margin-bottom:5px">📝 ที่อยู่</label>
+          <textarea id="addrText" rows="3" placeholder="บ้านเลขที่ ถนน ตำบล อำเภอ จังหวัด รหัสไปรษณีย์" style="width:100%;padding:11px 14px;border:1.5px solid #d1ddff;border-radius:10px;font-size:14px;font-family:inherit;resize:vertical">${e.address || ''}</textarea>
+        </div>
+        <button type="button" onclick="pinMyLocation()" style="width:100%;padding:11px;background:#fff;color:#1652F0;border:1.5px dashed #1652F0;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">
+          📍 ปักหมุดตำแหน่งปัจจุบัน (GPS)
+        </button>
+        <div id="addrPinStatus" style="font-size:12px;color:#5c6982;margin-top:6px;text-align:center;min-height:16px"></div>
+        <input type="hidden" id="addrLat" value="${e.location?.lat || ''}">
+        <input type="hidden" id="addrLng" value="${e.location?.lng || ''}">
+        <input type="hidden" id="addrEditId" value="${e.id || ''}">
+        <label style="display:flex;align-items:center;gap:8px;margin-top:14px;font-size:13px;color:#0a1530;cursor:pointer">
+          <input type="checkbox" id="addrDefault" ${e.isDefault ? 'checked' : ''}> ตั้งเป็นที่อยู่หลัก (ใช้บ่อยที่สุด)
+        </label>
+      </div>
+      <div style="padding:14px 20px;border-top:1px solid #e5e7eb;background:#f7f8fb">
+        <button onclick="saveAddress()" style="display:block;width:100%;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;padding:13px;border:none;border-radius:12px;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit">
+          💾 บันทึกที่อยู่
+        </button>
+        <button onclick="closeAddAddressModal()" style="display:block;width:100%;margin-top:6px;padding:9px;background:transparent;color:#6b7280;border:none;font-size:13px;cursor:pointer;font-family:inherit">ยกเลิก</button>
+      </div>
+    </div>
+  `;
+  modal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+function closeAddAddressModal() {
+  const m = document.getElementById('addrModal');
+  if (m) m.style.display = 'none';
+  document.body.style.overflow = '';
+}
+function pinMyLocation() {
+  const status = document.getElementById('addrPinStatus');
+  if (!navigator.geolocation) { status.textContent = '⚠️ Browser นี้ไม่รองรับ GPS'; status.style.color = '#dc2626'; return; }
+  status.textContent = '⏳ กำลังหาตำแหน่ง...'; status.style.color = '#1652F0';
+  navigator.geolocation.getCurrentPosition(pos => {
+    document.getElementById('addrLat').value = pos.coords.latitude;
+    document.getElementById('addrLng').value = pos.coords.longitude;
+    status.innerHTML = `✅ ปักหมุดแล้ว · <a href="https://maps.google.com/?q=${pos.coords.latitude},${pos.coords.longitude}" target="_blank" style="color:#1652F0;text-decoration:underline">ดูบน Google Maps</a>`;
+    status.style.color = '#16a34a';
+  }, err => {
+    status.textContent = '⚠️ หาตำแหน่งไม่ได้ — ใส่ที่อยู่ในช่องด้านบนแทน';
+    status.style.color = '#dc2626';
+  }, { timeout: 10000, enableHighAccuracy: true });
+}
+async function saveAddress() {
+  const label = document.getElementById('addrLabel').value.trim() || 'ที่อยู่';
+  const address = document.getElementById('addrText').value.trim();
+  const lat = parseFloat(document.getElementById('addrLat').value);
+  const lng = parseFloat(document.getElementById('addrLng').value);
+  const isDefault = document.getElementById('addrDefault').checked;
+  const editId = document.getElementById('addrEditId').value;
+  if (!address) return alert('กรุณาใส่ที่อยู่');
+  const db = loadDB();
+  const cust = db.customers[phone];
+  if (!cust) return;
+  cust.delivery_addresses = cust.delivery_addresses || [];
+  const newAddr = {
+    id: editId || ('a' + Date.now() + Math.random().toString(36).slice(2, 5)),
+    label, address,
+    ...(isFinite(lat) && isFinite(lng) ? { location: { lat, lng } } : {}),
+    isDefault,
+  };
+  // If marked default, clear default flag on others
+  if (isDefault) cust.delivery_addresses.forEach(a => { a.isDefault = false; });
+  // Replace if editing, else add
+  if (editId) {
+    const idx = cust.delivery_addresses.findIndex(a => a.id === editId);
+    if (idx >= 0) cust.delivery_addresses[idx] = newAddr;
+    else cust.delivery_addresses.push(newAddr);
+  } else {
+    // First address auto-default
+    if (cust.delivery_addresses.length === 0) newAddr.isDefault = true;
+    cust.delivery_addresses.push(newAddr);
+  }
+  saveDB(db);
+  if (window.cloud?.saveCustomer) await window.cloud.saveCustomer(cust);
+  closeAddAddressModal();
+  renderCustomer(cust, window._allOrders || []);
+}
+async function setDefaultAddress(id) {
+  const db = loadDB();
+  const cust = db.customers[phone];
+  if (!cust?.delivery_addresses) return;
+  cust.delivery_addresses.forEach(a => { a.isDefault = (a.id === id); });
+  saveDB(db);
+  if (window.cloud?.saveCustomer) await window.cloud.saveCustomer(cust);
+  renderCustomer(cust, window._allOrders || []);
+}
+async function deleteAddress(id) {
+  if (!confirm('ลบที่อยู่นี้?')) return;
+  const db = loadDB();
+  const cust = db.customers[phone];
+  if (!cust?.delivery_addresses) return;
+  cust.delivery_addresses = cust.delivery_addresses.filter(a => a.id !== id);
+  // If we removed the default, promote the first remaining one
+  if (cust.delivery_addresses.length && !cust.delivery_addresses.some(a => a.isDefault)) {
+    cust.delivery_addresses[0].isDefault = true;
+  }
+  saveDB(db);
+  if (window.cloud?.saveCustomer) await window.cloud.saveCustomer(cust);
+  renderCustomer(cust, window._allOrders || []);
+}
+window.onProfilePhotoSelected = onProfilePhotoSelected;
+window.openAddAddressModal = openAddAddressModal;
+window.closeAddAddressModal = closeAddAddressModal;
+window.pinMyLocation = pinMyLocation;
+window.saveAddress = saveAddress;
+window.setDefaultAddress = setDefaultAddress;
+window.deleteAddress = deleteAddress;
 
 // Generate + share/copy personal link so customer can bookmark on any device
 async function saveMyLink() {

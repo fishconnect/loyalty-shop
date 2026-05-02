@@ -983,6 +983,12 @@
       <h2>🛒 ตะกร้าของฉัน</h2>
     </div>
     <div class="cart-body">
+      <!-- "Add more menu items" CTA — closes the cart so user can browse menu.
+           Especially useful right after a reorder when cart is pre-filled. -->
+      <button id="btnAddMoreMenu" onclick="closeCart()" style="width:100%;margin-bottom:10px;padding:11px;background:#fff;color:#16a34a;border:1.5px dashed #16a34a;border-radius:10px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px">
+        ➕ เพิ่มเมนูอื่นในตะกร้า
+      </button>
+
       <div id="cartLines"></div>
 
       <!-- 🏭 Factory mode: button to add custom items -->
@@ -1037,10 +1043,13 @@
 
         <!-- Address fields — show only when delivery -->
         <div id="deliveryFields" style="display:none">
+          <!-- Saved addresses chips (filled by renderSavedAddresses if customer has any) -->
+          <div id="savedAddressesWrap" style="display:none;margin-bottom:8px"></div>
           <label>📍 ที่อยู่จัดส่ง <span style="color:#dc2626">*</span></label>
           <textarea id="deliveryAddress" class="cust-input" rows="2" placeholder="เช่น บ้านเลขที่ 123 ซ.xxx ถ.xxx ใกล้ร้าน xxx" style="resize:vertical;min-height:55px"></textarea>
           <button onclick="getMyLocation()" style="width:100%;margin-top:6px;padding:8px;background:#fff;color:#1652F0;border:1.5px dashed #1652F0;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer">📍 ใช้ตำแหน่งปัจจุบันของฉัน</button>
           <div id="deliveryLocationStatus" style="font-size:12px;color:#5c6982;margin-top:6px"></div>
+          <a id="manageAddressesLink" href="#" onclick="goToProfileAddresses(event)" style="display:inline-block;margin-top:6px;font-size:12px;color:#1652F0;text-decoration:underline;font-weight:600">🛠️ จัดการที่อยู่ในโปรไฟล์</a>
         </div>
 
         <!-- ⏰ เวลาที่ต้องการ (จัดส่งเลย / จองเวลา) -->
@@ -2196,7 +2205,68 @@ function applyOrderType(type) {
   document.getElementById('orderTypePickup').classList.toggle('active', type === 'pickup');
   document.getElementById('orderTypeDelivery').classList.toggle('active', type === 'delivery');
   document.getElementById('deliveryFields').style.display = type === 'delivery' ? 'block' : 'none';
+  if (type === 'delivery') renderSavedAddresses();
 }
+
+// 📍 Render the customer's saved delivery addresses as tappable chips at the
+// top of the delivery section. Tapping a chip fills the address textarea and
+// (if the chip has GPS coords) fills deliveryLocation too — same shape that
+// getMyLocation() uses, so no other code needs to change.
+function renderSavedAddresses() {
+  const wrap = document.getElementById('savedAddressesWrap');
+  if (!wrap) return;
+  if (!lastPhone) { wrap.style.display = 'none'; return; }
+  const db = loadDB();
+  const cust = db.customers[lastPhone];
+  const list = cust?.delivery_addresses || [];
+  if (!list.length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+  // Sort default first
+  const sorted = [...list].sort((a, b) => (b.isDefault ? 1 : 0) - (a.isDefault ? 1 : 0));
+  wrap.innerHTML = `
+    <label style="font-weight:700;color:#0a1530;font-size:13px;display:block;margin-bottom:5px">📌 เลือกที่อยู่บันทึกไว้</label>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      ${sorted.map(a => `
+        <button type="button" onclick="useSavedAddress('${a.id}')" style="background:${a.isDefault?'#ebf0ff':'#f7f8fb'};border:1.5px solid ${a.isDefault?'#1652F0':'#d1ddff'};border-radius:10px;padding:8px 12px;font-size:12px;font-weight:700;color:#0a1530;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:6px;text-align:left;max-width:100%">
+          <span style="font-size:16px">${a.label === 'บ้าน'?'🏠':a.label === 'ที่ทำงาน'?'💼':'📍'}</span>
+          <div style="overflow:hidden">
+            <div style="font-weight:800">${a.label}${a.isDefault?' ⭐':''}</div>
+            <div style="font-size:11px;color:#5c6982;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px">${a.address}</div>
+          </div>
+        </button>
+      `).join('')}
+    </div>
+  `;
+}
+
+function useSavedAddress(id) {
+  const db = loadDB();
+  const cust = db.customers[lastPhone];
+  if (!cust?.delivery_addresses) return;
+  const a = cust.delivery_addresses.find(x => x.id === id);
+  if (!a) return;
+  const ta = document.getElementById('deliveryAddress');
+  if (ta) ta.value = a.address;
+  if (a.location?.lat && a.location?.lng) {
+    deliveryLocation = { lat: a.location.lat, lng: a.location.lng, accuracy: 10 };
+    const status = document.getElementById('deliveryLocationStatus');
+    if (status) status.innerHTML = `✅ ใช้ตำแหน่ง "${a.label}" · <a href="https://maps.google.com/?q=${a.location.lat},${a.location.lng}" target="_blank" style="color:#1652F0;text-decoration:underline">ดูบน Google Maps</a>`;
+  } else {
+    deliveryLocation = null;
+    const status = document.getElementById('deliveryLocationStatus');
+    if (status) status.textContent = '';
+  }
+  toast(`✓ ใช้ที่อยู่ "${a.label}"`);
+}
+
+function goToProfileAddresses(ev) {
+  if (ev) ev.preventDefault();
+  if (lastPhone) location.href = `points.html?phone=${encodeURIComponent(lastPhone)}#addresses`;
+  else openSignupModal();
+}
+window.useSavedAddress = useSavedAddress;
+window.goToProfileAddresses = goToProfileAddresses;
+window.renderSavedAddresses = renderSavedAddresses;
 
 function showDeliveryWarning() {
   // If modal already exists, just open it
@@ -2965,7 +3035,7 @@ function reorderFromOrder(orderId) {
   // Auto-open cart so customer sees what was added + can edit
   if (typeof openCart === 'function') openCart();
   const note = missing ? ` (${missing} เมนูไม่มีในร้านแล้ว)` : '';
-  toast(`✓ เพิ่ม ${added} รายการจากออเดอร์เก่าลงตะกร้า — แก้ไขได้ก่อนสั่ง${note}`);
+  toast(`✓ พร้อมสั่งแล้ว — ${added} รายการ · กด "เพิ่มเมนูอื่น" เพื่อสั่งเพิ่ม${note}`);
   return true;
 }
 // Backward-compat alias (still called from old reorder card if any)
