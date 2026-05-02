@@ -721,6 +721,34 @@
       </div>
     </div>
 
+    <!-- 📄 ใบวางบิล (Invoice generator) -->
+    <div class="card" style="border:2px solid #1652F0;background:linear-gradient(135deg,#fff,#ebf0ff)">
+      <h2>📄 ออกใบวางบิล (Invoice)</h2>
+      <div style="font-size:12px;color:#5c6982;margin-bottom:10px;line-height:1.6">
+        เลือกช่วงวันที่ → ระบบสรุป order โรงงานแยก 4 หมวด:<br>
+        🍱 <b>มื้อกลางวัน</b> (8:00-15:00 · ราคา 50฿) · 🥤 <b>เครื่องดื่ม</b> (ทุกเวลา) ·
+        🌙 <b>มื้อโอที</b> (15:00+) · 🍚 <b>ข้าวพี่อาท</b> (ราคา 60฿)
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+        <div>
+          <label style="font-size:13px;font-weight:600;margin-bottom:4px">📅 วันที่เริ่ม</label>
+          <input type="date" id="invoiceFrom" style="width:100%">
+        </div>
+        <div>
+          <label style="font-size:13px;font-weight:600;margin-bottom:4px">📅 วันที่จบ</label>
+          <input type="date" id="invoiceTo" style="width:100%">
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+        <button class="btn-secondary" onclick="setInvoiceRange('today')" style="flex:1;min-width:80px;font-size:12px">วันนี้</button>
+        <button class="btn-secondary" onclick="setInvoiceRange('yesterday')" style="flex:1;min-width:80px;font-size:12px">เมื่อวาน</button>
+        <button class="btn-secondary" onclick="setInvoiceRange('week')" style="flex:1;min-width:80px;font-size:12px">7 วันล่าสุด</button>
+        <button class="btn-secondary" onclick="setInvoiceRange('month')" style="flex:1;min-width:80px;font-size:12px">เดือนนี้</button>
+      </div>
+      <button class="btn-primary" onclick="generateInvoice()" style="width:100%;padding:12px;font-size:15px">🔄 สร้างใบวางบิล</button>
+      <div id="invoiceOutput" style="margin-top:14px"></div>
+    </div>
+
     <div class="card">
       <h2>📋 รายการเครดิตค้างชำระ (เรียงตามวันครบกำหนด)</h2>
       <div style="font-size:12px;color:#5c6982;margin-bottom:10px">เครดิต 15 วัน · กดปุ่ม "✓ เก็บเงินแล้ว" เมื่อโรงงานชำระเงินมา</div>
@@ -3744,6 +3772,230 @@ async function markFactoryPaid(orderId) {
   }
   toast(`✅ เก็บเงินแล้ว · ${order.customer_name || 'โรงงาน'} · ฿${order.total}`);
   renderFactoryReports();
+}
+
+// ============================================
+// 📄 Factory Invoice (ใบวางบิล) — categorize orders into 4 buckets
+// ============================================
+const INVOICE_CATEGORIES = [
+  { key: 'lunch', emoji: '🍱', name: 'มื้อกลางวัน',
+    timeRange: '8:00 น. - 15:00 น.',
+    test: (orderHour, item, isDrink) =>
+      !isDrink && orderHour >= 8 && orderHour < 15 && Number(item.price) === 50 },
+  { key: 'drink', emoji: '🥤', name: 'เครื่องดื่ม',
+    timeRange: '8:00 - 24:00 น.',
+    test: (orderHour, item, isDrink) => isDrink },
+  { key: 'ot', emoji: '🌙', name: 'มื้อโอที',
+    timeRange: '15:00 น. เป็นต้นไป',
+    test: (orderHour, item, isDrink) =>
+      !isDrink && orderHour >= 15 && orderHour < 24 },
+  { key: 'aart', emoji: '🍚', name: 'ข้าวพี่อาท',
+    timeRange: '8:00 - 24:00 น.',
+    test: (orderHour, item, isDrink) =>
+      !isDrink && orderHour >= 8 && orderHour < 24 && Number(item.price) === 60 },
+];
+
+function _isDrinkItem(item) {
+  if (!item) return false;
+  const id = String(item.id || '');
+  if (id.startsWith('dr-')) return true;                 // built-in drink IDs
+  const name = String(item.mainName || item.name || '');
+  return /น้ำ|โค๊ก|โค้ก|ชา|กาแฟ|นม|โซดา|แฟนต้า|สไปร์|ลิ้นจี่|สัปปะรด|โกโก้|ฟรุ๊ต/.test(name);
+}
+
+function setInvoiceRange(range) {
+  const today = new Date();
+  const fmt = d => d.toISOString().slice(0, 10);
+  let from, to;
+  if (range === 'today') from = to = fmt(today);
+  else if (range === 'yesterday') {
+    const y = new Date(today); y.setDate(y.getDate() - 1);
+    from = to = fmt(y);
+  } else if (range === 'week') {
+    const s = new Date(today); s.setDate(s.getDate() - 6);
+    from = fmt(s); to = fmt(today);
+  } else if (range === 'month') {
+    const s = new Date(today.getFullYear(), today.getMonth(), 1);
+    from = fmt(s); to = fmt(today);
+  }
+  document.getElementById('invoiceFrom').value = from;
+  document.getElementById('invoiceTo').value = to;
+  generateInvoice();
+}
+
+function generateInvoice() {
+  const fromStr = document.getElementById('invoiceFrom').value;
+  const toStr = document.getElementById('invoiceTo').value;
+  if (!fromStr || !toStr) return toast('⚠️ เลือกช่วงวันที่ก่อน', true);
+
+  const from = new Date(fromStr); from.setHours(0,0,0,0);
+  const to = new Date(toStr); to.setHours(23,59,59,999);
+  if (from > to) return toast('⚠️ วันที่เริ่มต้องอยู่ก่อนวันที่จบ', true);
+
+  // Pull all factory orders that completed within the range
+  const factOrders = [
+    ...(db.pendingOrders || []).filter(o => isFactoryOrder(o) && ['done','delivered'].includes(o.status)),
+    ...(db.orders || []).filter(o => isFactoryOrder(o))
+  ];
+  // Dedup by id
+  const seen = new Set();
+  const orders = factOrders.filter(o => {
+    if (!o.id || seen.has(o.id)) return false;
+    seen.add(o.id);
+    const d = new Date(o.completed_at || o.date);
+    return d >= from && d <= to;
+  });
+
+  // Bucket per (date, category)
+  // grouping[date][catKey] = { count, total, items: [...] }
+  const grouping = {};
+  orders.forEach(o => {
+    const orderDate = new Date(o.completed_at || o.date);
+    const dateKey = orderDate.toISOString().slice(0, 10);
+    const orderHour = orderDate.getHours();
+    if (!grouping[dateKey]) grouping[dateKey] = {};
+    (o.items || []).forEach(item => {
+      const isDrink = _isDrinkItem(item);
+      const cat = INVOICE_CATEGORIES.find(c => c.test(orderHour, item, isDrink));
+      if (!cat) return;
+      const key = cat.key;
+      if (!grouping[dateKey][key]) grouping[dateKey][key] = { count: 0, total: 0, items: [] };
+      const qty = item.qty || 1;
+      const lineTotal = (item.price || 0) * qty;
+      grouping[dateKey][key].count += qty;
+      grouping[dateKey][key].total += lineTotal;
+      grouping[dateKey][key].items.push({ name: item.mainName || item.name, qty, price: item.price, total: lineTotal });
+    });
+  });
+
+  // Build rows for the report
+  const dateKeys = Object.keys(grouping).sort();
+  if (!dateKeys.length) {
+    document.getElementById('invoiceOutput').innerHTML = `
+      <div style="background:#fef3c7;color:#92400e;padding:14px;border-radius:10px;text-align:center">
+        ⚠️ ไม่มีข้อมูลออเดอร์โรงงานในช่วง ${formatThaiDate(from)} - ${formatThaiDate(to)}
+      </div>`;
+    return;
+  }
+
+  let grandCount = 0, grandTotal = 0;
+  let bodyRows = '';
+  dateKeys.forEach(dateKey => {
+    const dateLabel = formatThaiDate(new Date(dateKey));
+    let dayCount = 0, dayTotal = 0;
+    INVOICE_CATEGORIES.forEach(cat => {
+      const data = grouping[dateKey][cat.key];
+      if (!data) return;
+      bodyRows += `
+        <tr>
+          <td style="padding:8px;border:1px solid #d1d5db;font-size:12.5px;white-space:nowrap">${dateLabel}</td>
+          <td style="padding:8px;border:1px solid #d1d5db;font-size:12.5px">${cat.emoji} ${cat.name}</td>
+          <td style="padding:8px;border:1px solid #d1d5db;font-size:12px;color:#5c6982;white-space:nowrap">${cat.timeRange}</td>
+          <td style="padding:8px;border:1px solid #d1d5db;text-align:right;font-weight:700">${data.count}</td>
+          <td style="padding:8px;border:1px solid #d1d5db;text-align:right;font-weight:700;color:#1652F0">${fmtBaht(data.total)}</td>
+        </tr>`;
+      dayCount += data.count;
+      dayTotal += data.total;
+    });
+    grandCount += dayCount;
+    grandTotal += dayTotal;
+    if (dateKeys.length > 1 && dayCount > 0) {
+      bodyRows += `
+        <tr style="background:#ebf0ff">
+          <td colspan="3" style="padding:6px 8px;border:1px solid #d1d5db;font-size:12px;text-align:right;font-weight:700;color:#1652F0">รวมวัน ${dateLabel}</td>
+          <td style="padding:6px 8px;border:1px solid #d1d5db;text-align:right;font-weight:800">${dayCount}</td>
+          <td style="padding:6px 8px;border:1px solid #d1d5db;text-align:right;font-weight:800;color:#1652F0">${fmtBaht(dayTotal)}</td>
+        </tr>`;
+    }
+  });
+
+  const dateRangeLabel = fromStr === toStr
+    ? formatThaiDate(from)
+    : `${formatThaiDate(from)} ถึง ${formatThaiDate(to)}`;
+
+  document.getElementById('invoiceOutput').innerHTML = `
+    <div id="invoicePrintable" style="background:#fff;border:1.5px solid #1652F0;border-radius:10px;padding:16px;margin-top:8px">
+      <div style="text-align:center;margin-bottom:14px">
+        <h3 style="margin:0;font-size:18px;color:#0a1530">ใบวางบิลค่าอาหารครัวผู้ใหญ่ปอง</h3>
+        <div style="font-size:13px;color:#5c6982;margin-top:4px">${dateRangeLabel}</div>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="background:linear-gradient(135deg,#1652F0,#0738C9);color:#fff">
+            <th style="padding:10px 8px;border:1px solid #1652F0;text-align:left;font-size:12.5px">วันที่</th>
+            <th style="padding:10px 8px;border:1px solid #1652F0;text-align:left;font-size:12.5px">รายการ</th>
+            <th style="padding:10px 8px;border:1px solid #1652F0;text-align:left;font-size:12.5px">ช่วงเวลาสั่ง</th>
+            <th style="padding:10px 8px;border:1px solid #1652F0;text-align:right;font-size:12.5px">จำนวนกล่อง</th>
+            <th style="padding:10px 8px;border:1px solid #1652F0;text-align:right;font-size:12.5px">ราคา</th>
+          </tr>
+        </thead>
+        <tbody>${bodyRows}</tbody>
+        <tfoot>
+          <tr style="background:#0a1530;color:#fff">
+            <td colspan="3" style="padding:12px 8px;border:1px solid #0a1530;text-align:right;font-weight:800;font-size:14px">รวมทั้งสิ้น</td>
+            <td style="padding:12px 8px;border:1px solid #0a1530;text-align:right;font-weight:900;font-size:14px">${grandCount}</td>
+            <td style="padding:12px 8px;border:1px solid #0a1530;text-align:right;font-weight:900;font-size:16px">${fmtBaht(grandTotal)}</td>
+          </tr>
+        </tfoot>
+      </table>
+      <div style="margin-top:30px;display:flex;justify-content:space-between;font-size:13px;color:#5c6982">
+        <div>วันที่ออกบิล: ${formatThaiDate(new Date())}</div>
+        <div style="text-align:right">
+          <div style="margin-bottom:4px">ผู้รับบิล............................................</div>
+          <div style="font-size:11px;color:#9ca3af">(ลายเซ็นรับเอกสาร)</div>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn-secondary" onclick="printInvoice()" style="flex:1;padding:12px">🖨️ พิมพ์</button>
+      <button class="btn-secondary" onclick="exportInvoiceCSV(${JSON.stringify(grouping).replace(/"/g, '&quot;')})" style="flex:1;padding:12px">📊 Export CSV</button>
+    </div>
+  `;
+}
+
+function formatThaiDate(d) {
+  if (typeof d === 'string') d = new Date(d);
+  return d.toLocaleDateString('th-TH', { day:'2-digit', month:'2-digit', year:'numeric' });
+}
+
+function printInvoice() {
+  const printable = document.getElementById('invoicePrintable');
+  if (!printable) return;
+  const w = window.open('', '_blank', 'width=800,height=900');
+  w.document.write(`
+    <!DOCTYPE html>
+    <html><head><meta charset="UTF-8"><title>ใบวางบิล ครัวผู้ใหญ่ปอง</title>
+    <style>
+      body { font-family: 'Sarabun', 'Tahoma', sans-serif; padding: 20px; color: #0a1530; }
+      table { width: 100%; border-collapse: collapse; }
+      @media print { @page { margin: 12mm; } }
+    </style>
+    </head><body>${printable.outerHTML}</body></html>
+  `);
+  w.document.close();
+  setTimeout(() => { w.focus(); w.print(); }, 300);
+}
+
+function exportInvoiceCSV(grouping) {
+  // Header
+  const lines = ['วันที่,รายการ,ช่วงเวลาสั่ง,จำนวนกล่อง,ราคา'];
+  Object.keys(grouping).sort().forEach(dateKey => {
+    INVOICE_CATEGORIES.forEach(cat => {
+      const data = grouping[dateKey][cat.key];
+      if (!data) return;
+      const dateLabel = formatThaiDate(new Date(dateKey));
+      lines.push(`"${dateLabel}","${cat.emoji} ${cat.name}","${cat.timeRange}",${data.count},${data.total}`);
+    });
+  });
+  const csv = '﻿' + lines.join('\n'); // BOM for Excel Thai support
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `invoice-${document.getElementById('invoiceFrom').value}-${document.getElementById('invoiceTo').value}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  toast('✅ Export CSV แล้ว');
 }
 
 // SVG line chart for revenue trend
