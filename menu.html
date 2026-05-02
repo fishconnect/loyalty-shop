@@ -11,29 +11,93 @@
   body {
     font-family: -apple-system, "Segoe UI", "Sarabun", sans-serif;
     background: #f7f8fb; color: #1f2937;
-    padding-bottom: 100px;
+    padding-bottom: 130px;
   }
   img { display: block; max-width: 100%; }
   button { font-family: inherit; cursor: pointer; }
 
-  /* ============ Header ============ */
-  header {
-    background: linear-gradient(135deg, #f7f8fb, #ebf0ff);
-    padding: 14px 16px;
-    display: flex; align-items: center; gap: 12px;
-    border-bottom: 3px solid #1652F0;
-    position: sticky; top: 0; z-index: 10;
-    box-shadow: 0 2px 8px rgba(22,82,240,.08);
+  /* ============ Hero Header (Grab-style) ============ */
+  header.hero {
+    background: linear-gradient(160deg, #1652F0 0%, #0738C9 100%);
+    padding: 18px 18px 22px;
+    color: #fff;
+    position: relative;
+    border-radius: 0 0 22px 22px;
+    box-shadow: 0 4px 16px rgba(22,82,240,.25);
   }
-  header img.logo { height: 52px; width: 52px; object-fit: contain; border-radius: 12px; box-shadow: 0 2px 6px rgba(0,0,0,.1); }
-  header .call-btn {
-    background: linear-gradient(135deg, #16a34a, #15803d); color: #fff;
-    width: 44px; height: 44px; border-radius: 50%;
-    display: grid; place-items: center; text-decoration: none;
-    font-size: 20px; box-shadow: 0 3px 10px rgba(22,163,74,.3);
+  header.hero .top-row {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 14px;
+  }
+  header.hero img.logo {
+    height: 64px; width: 64px; border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid rgba(255,255,255,.95);
+    box-shadow: 0 4px 12px rgba(0,0,0,.18);
     flex-shrink: 0;
   }
-  header .info { flex: 1; }
+  header.hero .info { flex: 1; min-width: 0; }
+  header.hero h1 {
+    font-size: 21px; color: #fff; font-weight: 900; line-height: 1.15;
+    letter-spacing: -.3px;
+  }
+  header.hero .sub {
+    font-size: 12px; color: rgba(255,255,255,.92); margin-top: 4px;
+    font-weight: 600;
+  }
+  header.hero .call-btn {
+    background: rgba(255,255,255,.18);
+    backdrop-filter: blur(8px);
+    border: 1.5px solid rgba(255,255,255,.35);
+    color: #fff;
+    width: 44px; height: 44px; border-radius: 50%;
+    display: grid; place-items: center; text-decoration: none;
+    font-size: 19px; flex-shrink: 0;
+  }
+  header.hero .info-chips {
+    display: flex; gap: 8px; flex-wrap: wrap;
+  }
+  header.hero .info-chip {
+    background: rgba(255,255,255,.18);
+    border: 1px solid rgba(255,255,255,.28);
+    backdrop-filter: blur(8px);
+    color: #fff;
+    padding: 6px 11px; border-radius: 999px;
+    font-size: 12px; font-weight: 700;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  header.hero .info-chip.rating { background: rgba(255,193,7,.95); border-color: #fbbf24; color: #422006; }
+  header.hero .info-chip.open { background: rgba(34,197,94,.95); border-color: #16a34a; color: #052e16; }
+  header.hero .info-chip.closed { background: rgba(239,68,68,.95); border-color: #dc2626; color: #fff; }
+
+  /* ============ Promo Chips Strip ============ */
+  .promo-strip {
+    background: #fff;
+    padding: 12px 14px 14px;
+    border-bottom: 1px solid #e5e7eb;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    margin-top: -8px;
+    position: relative; z-index: 5;
+    border-radius: 18px 18px 0 0;
+  }
+  .promo-strip::-webkit-scrollbar { display: none; }
+  .promo-strip-inner { display: flex; gap: 10px; min-width: max-content; }
+  .promo-card {
+    background: linear-gradient(135deg, #fff7ed, #fef3c7);
+    border: 1.5px solid #fbbf24;
+    border-radius: 14px;
+    padding: 10px 14px;
+    display: flex; align-items: center; gap: 10px;
+    min-width: 200px;
+    box-shadow: 0 2px 6px rgba(251,191,36,.15);
+  }
+  .promo-card.green { background: linear-gradient(135deg, #ecfdf5, #d1fae5); border-color: #16a34a; box-shadow: 0 2px 6px rgba(22,163,74,.15); }
+  .promo-card.purple { background: linear-gradient(135deg, #f3e8ff, #ede9fe); border-color: #8b5cf6; box-shadow: 0 2px 6px rgba(139,92,246,.15); }
+  .promo-card .ic { font-size: 24px; line-height: 1; flex-shrink: 0; }
+  .promo-card .body { min-width: 0; }
+  .promo-card .title { font-size: 13px; font-weight: 800; color: #0a1530; line-height: 1.2; }
+  .promo-card .desc { font-size: 11px; color: #5c6982; margin-top: 2px; font-weight: 600; }
+
   .item.unavailable { opacity: .5; pointer-events: none; }
   .item.unavailable .add-ic { background: #9ca3af !important; box-shadow: none; }
   .item .out-badge {
@@ -43,72 +107,167 @@
     font-size: 11px; font-weight: 800;
     box-shadow: 0 2px 6px rgba(220,38,38,.3);
   }
-  header h1 { font-size: 18px; color: #0a1530; font-weight: 800; line-height: 1.2; }
-  header .sub {
-    font-size: 11.5px; color: #0738C9; margin-top: 3px; font-weight: 600;
-    display: inline-block; background: #c5d3ff; padding: 2px 8px; border-radius: 999px;
+
+  /* ============ Popular Section (เมนูยอดนิยม) ============ */
+  .popular-section {
+    padding: 18px 14px 8px;
+  }
+  .popular-section .sec-title {
+    font-size: 19px; font-weight: 900; color: #0a1530;
+    margin-bottom: 12px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .popular-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  }
+  .popular-card {
+    background: #fff; border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 2px 10px rgba(0,0,0,.07);
+    cursor: pointer;
+    transition: transform .15s;
+    position: relative;
+    border: 2px solid transparent;
+  }
+  .popular-card:active { transform: scale(.98); }
+  .popular-card.has-qty { border-color: #1652F0; }
+  .popular-card .img-wrap {
+    position: relative; aspect-ratio: 1/1;
+    background: linear-gradient(135deg, #f7f8fb, #c5d3ff);
+  }
+  .popular-card .img-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .popular-card .pop-badge {
+    position: absolute; top: 8px; left: 8px;
+    background: rgba(255,210,213,.96);
+    color: #b91c1c;
+    padding: 4px 10px; border-radius: 999px;
+    font-size: 11px; font-weight: 800;
+    backdrop-filter: blur(4px);
+    box-shadow: 0 2px 6px rgba(0,0,0,.1);
+  }
+  .popular-card .qty-badge-pop {
+    position: absolute; top: 8px; right: 8px;
+    background: #1652F0; color: #fff;
+    width: 26px; height: 26px; border-radius: 50%;
+    display: grid; place-items: center;
+    font-weight: 800; font-size: 13px;
+    border: 2px solid #fff;
+  }
+  .popular-card .info {
+    padding: 10px 12px 12px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .popular-card .nm {
+    font-size: 13.5px; font-weight: 700; color: #1f2937;
+    line-height: 1.25;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .popular-card .pr-row {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-top: 4px;
+  }
+  .popular-card .pr {
+    font-size: 15px; font-weight: 800; color: #0a1530;
+  }
+  .popular-card .add-pop {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: linear-gradient(135deg, #4F7AFF, #1652F0);
+    color: #fff; font-size: 18px; font-weight: 800;
+    display: grid; place-items: center;
+    box-shadow: 0 2px 6px rgba(22,82,240,.35);
   }
 
   /* ============ Categories ============ */
   .cats {
     background: #ffffff;
-    border-bottom: 1px solid #d1ddff;
-    position: sticky; top: 80px; z-index: 9;
+    border-bottom: 1px solid #e5e7eb;
+    position: sticky; top: 0; z-index: 9;
     overflow-x: auto; -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
+    box-shadow: 0 2px 8px rgba(0,0,0,.04);
   }
   .cats::-webkit-scrollbar { display: none; }
-  .cats-inner { display: flex; gap: 6px; padding: 10px 12px; min-width: max-content; }
+  .cats-inner { display: flex; gap: 4px; padding: 10px 12px; min-width: max-content; align-items: center; }
+  .cat-icon-btn {
+    background: transparent;
+    border: none;
+    padding: 8px 8px;
+    color: #5c6982;
+    font-size: 19px;
+    flex-shrink: 0;
+    display: grid; place-items: center;
+    width: 36px; height: 36px;
+  }
+  .cat-icon-btn.divider { border-right: 1px solid #e5e7eb; padding-right: 8px; margin-right: 4px; height: 26px; width: 1px; padding: 0; }
   .cat-btn {
-    background: #fff; border: 2px solid #d1ddff;
-    padding: 8px 14px; border-radius: 999px;
-    font-size: 13px; font-weight: 700; color: #0a1530;
+    background: transparent; border: none;
+    padding: 8px 4px;
+    border-bottom: 3px solid transparent;
+    border-radius: 0;
+    font-size: 14px; font-weight: 700; color: #5c6982;
     white-space: nowrap; transition: all .15s;
+    margin: 0 8px;
   }
   .cat-btn.active {
-    background: linear-gradient(135deg, #4F7AFF, #1652F0);
-    color: #fff; border-color: #1652F0;
-    box-shadow: 0 4px 12px rgba(22,82,240,.3);
+    color: #16a34a;
+    border-bottom-color: #16a34a;
+    background: transparent;
+    box-shadow: none;
   }
 
   /* ============ Sections ============ */
-  .section { padding: 18px 16px 4px; }
+  .section { padding: 18px 14px 4px; background: #fff; }
+  .section + .section { border-top: 8px solid #f3f4f6; }
   .section-title {
-    font-size: 22px; font-weight: 800; color: #0a1530;
-    margin-bottom: 14px;
-    display: flex; align-items: center; gap: 10px;
+    font-size: 19px; font-weight: 900; color: #0a1530;
+    margin-bottom: 12px;
+    display: flex; align-items: center; gap: 8px;
   }
   .section-title .emoji {
-    font-size: 28px;
-    background: #c5d3ff; padding: 4px 10px; border-radius: 12px;
+    font-size: 22px;
   }
   .section-title .price-tag {
-    margin-left: auto; font-size: 13px; font-weight: 700;
-    color: #16a34a; background: #dcfce7; padding: 4px 10px; border-radius: 999px;
+    margin-left: auto; font-size: 12px; font-weight: 700;
+    color: #16a34a; background: #dcfce7; padding: 3px 9px; border-radius: 999px;
   }
 
-  /* ============ Item Cards ============ */
-  .items {
-    display: grid; grid-template-columns: 1fr; gap: 12px;
+  /* ============ Bottom Info Banner ============ */
+  .info-banner {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    background: linear-gradient(180deg, #fff5f5, #fee2e2);
+    border-top: 1px solid #fecaca;
+    padding: 10px 16px;
+    z-index: 25;
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 12.5px; font-weight: 700;
+    color: #991b1b;
+    transition: transform .3s ease;
   }
-  @media (min-width: 600px) {
-    .items { grid-template-columns: 1fr 1fr; }
+  .info-banner.cart-showing { transform: translateY(-58px); }  /* lift above cart bar when cart is visible */
+  .info-banner .left-info { display: flex; align-items: center; gap: 6px; }
+  .info-banner .right-info { color: #5c6982; font-weight: 600; font-size: 11.5px; }
+
+  /* ============ Item Cards (list style — Grab-like) ============ */
+  .items {
+    display: flex; flex-direction: column;
   }
   .item {
-    background: #fff; border-radius: 16px;
-    display: flex; gap: 12px; padding: 12px;
-    box-shadow: 0 2px 8px rgba(0,0,0,.06);
+    background: #fff;
+    display: flex; gap: 14px; padding: 14px 4px;
     align-items: center;
     cursor: pointer;
-    transition: transform .15s, box-shadow .15s;
+    transition: opacity .15s;
     position: relative;
-    border: 2px solid transparent;
+    border-bottom: 1px solid #f3f4f6;
   }
-  .item:active { transform: scale(.98); }
-  .item.has-qty { border-color: #1652F0; box-shadow: 0 4px 16px rgba(22,82,240,.18); }
+  .item:last-child { border-bottom: none; }
+  .item:active { opacity: .7; }
+  .item.has-qty { background: linear-gradient(90deg, #f0f7ff, #fff); }
 
   .item .img {
-    width: 90px; height: 90px; flex-shrink: 0;
+    width: 84px; height: 84px; flex-shrink: 0;
     border-radius: 12px; overflow: hidden;
     position: relative;
     background: linear-gradient(135deg, #f7f8fb, #c5d3ff);
@@ -131,17 +290,17 @@
     box-shadow: 0 2px 6px rgba(22,82,240,.4);
   }
   .item .body { flex: 1; min-width: 0; }
-  .item .name { font-size: 15px; font-weight: 700; line-height: 1.3; color: #1f2937; }
-  .item .note { font-size: 12px; color: #0a1530; margin-top: 3px; font-weight: 600; }
-  .item .price { font-size: 16px; font-weight: 800; color: #1652F0; margin-top: 6px; }
+  .item .name { font-size: 15px; font-weight: 700; line-height: 1.3; color: #0a1530; }
+  .item .note { font-size: 12px; color: #5c6982; margin-top: 3px; font-weight: 500; }
+  .item .price { font-size: 16px; font-weight: 800; color: #0a1530; margin-top: 8px; }
   .item .add-ic {
-    width: 38px; height: 38px; border-radius: 50%;
-    background: linear-gradient(135deg, #4F7AFF, #1652F0);
+    width: 36px; height: 36px; border-radius: 50%;
+    background: linear-gradient(135deg, #22c55e, #16a34a);
     color: #fff;
     font-size: 22px; font-weight: 800;
     display: grid; place-items: center;
     flex-shrink: 0;
-    box-shadow: 0 4px 10px rgba(22,82,240,.35);
+    box-shadow: 0 3px 8px rgba(22,163,74,.3);
   }
 
   /* ============ Floating Cart Bar ============ */
@@ -583,27 +742,42 @@
 </head>
 <body>
 
-<header id="pageHeader">
-  <img class="logo" src="logo.jpg" alt="logo">
-  <div class="info">
-    <h1>ครัวผู้ใหญ่ปอง</h1>
-    <div class="sub">🍽️ อาหารตามสั่ง · ก๋วยเตี๋ยว</div>
+<header class="hero" id="pageHeader">
+  <div class="top-row">
+    <img class="logo" src="logo.jpg" alt="logo">
+    <div class="info">
+      <h1>ครัวผู้ใหญ่ปอง</h1>
+      <div class="sub">🍽️ อาหารตามสั่ง · ก๋วยเตี๋ยว · เครื่องดื่ม</div>
+    </div>
+    <a href="tel:0619623696" class="call-btn" title="โทรร้าน">📞</a>
   </div>
-  <a href="tel:0619623696" class="call-btn" title="โทรร้าน">📞</a>
+  <div class="info-chips" id="heroInfoChips">
+    <!-- populated by JS — rating/open status/points-rate -->
+  </div>
 </header>
 
-<nav class="cats" id="cats"></nav>
-
-<!-- 🔍 Search bar -->
-<div id="searchBox" style="padding:10px 14px;background:#f7f8fb;border-bottom:1px solid #e5e7eb">
-  <input type="text" id="menuSearch" placeholder="🔍 ค้นหาเมนู เช่น กะเพรา ชานม ต้มยำ..." oninput="onMenuSearch()" style="width:100%;padding:11px 14px;border:1.5px solid #d1ddff;border-radius:999px;font-size:14px;font-family:inherit;background:#fff;box-shadow:0 1px 3px rgba(22,82,240,.05)">
+<!-- Promo / loyalty chips -->
+<div class="promo-strip" id="promoStrip">
+  <div class="promo-strip-inner" id="promoStripInner">
+    <!-- populated by JS -->
+  </div>
 </div>
+
+<!-- 🔍 Search bar (collapsible — shown when 🔍 icon tapped) -->
+<div id="searchBox" style="display:none;padding:10px 14px;background:#fff;border-bottom:1px solid #e5e7eb">
+  <input type="text" id="menuSearch" placeholder="🔍 ค้นหาเมนู เช่น กะเพรา ชานม ต้มยำ..." oninput="onMenuSearch()" style="width:100%;padding:11px 14px;border:1.5px solid #d1ddff;border-radius:999px;font-size:14px;font-family:inherit;background:#f7f8fb">
+</div>
+
+<nav class="cats" id="cats"></nav>
 
 <!-- 🔁 Reorder last order card (returning customers) -->
 <div id="reorderCard" style="display:none"></div>
 
 <!-- Returning customer widget -->
 <div class="user-widget" id="userWidget"></div>
+
+<!-- ⭐ Popular section (auto-computed from orders) -->
+<div id="popularSection" style="display:none"></div>
 
 <!-- 💬 Floating chat button (URL set dynamically from settings/contact) -->
 <a id="chatFloat" href="tel:0619623696" target="_blank" rel="noopener" style="position:fixed;bottom:90px;right:14px;z-index:80;background:linear-gradient(135deg,#06c755,#04a648);color:#fff;width:54px;height:54px;border-radius:50%;display:grid;place-items:center;font-size:26px;box-shadow:0 6px 18px rgba(6,199,85,.45);text-decoration:none">💬</a>
@@ -617,6 +791,8 @@
     if (isEmbed) {
       const h = document.getElementById('pageHeader');
       if (h) h.style.display = 'none';
+      const ps = document.getElementById('promoStrip');
+      if (ps) ps.style.display = 'none';
       const cats = document.querySelector('.cats');
       if (cats) cats.style.top = '0';
       document.body.style.paddingBottom = '110px';
@@ -632,6 +808,12 @@
 </script>
 
 <main id="menuMain"></main>
+
+<!-- Bottom info banner — shows points/loyalty teaser -->
+<div class="info-banner" id="infoBanner">
+  <div class="left-info" id="infoBannerLeft">⭐ สมัครฟรี · รับ 5 แต้มสมัครใหม่</div>
+  <div class="right-info" id="infoBannerRight">1฿ = 1 แต้ม</div>
+</div>
 
 <div class="cart-bar" id="cartBar" onclick="openCart()">
   <div class="left">
@@ -901,6 +1083,151 @@ function onMenuSearch() {
   renderMenu();
 }
 
+// ============ Hero / Promo / Popular renderers ============
+
+// Toggle the collapsible search box (triggered by 🔍 icon in tabs)
+function toggleSearchBox() {
+  const box = document.getElementById('searchBox');
+  if (!box) return;
+  const showing = box.style.display !== 'none';
+  box.style.display = showing ? 'none' : 'block';
+  if (!showing) {
+    setTimeout(() => document.getElementById('menuSearch')?.focus(), 50);
+  } else {
+    document.getElementById('menuSearch').value = '';
+    menuSearchQ = '';
+    renderMenu();
+  }
+}
+
+// Render hero info chips (rating placeholder · open/closed · points-rate)
+function renderHeroChips() {
+  const wrap = document.getElementById('heroInfoChips');
+  if (!wrap) return;
+  // Compute simple "rating" from total order count (gamified, max 5.0)
+  const db = loadDB();
+  const orderCount = (db.pendingOrders || []).length + (db.orders || []).length;
+  // Show open/closed status from menuConfig
+  const cfg = JSON.parse(localStorage.getItem('menuConfig') || '{}');
+  const isOpen = cfg.shopOpen !== false;
+  const chips = [];
+  if (orderCount >= 3) chips.push(`<span class="info-chip rating">⭐ 4.9</span>`);
+  chips.push(isOpen
+    ? `<span class="info-chip open">🟢 ร้านเปิด</span>`
+    : `<span class="info-chip closed">🔴 ร้านปิด</span>`);
+  chips.push(`<span class="info-chip">⏱️ 30-45 น.</span>`);
+  chips.push(`<span class="info-chip">💎 1฿ = 1 แต้ม</span>`);
+  wrap.innerHTML = chips.join('');
+}
+
+// Render promo / loyalty cards strip
+function renderPromoStrip() {
+  const wrap = document.getElementById('promoStripInner');
+  if (!wrap) return;
+  if (isFactoryMode) {
+    document.getElementById('promoStrip').style.display = 'none';
+    return;
+  }
+  const cards = [
+    `<div class="promo-card green"><div class="ic">🎁</div><div class="body"><div class="title">+5 แต้มสมัครใหม่</div><div class="desc">ฟรี · กรอกเบอร์ครั้งแรก</div></div></div>`,
+    `<div class="promo-card"><div class="ic">🥤</div><div class="body"><div class="title">50 แต้ม = ดื่มฟรี</div><div class="desc">แลกเครื่องดื่มได้</div></div></div>`,
+    `<div class="promo-card purple"><div class="ic">💰</div><div class="body"><div class="title">100 แต้ม = ลด ฿20</div><div class="desc">แลกส่วนลดได้ทันที</div></div></div>`,
+    `<div class="promo-card green"><div class="ic">🤝</div><div class="body"><div class="title">แนะนำเพื่อน +5 แต้ม</div><div class="desc">เพื่อนสมัครก็ได้ +5</div></div></div>`,
+  ];
+  wrap.innerHTML = cards.join('');
+}
+
+// Compute top N popular items from cloud orders + local pending
+let _popularItemIds = [];
+function computePopularItems(maxN) {
+  const counts = {};
+  const sources = [];
+  if (Array.isArray(window.cloudOrders)) sources.push(window.cloudOrders);
+  try { const db = loadDB(); sources.push(db.pendingOrders || []); sources.push(db.orders || []); } catch(e) {}
+  for (const list of sources) {
+    for (const o of list) {
+      const items = o.items || o.original_items || [];
+      for (const it of items) {
+        if (it.isReward) continue;
+        const id = it.id;
+        if (!id || it.isCustom) continue;
+        counts[id] = (counts[id] || 0) + (it.qty || 1);
+      }
+    }
+  }
+  // Sort by count desc
+  const ranked = Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([id]) => id);
+  // Filter to items still in EFFECTIVE_MENU and available
+  const valid = ranked.filter(id => {
+    const f = findItem(id);
+    return f && f.item.available !== false && !f.cat?.isAddOn;
+  });
+  return valid.slice(0, maxN);
+}
+
+// Render the ⭐ popular section above main menu
+function renderPopularSection() {
+  const wrap = document.getElementById('popularSection');
+  if (!wrap) return;
+  if (isFactoryMode) { wrap.style.display = 'none'; return; }
+  const ids = computePopularItems(4);
+  _popularItemIds = ids;
+  if (!ids.length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+  wrap.innerHTML = `
+    <section class="popular-section">
+      <div class="sec-title">⭐ เมนูยอดนิยม คนสั่งเยอะ</div>
+      <div class="popular-grid">
+        ${ids.map((id, i) => {
+          const f = findItem(id);
+          if (!f) return '';
+          const it = f.item;
+          const cat = f.cat;
+          const qtyInCart = cart.filter(l => l.mainId === it.id).reduce((s, l) => s + l.qty, 0);
+          return `
+          <div class="popular-card ${qtyInCart>0?'has-qty':''}" onclick="openCustomize('${it.id}')">
+            <div class="img-wrap">
+              <img src="${it.image || SHOP_INFO.defaultImage}" alt=""
+                   onerror="this.onerror=null;this.src='${SHOP_INFO.defaultImage}'">
+              <div class="pop-badge">Popular #${i+1}</div>
+              ${qtyInCart > 0 ? `<div class="qty-badge-pop">${qtyInCart}</div>` : ''}
+            </div>
+            <div class="info">
+              <div class="nm">${it.name}</div>
+              <div class="pr-row">
+                <div class="pr">฿${it.price}</div>
+                <div class="add-pop">+</div>
+              </div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </section>
+  `;
+}
+
+// Render bottom info banner (points balance for known customer, else loyalty teaser)
+function renderInfoBanner() {
+  const left = document.getElementById('infoBannerLeft');
+  const right = document.getElementById('infoBannerRight');
+  if (!left || !right) return;
+  // Show customer points if known phone
+  let cust = null;
+  if (lastPhone) {
+    const db = loadDB();
+    cust = db.customers[lastPhone];
+  }
+  if (cust && (cust.points || 0) > 0) {
+    left.innerHTML = `⭐ <b>${cust.name}</b> · ${cust.points} แต้มสะสม`;
+    right.textContent = '🎁 แลกรางวัลได้';
+  } else {
+    left.innerHTML = `⭐ สมัครฟรี · รับ 5 แต้มสมัครใหม่`;
+    right.textContent = '1฿ = 1 แต้ม';
+  }
+}
+
 function renderMenu() {
   const cats = document.getElementById('cats');
   const main = document.getElementById('menuMain');
@@ -916,7 +1243,9 @@ function renderMenu() {
   }
 
   cats.innerHTML = '<div class="cats-inner">' +
-    visibleCats.map((c, i) => `<button class="cat-btn ${i===0?'active':''}" onclick="scrollToCat('cat-${i}')">${c.emoji} ${c.cat}</button>`).join('') +
+    `<button class="cat-icon-btn" onclick="toggleSearchBox()" aria-label="ค้นหา">🔍</button>` +
+    `<span class="cat-icon-btn divider"></span>` +
+    visibleCats.map((c, i) => `<button class="cat-btn ${i===0?'active':''}" data-cat-idx="${i}" onclick="scrollToCat('cat-${i}')">${c.cat}</button>`).join('') +
     '</div>';
 
   if (menuSearchQ && !visibleCats.length) {
@@ -1239,6 +1568,11 @@ function updateCartBar() {
   document.getElementById('cartBadge').textContent = count;
   document.getElementById('cartTotal').textContent = '฿' + total;
   document.getElementById('cartBar').classList.toggle('show', count > 0);
+  // Push the bottom info banner up when cart bar is showing so they don't overlap
+  const banner = document.getElementById('infoBanner');
+  if (banner) banner.classList.toggle('cart-showing', count > 0);
+  // Refresh popular cards' qty badges (they show same items as main grid)
+  if (typeof renderPopularSection === 'function') renderPopularSection();
 }
 
 // ============ Cart Modal ============
@@ -2309,6 +2643,7 @@ function initReturningCustomer() {
     }
     // Subscribe to orders, find this customer's pending or recent done
     window.cloud.onOrders(orders => {
+      window.cloudOrders = orders;       // expose for popular-section computation
       const myOrders = orders.filter(o =>
         o.customer_phone === lastPhone || o.customer_id === lastPhone
       );
@@ -2323,6 +2658,7 @@ function initReturningCustomer() {
       }
       renderUserWidget(cloudCust || customer, pending, recentDone);
       renderReorderCard(myOrders);
+      renderPopularSection();            // refresh popular when fresh orders arrive
     });
   });
 }
@@ -2341,7 +2677,22 @@ openCart = function() {
 // ============ Init ============
 renderMenu();
 updateCartBar();
+renderHeroChips();
+renderPromoStrip();
+renderPopularSection();
+renderInfoBanner();
 initReturningCustomer();
+
+// Always subscribe to orders for popular-section computation (even for new
+// visitors with no lastPhone) — initReturningCustomer skips if no phone.
+if (!isShopMode && !isFactoryMode && !lastPhone) {
+  whenCloudReady(() => {
+    window.cloud.onOrders?.(orders => {
+      window.cloudOrders = orders;
+      renderPopularSection();
+    });
+  });
+}
 
 // 💬 Chat button — load URL from cloud config (settings/contact) or localStorage
 function buildChatUrl(type, value) {
