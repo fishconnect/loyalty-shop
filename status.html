@@ -281,6 +281,17 @@ function renderActive(order, status) {
       </div>
     </div>` : '';
 
+  // 🛑 Cancel button — only available before kitchen confirms
+  const cancelBtnHtml = (status === 'pending') ? `
+    <button onclick="cancelMyOrder('${order.id}')" style="display:block;width:100%;margin-top:10px;padding:12px;background:#fff;color:#dc2626;border:1.5px solid #fecaca;border-radius:10px;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit">
+      🛑 ยกเลิกออเดอร์นี้
+    </button>
+    <div style="font-size:11px;color:#9ca3af;text-align:center;margin-top:4px">ยกเลิกได้จนกว่าครัวจะยืนยัน</div>
+  ` : '';
+
+  // 💵 Payment instructions — show until delivered
+  const paymentHtml = renderPaymentSection(order);
+
   document.getElementById('content').innerHTML = `
     <div class="status-card">
       <div class="status-icon ${status==='cooking'?'cooking':''}" style="font-size:64px">${stat.icon}</div>
@@ -291,9 +302,64 @@ function renderActive(order, status) {
       ${progressHtml}
       ${order.free_boxes_used ? `<div style="background:#dcfce7;color:#166534;padding:10px;border-radius:10px;margin-bottom:10px;font-weight:700">🎁 ได้ข้าวฟรี ${order.free_boxes_used} กล่อง · ลด ฿${order.discount}</div>` : ''}
       ${renderItemsHTML(order)}
+      ${paymentHtml}
+      ${cancelBtnHtml}
     </div>
   `;
 }
+
+// 💵 Payment section — QR + bank info + COD note
+function renderPaymentSection(order) {
+  const isPaid = order.payment_status === 'paid';
+  if (isPaid) {
+    return `<div style="margin-top:14px;background:#dcfce7;border:1.5px solid #16a34a;color:#166534;padding:12px;border-radius:12px;text-align:center;font-weight:800">✅ ชำระเงินเรียบร้อยแล้ว</div>`;
+  }
+  const isCOD = order.order_type === 'delivery';
+  // Try cloud paymentQrDataUrl first (admin-uploaded), fall back to repo file
+  const qrSrc = (typeof cloudMenuConfig === 'object' && cloudMenuConfig?.paymentQrDataUrl)
+    || 'payment-qr.jpg';
+  return `
+    <div style="margin-top:14px;background:#fff7ed;border:1.5px solid #fbbf24;border-radius:14px;padding:14px;text-align:center">
+      <div style="font-weight:900;color:#92400e;font-size:15px;margin-bottom:6px">💵 วิธีชำระเงิน · ฿${order.total}</div>
+      ${isCOD ? `
+        <div style="background:#fff;border:1px dashed #fbbf24;padding:10px;border-radius:10px;font-size:13px;color:#78350f;margin-bottom:8px;line-height:1.6">
+          🛵 <b>เก็บเงินปลายทาง (COD)</b><br>
+          จ่ายให้พนักงานส่ง เมื่อรับอาหาร
+        </div>
+        <div style="font-size:12px;color:#92400e;margin-bottom:8px">หรือโอนล่วงหน้าผ่าน QR ด้านล่าง:</div>
+      ` : `
+        <div style="background:#fff;border:1px dashed #fbbf24;padding:8px;border-radius:10px;font-size:12.5px;color:#78350f;margin-bottom:8px">
+          🏪 <b>รับที่ร้าน</b> — จ่ายเงินสด/QR ตอนรับของได้เลย
+        </div>
+      `}
+      <img src="${qrSrc}" alt="QR Payment" style="max-width:200px;width:100%;border-radius:10px;border:1px solid #fde68a;background:#fff" onerror="this.style.display='none'">
+      <div style="font-size:11px;color:#92400e;margin-top:6px;line-height:1.5">
+        📱 PromptPay · สแกนเพื่อชำระ ฿${order.total}<br>
+        หลังโอน → โทรแจ้ง <a href="tel:0619623696" style="color:#1652F0;font-weight:700">061-962-3696</a>
+      </div>
+    </div>
+  `;
+}
+
+// 🛑 Customer-initiated cancel — only allowed while pending
+async function cancelMyOrder(orderId) {
+  if (!confirm('🛑 ยืนยันยกเลิกออเดอร์นี้?\n\n• ครัวจะถูกแจ้งทันที\n• ถ้าจ่ายเงินไปแล้ว ติดต่อ 061-962-3696 เพื่อรับเงินคืน\n\nกด OK เพื่อยกเลิก')) return;
+  const reason = prompt('เหตุผล (ไม่บังคับ):', '') || 'ลูกค้ายกเลิกเอง';
+  try {
+    if (window.cloud?.cancelOrderByCustomer) {
+      const ok = await window.cloud.cancelOrderByCustomer(orderId, reason);
+      if (ok) {
+        alert('✅ ยกเลิกออเดอร์เรียบร้อย');
+        // Status snapshot will re-render automatically
+      } else {
+        alert('⚠️ ยกเลิกไม่สำเร็จ — โทร 061-962-3696');
+      }
+    }
+  } catch (e) {
+    alert('⚠️ มีปัญหา — โทร 061-962-3696');
+  }
+}
+window.cancelMyOrder = cancelMyOrder;
 
 function renderCancelled(order) {
   document.getElementById('content').innerHTML = `
@@ -450,11 +516,120 @@ function renderDone(order, db) {
 }
 
 render();
+
+// 🔔 Web push + audible alert when order status changes.
+// Browser permission must be granted (asked on first page load if pending).
+let _lastSeenStatus = null;
+function maybeNotifyStatusChange(prev, next, order) {
+  if (!next || prev === next) return;
+  // Skip the initial render (no prev → no transition)
+  if (prev == null) return;
+  const map = {
+    confirmed:  { title: '📋 ครัวยืนยันแล้ว!',     body: 'เริ่มเตรียมอาหารของคุณ',           icon: '📋' },
+    cooking:    { title: '👨‍🍳 กำลังทำอาหาร',       body: 'ครัวเริ่มทำแล้ว — รออีกสักครู่',       icon: '👨‍🍳' },
+    ready:      { title: '📦 อาหารพร้อมแล้ว!',      body: order.order_type === 'delivery' ? 'รอขนส่งมารับ' : 'มารับที่ร้านได้เลย', icon: '📦' },
+    delivering: { title: '🛵 กำลังจัดส่ง',           body: 'อาหารออกจากร้านแล้ว · เตรียมรับ',     icon: '🛵' },
+    delivered:  { title: '✅ ส่งสำเร็จ — ขอบคุณ!',  body: 'แต้มสะสมเข้าบัญชีแล้ว',              icon: '✅' },
+    cancelled:  { title: '❌ ออเดอร์ถูกยกเลิก',    body: order.cancel_reason || 'ติดต่อร้านสำหรับรายละเอียด', icon: '❌' },
+  };
+  const n = map[next];
+  if (!n) return;
+
+  // 1. Browser notification (works on Android Chrome / desktop; iOS Safari only when in PWA)
+  if ('Notification' in window && Notification.permission === 'granted') {
+    try {
+      const notif = new Notification(n.title, {
+        body: n.body,
+        icon: 'logo.jpg',
+        badge: 'logo.jpg',
+        tag: 'order-' + order.id,
+        renotify: true,
+      });
+      notif.onclick = () => { window.focus(); notif.close(); };
+    } catch (e) {}
+  }
+
+  // 2. Audible beep (works everywhere) — short pleasant chord
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    [523, 659, 784].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.frequency.value = freq;
+      osc.type = 'sine';
+      gain.gain.setValueAtTime(0.001, ctx.currentTime + i * 0.12);
+      gain.gain.exponentialRampToValueAtTime(0.15, ctx.currentTime + i * 0.12 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.12 + 0.4);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(ctx.currentTime + i * 0.12);
+      osc.stop(ctx.currentTime + i * 0.12 + 0.4);
+    });
+  } catch (e) {}
+
+  // 3. Vibrate (mobile)
+  if ('vibrate' in navigator) try { navigator.vibrate([200, 80, 200]); } catch (e) {}
+
+  // 4. Toast banner inside the page
+  showStatusChangeToast(n.title, n.body);
+}
+
+function showStatusChangeToast(title, body) {
+  let t = document.getElementById('statusChangeToast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'statusChangeToast';
+    t.style.cssText = 'position:fixed;top:14px;left:50%;transform:translateX(-50%) translateY(-200%);z-index:9999;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;padding:14px 18px;border-radius:14px;box-shadow:0 8px 24px rgba(22,163,74,.4);font-family:inherit;font-size:14px;font-weight:700;line-height:1.4;text-align:center;max-width:90vw;transition:transform .35s ease';
+    document.body.appendChild(t);
+  }
+  t.innerHTML = `<div style="font-size:15px">${title}</div><div style="font-size:12px;opacity:.92;margin-top:2px;font-weight:500">${body}</div>`;
+  // Slide in
+  requestAnimationFrame(() => { t.style.transform = 'translateX(-50%) translateY(0)'; });
+  setTimeout(() => { t.style.transform = 'translateX(-50%) translateY(-200%)'; }, 5000);
+}
+
+// 🔔 Ask for notification permission on first visit (only for active orders).
+// Don't be pushy — only ask once, only when there's actually an order to track.
+function maybeAskNotificationPermission(order) {
+  if (!order || ['delivered','done','cancelled'].includes(order.status)) return;
+  if (!('Notification' in window)) return;
+  if (Notification.permission !== 'default') return;     // already asked
+  if (sessionStorage.getItem('notifAsked')) return;
+  sessionStorage.setItem('notifAsked', '1');
+  // Show a friendly inline prompt instead of jumping to the browser dialog
+  const banner = document.createElement('div');
+  banner.id = 'notifPrompt';
+  banner.style.cssText = 'position:fixed;bottom:14px;left:14px;right:14px;z-index:200;background:linear-gradient(135deg,#1652F0,#0738C9);color:#fff;padding:14px 16px;border-radius:14px;box-shadow:0 8px 24px rgba(22,82,240,.35);display:flex;align-items:center;gap:12px;font-family:inherit;max-width:520px;margin:0 auto';
+  banner.innerHTML = `
+    <div style="font-size:28px;flex-shrink:0">🔔</div>
+    <div style="flex:1;font-size:13px;line-height:1.4">
+      <div style="font-weight:800">เปิดแจ้งเตือน?</div>
+      <div style="opacity:.92;font-size:12px">รับแจ้งทันทีเมื่อครัวเริ่มทำ / อาหารพร้อม</div>
+    </div>
+    <button onclick="enableNotifications()" style="background:#fff;color:#1652F0;border:none;padding:8px 14px;border-radius:999px;font-weight:800;font-size:12px;cursor:pointer;font-family:inherit;flex-shrink:0">เปิด</button>
+    <button onclick="document.getElementById('notifPrompt').remove()" style="background:rgba(255,255,255,.2);color:#fff;border:none;padding:8px 10px;border-radius:999px;font-size:14px;cursor:pointer;font-family:inherit;flex-shrink:0">×</button>
+  `;
+  document.body.appendChild(banner);
+}
+async function enableNotifications() {
+  document.getElementById('notifPrompt')?.remove();
+  if (!('Notification' in window)) return;
+  try {
+    const result = await Notification.requestPermission();
+    if (result === 'granted') {
+      try {
+        new Notification('🔔 พร้อมรับการแจ้งเตือนแล้ว', { body: 'เราจะแจ้งเมื่อสถานะออเดอร์เปลี่ยน', icon: 'logo.jpg' });
+      } catch (e) {}
+    }
+  } catch (e) {}
+}
+window.enableNotifications = enableNotifications;
+
 // Subscribe to real-time updates from cloud
 whenCloudReady(() => {
   if (orderId) {
     window.cloud.onOrder(orderId, async order => {
       if (order) {
+        const prevStatus = _lastSeenStatus;
         cloudOrder = order;
         // Mirror to local
         const db = loadDB();
@@ -462,6 +637,11 @@ whenCloudReady(() => {
         if (idx >= 0) db.pendingOrders[idx] = order;
         else { db.pendingOrders = db.pendingOrders || []; db.pendingOrders.push(order); }
         saveDB(db);
+        // 🔔 Fire notification on status transition
+        maybeNotifyStatusChange(prevStatus, order.status, order);
+        _lastSeenStatus = order.status;
+        // Ask permission on first paint of an active order
+        maybeAskNotificationPermission(order);
       }
       // also fetch customer for points display
       if (phone) {

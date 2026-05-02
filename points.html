@@ -246,6 +246,11 @@ function doLookup() {
 }
 
 function renderCustomer(customer, allOrders) {
+  // 🎂 Birthday auto-grant — fire on FIRST page-load of the day if customer has
+  // a birthday on file and we haven't already granted this year. No need for
+  // them to actually order on their birthday to claim the bonus.
+  maybeGrantBirthdayBonus(customer);
+
   const points = customer.points || 0;
   const lifetime = customer.lifetime_points || 0;
   // Two-tier rewards: 10 = drink, 15 = discount 50
@@ -298,7 +303,22 @@ function renderCustomer(customer, allOrders) {
                   : canDrink    ? `อีก ${DISCOUNT_PT - points} แต้ม → ลด 50฿`
                                 : `อีก ${DRINK_PT - points} แต้ม → ฟรีเครื่องดื่ม`;
 
+  // 🗑️ PDPA — show pending deletion banner if customer has requested deletion
+  const deletionBanner = customer.deletion_requested ? `
+    <div style="background:linear-gradient(135deg,#fee2e2,#fecaca);border:1.5px solid #dc2626;color:#991b1b;padding:14px 16px;border-radius:14px;margin-bottom:14px;font-size:13px;line-height:1.5">
+      <div style="display:flex;align-items:flex-start;gap:8px">
+        <div style="font-size:22px;flex-shrink:0">🗑️</div>
+        <div style="flex:1">
+          <div style="font-weight:900;margin-bottom:3px">คำขอลบบัญชีของคุณกำลังดำเนินการ</div>
+          <div style="opacity:.85;font-size:12px">ขอเมื่อ ${new Date(customer.deletion_requested_at).toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'numeric'})} · ทีมงานจะดำเนินการภายใน 7 วัน</div>
+        </div>
+      </div>
+      <button onclick="cancelDeletionRequest()" style="display:block;width:100%;margin-top:10px;padding:9px;background:#fff;color:#dc2626;border:1.5px solid #dc2626;border-radius:8px;font-weight:700;font-size:12.5px;cursor:pointer;font-family:inherit">↩️ ยกเลิกคำขอ — เก็บบัญชีไว้</button>
+    </div>
+  ` : '';
+
   document.getElementById('main').innerHTML = `
+    ${deletionBanner}
     <div class="hero-card">
       <!-- Profile row: avatar + greeting/name + edit button -->
       <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;position:relative">
@@ -1131,6 +1151,63 @@ function reorderAndGo(orderId) {
   location.href = `menu.html?phone=${encodeURIComponent(phone)}&reorder=${encodeURIComponent(orderId)}`;
 }
 window.reorderAndGo = reorderAndGo;
+// 🎂 Birthday auto-grant — fires on first page load OF the birthday day per
+// year. Customer no longer needs to actually order on their birthday.
+async function maybeGrantBirthdayBonus(customer) {
+  if (!customer || !customer.birth_day || !customer.birth_month) return;
+  const now = new Date();
+  if (now.getDate() !== customer.birth_day) return;
+  if ((now.getMonth() + 1) !== customer.birth_month) return;
+  const year = now.getFullYear();
+  if (customer.last_birthday_bonus_year === year) return;     // already given this year
+  const BONUS = (window.LOYALTY?.SIGNUP_BONUS) || 5;
+  customer.points = (customer.points || 0) + BONUS;
+  customer.lifetime_points = (customer.lifetime_points || 0) + BONUS;
+  customer.last_birthday_bonus_year = year;
+  // Persist locally + cloud
+  const db = loadDB();
+  db.customers[phone] = customer;
+  saveDB(db);
+  try {
+    if (window.cloud?.saveCustomer) await window.cloud.saveCustomer(customer);
+  } catch (e) {}
+  // Show a celebration toast
+  setTimeout(() => {
+    const t = document.createElement('div');
+    t.style.cssText = 'position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:9999;background:linear-gradient(135deg,#f59e0b,#dc2626);color:#fff;padding:14px 22px;border-radius:14px;font-weight:800;font-size:15px;box-shadow:0 8px 24px rgba(245,158,11,.4);max-width:90vw;text-align:center';
+    t.innerHTML = `🎂 สุขสันต์วันเกิด!<br><span style="font-weight:500;font-size:13px;opacity:.95">คุณได้รับ +${BONUS} แต้มจากร้านครับ</span>`;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 4500);
+  }, 600);
+}
+
+// 🗑️ Cancel a pending deletion request — un-marks the flag in cloud.
+async function cancelDeletionRequest() {
+  if (!confirm('↩️ ยกเลิกคำขอลบบัญชี?\n\nบัญชีและข้อมูลของคุณจะถูกเก็บไว้ตามปกติ')) return;
+  const db = loadDB();
+  const cust = db.customers[phone];
+  if (!cust) return;
+  delete cust.deletion_requested;
+  delete cust.deletion_requested_at;
+  delete cust.deletion_reason;
+  saveDB(db);
+  try {
+    if (window.cloud?.saveCustomer) await window.cloud.saveCustomer(cust);
+    if (window.cloud?.saveConsentLog) {
+      await window.cloud.saveConsentLog({
+        type: 'account_deletion_cancelled',
+        customer_id: phone, customer_phone: phone,
+        version: '1.0', accepted: true,
+        details: { source: 'points_page' },
+      });
+    }
+  } catch (e) {}
+  alert('✅ ยกเลิกคำขอลบบัญชีแล้ว');
+  renderCustomer(cust, window._allOrders || []);
+}
+
+window.maybeGrantBirthdayBonus = maybeGrantBirthdayBonus;
+window.cancelDeletionRequest = cancelDeletionRequest;
 window.openReorderModal = openReorderModal;
 window.closeReorderModal = closeReorderModal;
 

@@ -525,10 +525,23 @@ function render() {
           </div>
         ` : ''}
         <div class="order-head" style="background:${status==='cancelled'?'#fee2e2':status==='delivered'||status==='done'?'#f3f4f6':'#f7f8fb'}">
-          <div>
-            <div class="name">${o.customer_name}</div>
-            <div class="phone">📞 ${o.customer_phone}</div>
-            <div class="status" style="background:${stat.color};color:#fff">${stat.icon} ${stat.label}</div>
+          <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
+            ${(() => {
+              // 📷 Pull the customer's profile photo from local DB so kitchen
+              // staff can recognize the face. Tiny circular avatar — falls
+              // back to first-letter initial if no photo.
+              const _cust = (loadDB().customers || {})[o.customer_id]
+                         || (loadDB().customers || {})[o.customer_phone];
+              const _initial = (o.customer_name || '?').slice(0, 1);
+              return _cust?.photo
+                ? `<img src="${_cust.photo}" onclick="event.stopPropagation();window.open(this.src,'_blank')" style="width:38px;height:38px;border-radius:50%;object-fit:cover;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.15);flex-shrink:0;cursor:zoom-in">`
+                : `<div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#c5d3ff,#1652F0);color:#fff;display:grid;place-items:center;font-size:16px;font-weight:900;border:2px solid #fff;box-shadow:0 2px 6px rgba(22,82,240,.2);flex-shrink:0">${_initial}</div>`;
+            })()}
+            <div style="flex:1;min-width:0">
+              <div class="name">${o.customer_name}</div>
+              <div class="phone">📞 ${o.customer_phone}</div>
+              <div class="status" style="background:${stat.color};color:#fff">${stat.icon} ${stat.label}</div>
+            </div>
           </div>
           <div class="time">
             ${fmtTime(o.date)}<br>

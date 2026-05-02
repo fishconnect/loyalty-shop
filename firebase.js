@@ -116,6 +116,22 @@ window.cloud = {
     try { await deleteDoc(doc(fdb, 'orders', String(id))); }
     catch (e) { console.warn('[cloud] deleteOrder', e); }
   },
+  // 🛑 Customer-initiated cancel — only allowed while status is 'pending'.
+  // We don't delete the order; we flip its status to 'cancelled' and stamp
+  // who/when so the kitchen sees the change immediately and accounting keeps
+  // a complete history.
+  async cancelOrderByCustomer(id, reason) {
+    if (!id) return;
+    try {
+      await updateDoc(doc(fdb, 'orders', String(id)), {
+        status: 'cancelled',
+        cancelled_at: new Date().toISOString(),
+        cancelled_by: 'customer',
+        cancel_reason: reason || 'ลูกค้ายกเลิกเอง',
+      });
+      return true;
+    } catch (e) { console.warn('[cloud] cancelOrderByCustomer', e); return false; }
+  },
   onOrders(cb) {
     return onSnapshot(query(collection(fdb, 'orders'), orderBy('date', 'desc')), snap => {
       const out = [];

@@ -1482,7 +1482,7 @@ function renderPopularSection() {
           return `
           <div class="popular-card ${qtyInCart>0?'has-qty':''}" onclick="openCustomize('${it.id}')">
             <div class="img-wrap">
-              <img src="${imgSrc(it)}" alt="" onerror="${_imgFallback}">
+              <img src="${imgSrc(it)}" alt="" onerror="${_imgFallback}" onclick="event.stopPropagation();openLightbox(this.src)">
               <div class="pop-badge">Popular #${i+1}</div>
               ${qtyInCart > 0 ? `<div class="qty-badge-pop">${qtyInCart}</div>` : ''}
             </div>
@@ -1693,7 +1693,7 @@ function renderMenu() {
             return `
             <div class="item ${qtyInCart > 0 ? 'has-qty' : ''} ${isOut ? 'unavailable' : ''}" onclick="${isOut?'':`openCustomize('${it.id}')`}">
               <div class="img">
-                <img src="${imgSrc(it)}" alt="" onerror="${_imgFallback}">
+                <img src="${imgSrc(it)}" alt="" onerror="${_imgFallback}" onclick="event.stopPropagation();openLightbox(this.src)">
                 <div class="overlay-emoji">${c.emoji}</div>
                 ${qtyInCart > 0 ? `<div class="qty-badge">${qtyInCart}</div>` : ''}
                 ${isOut ? '<div class="out-badge">หมด</div>' : ''}
@@ -2202,8 +2202,25 @@ function getFeatureFlags() {
 }
 
 // Schedule mode — 'asap' (default) or 'later' (with scheduled_at ISO string)
+// 🔧 Persisted to localStorage so closing the browser between picking a time
+// and submitting doesn't drop the customer's selection.
 let scheduleMode = 'asap';
 let scheduledAt = null;          // ISO string when scheduleMode === 'later'
+try {
+  const _saved = JSON.parse(localStorage.getItem('schedState') || 'null');
+  if (_saved) {
+    // Drop saved state if scheduledAt is in the past (stale)
+    if (_saved.scheduledAt && new Date(_saved.scheduledAt).getTime() < Date.now() + 30*60*1000) {
+      // expired — ignore
+    } else {
+      scheduleMode = _saved.scheduleMode || 'asap';
+      scheduledAt = _saved.scheduledAt || null;
+    }
+  }
+} catch (e) {}
+function persistSchedState() {
+  try { localStorage.setItem('schedState', JSON.stringify({ scheduleMode, scheduledAt })); } catch (e) {}
+}
 
 // SHOP HOURS — used to validate schedule slots
 const SHOP_HOURS = { openH: 9, openM: 30, closeH: 17, closeM: 30 };
@@ -2214,8 +2231,9 @@ function setSchedule(mode) {
   document.getElementById('schedASAP').classList.toggle('active', mode === 'asap');
   document.getElementById('schedLater').classList.toggle('active', mode === 'later');
   document.getElementById('schedSlotBox').style.display = (mode === 'later') ? 'block' : 'none';
-  if (mode === 'asap') { scheduledAt = null; renderOrderBreakdown(); return; }
+  if (mode === 'asap') { scheduledAt = null; persistSchedState(); renderOrderBreakdown(); return; }
   buildSchedSlots();
+  persistSchedState();
 }
 
 // Build available 30-min slots within shop hours, ≥1hr from now.
@@ -2283,7 +2301,12 @@ function buildSchedSlots() {
     : '🕒 ร้านปิดอยู่ — สั่งล่วงหน้าสำหรับวันถัดไปได้ เลือกเวลาด้านบน';
   hint.style.color = isToday ? '#5c6982' : '#0738C9';
 }
+// Persist whenever the slot select changes
 function onSchedSlotChange() {
+  _onSchedSlotChange();
+  persistSchedState();
+}
+function _onSchedSlotChange() {
   const sel = document.getElementById('schedSlot');
   scheduledAt = sel.value || null;
   renderOrderBreakdown();
@@ -2333,6 +2356,14 @@ function renderSavedAddresses() {
   wrap.style.display = 'block';
   // Sort default first
   const sorted = [...list].sort((a, b) => (b.isDefault ? 1 : 0) - (a.isDefault ? 1 : 0));
+  // 📍 Auto-apply the default address ONCE per cart session — saves customer
+  // a tap. Only fires if the address textarea is currently empty.
+  const ta = document.getElementById('deliveryAddress');
+  const def = sorted.find(a => a.isDefault) || sorted[0];
+  if (def && ta && !ta.value && !sessionStorage.getItem('addrAutoApplied')) {
+    setTimeout(() => useSavedAddress(def.id), 50);
+    sessionStorage.setItem('addrAutoApplied', '1');
+  }
   wrap.innerHTML = `
     <label style="font-weight:700;color:#0a1530;font-size:13px;display:block;margin-bottom:5px">📌 เลือกที่อยู่บันทึกไว้</label>
     <div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -2852,6 +2883,17 @@ async function submitOrder() {
       toast('⚠️ กรอกที่อยู่หรือกดปักหมุดตำแหน่ง', true);
       return;
     }
+    // 📍 Distance hard-cap — block submit if pinned location is beyond delivery radius.
+    // We can only check when the customer pinned (lat/lng) — typed-only addresses pass through.
+    if (deliveryLocation && SHOP_INFO.lat && SHOP_INFO.lng && typeof haversineKm === 'function') {
+      const km = haversineKm({lat:SHOP_INFO.lat,lng:SHOP_INFO.lng}, deliveryLocation);
+      const limit = SHOP_INFO.deliveryRadiusKm || 7;
+      if (km > limit) {
+        if (!confirm(`⚠️ ตำแหน่งของคุณอยู่ไกล ${km.toFixed(1)} กม. จากร้าน\n\nร้านส่งได้ในรัศมีไม่เกิน ${limit} กม.\nหากต้องการดำเนินการต่อ ทางร้านอาจปฏิเสธหรือคิดค่าส่งเพิ่ม\n\nกด OK เพื่อส่งคำขอต่อ\nกด Cancel เพื่อเปลี่ยนเป็นรับที่ร้าน`)) {
+          return;
+        }
+      }
+    }
   }
   const deliveryAddress = document.getElementById('deliveryAddress')?.value.trim() || '';
 
@@ -3030,16 +3072,23 @@ async function submitOrder() {
     renderMenu();
     updateCartBar();
 
-    // Fullscreen success overlay (z-index above everything)
+    // Fullscreen success overlay (z-index above everything) — now includes
+    // payment QR + total so customer knows how to pay before leaving.
     const overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;inset:0;background:linear-gradient(135deg,#16a34a,#15803d);z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;text-align:center;padding:30px;animation:fadeIn .25s ease';
+    overlay.style.cssText = 'position:fixed;inset:0;background:linear-gradient(135deg,#16a34a,#15803d);z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;text-align:center;padding:24px;animation:fadeIn .25s ease;overflow-y:auto';
+    const qrSrc = (typeof menuConfig === 'object' && menuConfig?.paymentQrDataUrl) || 'payment-qr.jpg';
     overlay.innerHTML = `
       <style>@keyframes fadeIn{from{opacity:0}to{opacity:1}}@keyframes popCheck{0%{transform:scale(0)}60%{transform:scale(1.2)}100%{transform:scale(1)}}</style>
-      <div style="font-size:96px;animation:popCheck .5s ease-out">✅</div>
-      <div style="font-size:28px;font-weight:900;margin-top:14px">ท่านได้กดสั่งอาหารแล้ว</div>
-      <div style="font-size:15px;opacity:.9;margin-top:8px">ครัวได้รับ Order #${orderId.slice(-6)} แล้ว</div>
-      <div style="font-size:14px;opacity:.85;margin-top:14px">${customer.name} · ฿${total}</div>
-      <div style="font-size:12px;opacity:.7;margin-top:24px">⏳ กำลังพาคุณไปหน้าสถานะ...</div>
+      <div style="font-size:72px;animation:popCheck .5s ease-out">✅</div>
+      <div style="font-size:24px;font-weight:900;margin-top:10px">ท่านได้กดสั่งอาหารแล้ว</div>
+      <div style="font-size:14px;opacity:.9;margin-top:6px">Order #${orderId.slice(-6)} · ${customer.name}</div>
+      <div style="background:rgba(255,255,255,.18);border:1.5px solid rgba(255,255,255,.35);backdrop-filter:blur(6px);border-radius:14px;padding:14px 18px;margin-top:16px;max-width:300px;width:100%">
+        <div style="font-size:11px;opacity:.85;margin-bottom:4px">ยอดที่ต้องชำระ</div>
+        <div style="font-size:32px;font-weight:900">฿${finalTotal}</div>
+        <img src="${qrSrc}" alt="QR" style="max-width:160px;width:100%;margin-top:8px;border-radius:10px;background:#fff;padding:6px" onerror="this.style.display='none'">
+        <div style="font-size:11px;opacity:.85;margin-top:6px;line-height:1.4">📱 PromptPay · สแกนเพื่อชำระ${orderType==='delivery'?' หรือ COD':' หรือจ่ายตอนรับของ'}</div>
+      </div>
+      <div style="font-size:11px;opacity:.7;margin-top:14px">⏳ กำลังพาคุณไปหน้าสถานะ + แจ้งเตือน...</div>
     `;
     document.body.appendChild(overlay);
 
@@ -3499,6 +3548,33 @@ window.acceptPdpa = acceptPdpa;
 window.isPdpaRejected = isPdpaRejected;
 window.refreshPdpaUiGates = refreshPdpaUiGates;
 window.PDPA_VERSION = PDPA_VERSION;
+
+// ============ 🌐 Offline / Firebase down banner ============
+// Watch the browser online event + detect Firebase failure (no cloud-ready
+// fired within 8 seconds) and show a sticky red banner so the customer
+// knows data isn't syncing.
+function showOfflineBanner(msg) {
+  let b = document.getElementById('offlineBanner');
+  if (!b) {
+    b = document.createElement('div');
+    b.id = 'offlineBanner';
+    b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:300;background:linear-gradient(135deg,#dc2626,#991b1b);color:#fff;padding:8px 14px;text-align:center;font-weight:700;font-size:12.5px;font-family:inherit;box-shadow:0 2px 10px rgba(220,38,38,.35)';
+    document.body.insertBefore(b, document.body.firstChild);
+  }
+  b.textContent = msg;
+}
+function hideOfflineBanner() {
+  document.getElementById('offlineBanner')?.remove();
+}
+window.addEventListener('online',  hideOfflineBanner);
+window.addEventListener('offline', () => showOfflineBanner('⚠️ ออฟไลน์ — สั่งซื้อยังทำได้ แต่จะส่งให้ครัวเมื่อกลับออนไลน์'));
+if (!navigator.onLine) showOfflineBanner('⚠️ ออฟไลน์ — สั่งซื้อยังทำได้ แต่จะส่งให้ครัวเมื่อกลับออนไลน์');
+// Detect "cloud never came up" — show after 10s if window.cloud isn't ready
+setTimeout(() => {
+  if (!window.cloud?.ready && navigator.onLine) {
+    showOfflineBanner('⚠️ ระบบ cloud มีปัญหา — ข้อมูลอาจไม่อัพเดท · โทร 061-962-3696');
+  }
+}, 10000);
 
 // ============ Init ============
 renderMenu();

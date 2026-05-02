@@ -5,6 +5,23 @@ window.SHOP_INFO = {
   phone: "061-962-3696",
   logo: "logo.jpg",
   defaultImage: "assets/menu-placeholder.jpg",
+  // 📍 Shop coordinates — used for distance validation on delivery orders.
+  // Update these to your real coordinates (Google Maps → right-click → "What's here?")
+  lat: 14.0833,        // <-- TODO: set real shop latitude
+  lng: 100.6167,       // <-- TODO: set real shop longitude
+  deliveryRadiusKm: 7, // hard limit — orders beyond this distance are blocked
+};
+
+// 📍 Haversine — distance in km between two {lat, lng} points
+window.haversineKm = function(a, b) {
+  if (!a || !b) return Infinity;
+  const R = 6371;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const lat1 = toRad(a.lat), lat2 = toRad(b.lat);
+  const x = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLng/2)**2;
+  return 2 * R * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
 };
 
 // ============================================
