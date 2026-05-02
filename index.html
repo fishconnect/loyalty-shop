@@ -3844,7 +3844,7 @@ function setInvoiceMode(mode) {
 
 function setInvoiceRange(range) {
   const today = new Date();
-  const fmt = d => d.toISOString().slice(0, 10);
+  const fmt = _localDateKey;  // local YYYY-MM-DD (not UTC)
   let from, to;
   if (range === 'today') from = to = fmt(today);
   else if (range === 'yesterday') {
@@ -3909,7 +3909,7 @@ function renderInvoiceDaily(orders, dateRangeLabel) {
   const grouping = {};
   orders.forEach(o => {
     const orderDate = new Date(o.completed_at || o.date);
-    const dateKey = orderDate.toISOString().slice(0, 10);
+    const dateKey = _localDateKey(orderDate);
     const orderHour = orderDate.getHours();
     if (!grouping[dateKey]) grouping[dateKey] = {};
     (o.items || []).forEach(item => {
@@ -3986,7 +3986,7 @@ function renderInvoiceWeekly(orders, dateRangeLabel) {
   const byDay = {};
   orders.forEach(o => {
     const orderDate = new Date(o.completed_at || o.date);
-    const dateKey = orderDate.toISOString().slice(0, 10);
+    const dateKey = _localDateKey(orderDate);
     if (!byDay[dateKey]) byDay[dateKey] = { count: 0, total: 0, orders: 0 };
     byDay[dateKey].orders += 1;
     (o.items || []).forEach(item => {
@@ -4003,7 +4003,7 @@ function renderInvoiceWeekly(orders, dateRangeLabel) {
   const end = new Date(toStr); end.setHours(0,0,0,0);
   const allDates = [];
   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-    allDates.push(d.toISOString().slice(0, 10));
+    allDates.push(_localDateKey(d));
   }
 
   let grandCount = 0, grandTotal = 0, grandOrders = 0, bodyRows = '';
@@ -4141,6 +4141,15 @@ function _downloadCSV(lines, prefix) {
 function formatThaiDate(d) {
   if (typeof d === 'string') d = new Date(d);
   return d.toLocaleDateString('th-TH', { day:'2-digit', month:'2-digit', year:'numeric' });
+}
+
+// 🌏 Format Date → 'YYYY-MM-DD' in LOCAL timezone (NOT UTC like toISOString does).
+// Critical for invoice grouping in Thailand (UTC+7) — without this, midnight 1 May
+// local rolls back to "2026-04-30" via toISOString and orders end up on the wrong day.
+function _localDateKey(d) {
+  return d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0');
 }
 
 function printInvoice() {
