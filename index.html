@@ -786,6 +786,45 @@
     </div>
   </div>
 
+  <!-- 📈 P&L cards — ALWAYS visible regardless of mode (combined / shop / factory)
+       so factory operators can see P&L for factory revenue too. -->
+  <div id="plSection">
+
+    <!-- 💰💸📈 P&L summary -->
+    <div class="card" id="plCard" style="border:2px solid #1652F0;background:linear-gradient(135deg,#fff,#ebf0ff);margin-bottom:12px;cursor:pointer" onclick="drillDown('pl')">
+      <h2 style="margin:0 0 10px;display:flex;justify-content:space-between;align-items:center">
+        <span>📈 กำไร / ขาดทุน <span id="plScopeLabel" style="font-size:11px;color:#9ca3af;font-weight:500">(แตะดูรายละเอียด)</span></span>
+      </h2>
+      <div style="display:grid;grid-template-columns:1fr auto 1fr auto 1fr;gap:8px;align-items:center;text-align:center">
+        <div>
+          <div style="font-size:11px;color:#5c6982">รายรับ</div>
+          <div id="plRevenue" style="font-size:20px;font-weight:900;color:#16a34a">฿0</div>
+        </div>
+        <div style="font-size:24px;color:#9ca3af">−</div>
+        <div>
+          <div style="font-size:11px;color:#5c6982">ค่าใช้จ่าย</div>
+          <div id="plExpense" style="font-size:20px;font-weight:900;color:#dc2626">฿0</div>
+        </div>
+        <div style="font-size:24px;color:#9ca3af">=</div>
+        <div>
+          <div style="font-size:11px;color:#5c6982">กำไร</div>
+          <div id="plProfit" style="font-size:24px;font-weight:900;color:#1652F0">฿0</div>
+        </div>
+      </div>
+      <div id="plMargin" style="text-align:center;font-size:12px;color:#5c6982;margin-top:8px"></div>
+    </div>
+
+    <!-- 🏥 P&L Health Check -->
+    <div class="card" id="plHealthCard" style="margin-bottom:12px;border:2px solid #16a34a">
+      <h2 style="margin:0 0 6px;display:flex;justify-content:space-between;align-items:center">
+        <span>🏥 วิเคราะห์สุขภาพร้าน <span style="font-size:11px;color:#9ca3af;font-weight:500">(P&L Health Check)</span></span>
+        <span id="plHealthScore" style="font-size:14px;padding:4px 12px;border-radius:999px;background:#dcfce7;color:#16a34a;font-weight:800">— /100</span>
+      </h2>
+      <div id="plHealthBody" style="font-size:13px"></div>
+    </div>
+
+  </div><!-- /plSection -->
+
   <!-- 🍽 Shop dashboard (default — original content) -->
   <div id="shopDashboard">
 
@@ -817,38 +856,7 @@
     </div>
   </div>
 
-  <!-- 💰💸📈 P&L summary — Revenue − Expense = Profit/Loss -->
-  <div class="card" id="plCard" style="border:2px solid #1652F0;background:linear-gradient(135deg,#fff,#ebf0ff);margin-bottom:12px;cursor:pointer" onclick="drillDown('pl')">
-    <h2 style="margin:0 0 10px;display:flex;justify-content:space-between;align-items:center">
-      <span>📈 กำไร / ขาดทุน <span style="font-size:11px;color:#9ca3af;font-weight:500">(แตะดูรายละเอียด)</span></span>
-    </h2>
-    <div style="display:grid;grid-template-columns:1fr auto 1fr auto 1fr;gap:8px;align-items:center;text-align:center">
-      <div>
-        <div style="font-size:11px;color:#5c6982">รายรับ</div>
-        <div id="plRevenue" style="font-size:20px;font-weight:900;color:#16a34a">฿0</div>
-      </div>
-      <div style="font-size:24px;color:#9ca3af">−</div>
-      <div>
-        <div style="font-size:11px;color:#5c6982">ค่าใช้จ่าย</div>
-        <div id="plExpense" style="font-size:20px;font-weight:900;color:#dc2626">฿0</div>
-      </div>
-      <div style="font-size:24px;color:#9ca3af">=</div>
-      <div>
-        <div style="font-size:11px;color:#5c6982">กำไร</div>
-        <div id="plProfit" style="font-size:24px;font-weight:900;color:#1652F0">฿0</div>
-      </div>
-    </div>
-    <div id="plMargin" style="text-align:center;font-size:12px;color:#5c6982;margin-top:8px"></div>
-  </div>
-
-  <!-- 🏥 P&L Health Check — restaurant-industry-standard analysis + recommendations -->
-  <div class="card" id="plHealthCard" style="margin-bottom:12px;border:2px solid #16a34a">
-    <h2 style="margin:0 0 6px;display:flex;justify-content:space-between;align-items:center">
-      <span>🏥 วิเคราะห์สุขภาพร้าน <span style="font-size:11px;color:#9ca3af;font-weight:500">(P&L Health Check)</span></span>
-      <span id="plHealthScore" style="font-size:14px;padding:4px 12px;border-radius:999px;background:#dcfce7;color:#16a34a;font-weight:800">— /100</span>
-    </h2>
-    <div id="plHealthBody" style="font-size:13px"></div>
-  </div>
+  <!-- (P&L cards moved to #plSection above — always visible across modes) -->
 
   <!-- 💰 Cash vs Transfer + Discount summary (per-period) -->
   <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr)">
@@ -3138,6 +3146,12 @@ function renderReports() {
   const plExpenseEl = document.getElementById('plExpense');
   const plProfitEl = document.getElementById('plProfit');
   const plMarginEl = document.getElementById('plMargin');
+  const plScopeLabel = document.getElementById('plScopeLabel');
+  if (plScopeLabel) {
+    plScopeLabel.textContent = reportMode === 'combined'
+      ? '(ทั้งร้าน · แตะดูรายละเอียด)'
+      : '(เฉพาะร้าน · แตะดูรายละเอียด)';
+  }
   if (plRevenueEl) plRevenueEl.textContent = fmtBaht(revenue);
   if (plExpenseEl) plExpenseEl.textContent = fmtBaht(plExp);
   if (plProfitEl) {
@@ -3948,6 +3962,38 @@ function renderFactoryReports() {
   // Period totals
   const periodTotal = inRange.reduce((s,o) => s + (o.total || 0), 0);
   const periodDishes = inRange.reduce((s,o) => s + (o.boxes || 0), 0);
+
+  // 📈 P&L for factory mode — factory revenue vs all expenses
+  const plExpData = (typeof computeExpenseInRange === 'function')
+    ? computeExpenseInRange(start, end || new Date())
+    : { total: 0, byCat: {} };
+  const plExp = plExpData.total;
+  const plProfit = periodTotal - plExp;
+  const plRevEl = document.getElementById('plRevenue');
+  const plExpEl = document.getElementById('plExpense');
+  const plProfEl = document.getElementById('plProfit');
+  const plMargEl = document.getElementById('plMargin');
+  const plScopeEl = document.getElementById('plScopeLabel');
+  if (plScopeEl) plScopeEl.textContent = '(เฉพาะโรงงาน · แตะดูรายละเอียด)';
+  if (plRevEl) plRevEl.textContent = fmtBaht(periodTotal);
+  if (plExpEl) plExpEl.textContent = fmtBaht(plExp);
+  if (plProfEl) {
+    plProfEl.textContent = (plProfit >= 0 ? '' : '−') + fmtBaht(Math.abs(plProfit));
+    plProfEl.style.color = plProfit >= 0 ? '#1652F0' : '#dc2626';
+  }
+  if (plMargEl) {
+    if (periodTotal > 0) {
+      const margin = (plProfit / periodTotal) * 100;
+      const emoji = margin >= 30 ? '✅' : margin >= 10 ? '⚠️' : margin >= 0 ? '😐' : '🔴';
+      plMargEl.textContent = `${emoji} margin ${margin.toFixed(1)}% · เฉพาะโรงงาน · ${label}`;
+    } else {
+      plMargEl.textContent = `— ยังไม่มียอดขายโรงงานในงวดนี้ —`;
+    }
+  }
+  // 🏥 Health check uses factory revenue
+  if (typeof renderPLHealth === 'function') {
+    try { renderPLHealth(periodTotal, plExp, plProfit, plExpData.byCat, label); } catch (e) {}
+  }
   inRange.forEach(o => {
     if (o.factory_paid) { paidAmt += o.total || 0; paidCount++; }
   });
