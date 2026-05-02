@@ -2018,7 +2018,7 @@ async function buildStickerESCPOS(order, item, unitIdx, totalUnits, globalIdx, g
     for (let i = start; i < end; i++) out.push(raster[i]);
     row += rowsThis;
   }
-  out.push(0x0A);                     // 1 feed for cut clearance (was 4 = wasted 9mm)
+  out.push(0x0A, 0x0A, 0x0A, 0x0A);   // 4 feeds for cutter clearance (~15mm)
   out.push(0x1D, 0x56, 0x00);         // GS V 0 — full cut
   return new Uint8Array(out);
 }
@@ -2070,7 +2070,7 @@ async function buildBitmapESCPOS(order) {
   }
 
   // Feed paper to align with cutter, then auto-cut
-  out.push(0x0A);                  // 1 feed line — minimum for cutter clearance (was 4 = wasted 9mm/cut)
+  out.push(0x0A, 0x0A, 0x0A, 0x0A); // 4 feeds — cutter blade is ~15mm above print head
   // GS V 1 — partial cut (stays attached at center)
   // GS V 0 — full cut (fully separates)
   // Many compact thermal printers (Xprinter N160II) only have GS V m
@@ -2229,25 +2229,35 @@ if (localStorage.getItem('btPrinterName')) {
 // Auto-print new orders (toggle in admin settings)
 const printedOrderIds = new Set();
 function maybeAutoPrint(orders) {
-  if (localStorage.getItem('autoPrint') !== '1') return;
+  const enabled = localStorage.getItem('autoPrint') === '1';
+  if (!enabled) return;
   orders.forEach(o => {
-    if (o.status === 'pending' && !printedOrderIds.has(o.id)) {
+    if (o.status !== 'pending') return;
+    if (printedOrderIds.has(o.id)) return;
+
+    // First snapshot: orders that already existed when we connected.
+    // Mark them seen but DON'T print — they were already handled.
+    if (firstOrderLoad) {
       printedOrderIds.add(o.id);
-      if (firstOrderLoad) return;
-      // Silent auto-print: ONLY use BT, never pop dialogs / never fallback to browser
-      const bt = getBTPrinter();
-      if (!bt) {
-        console.warn('[AutoPrint] BT not connected, skipping order', o.id);
-        toast('🔇 Auto-print: BT ไม่เชื่อมต่อ — ข้าม', true);
-        return;
-      }
-      const orderSrc = cloudOrders !== null ? cloudOrders : (loadDB().pendingOrders || []);
-      const fullOrder = orderSrc.find(x => x.id === o.id);
-      if (!fullOrder) return;
-      printViaBluetooth(fullOrder, bt).then(r => {
-        if (r.success) toast('🖨️ Auto-print → ' + (fullOrder.customer_name || ''));
-      });
+      return;
     }
+
+    // Genuinely new pending order arrived after we were connected.
+    printedOrderIds.add(o.id);
+    const bt = getBTPrinter();
+    if (!bt) {
+      console.warn('[AutoPrint] BT not connected, skipping order', o.id);
+      toast('🔇 Auto-print: BT ไม่เชื่อมต่อ — ข้าม', true);
+      return;
+    }
+    const orderSrc = cloudOrders !== null ? cloudOrders : (loadDB().pendingOrders || []);
+    const fullOrder = orderSrc.find(x => x.id === o.id);
+    if (!fullOrder) return;
+    console.log('[AutoPrint] firing for', fullOrder.id, fullOrder.customer_name);
+    printViaBluetooth(fullOrder, bt).then(r => {
+      if (r.success) toast('🖨️ Auto-print → ' + (fullOrder.customer_name || ''));
+      else toast('⚠️ Auto-print ล้มเหลว: ' + (r.error || 'unknown'), true);
+    });
   });
 }
 let firstOrderLoad = true;
