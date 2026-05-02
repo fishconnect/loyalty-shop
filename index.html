@@ -4005,7 +4005,7 @@ function renderInvoiceWeekly(orders, dateRangeLabel) {
     bodyRows += `
       <tr>
         <td style="padding:10px 8px;border:1px solid #d1d5db;font-size:13px;white-space:nowrap">${formatThaiDate(new Date(dateKey))}</td>
-        <td style="padding:10px 8px;border:1px solid #d1d5db;font-size:14px;font-weight:700">${INVOICE_WEEKLY_LABEL} <span style="color:#9ca3af;font-size:11px;font-weight:500">(${d.orders} ออเดอร์)</span></td>
+        <td style="padding:10px 8px;border:1px solid #d1d5db;font-size:14px;font-weight:700">${INVOICE_WEEKLY_LABEL}</td>
         <td style="padding:10px 8px;border:1px solid #d1d5db;text-align:right;font-weight:700">${d.count}</td>
         <td style="padding:10px 8px;border:1px solid #d1d5db;text-align:right;font-weight:700;color:#1652F0">${fmtBaht(d.total)}</td>
       </tr>`;
@@ -4027,7 +4027,7 @@ function renderInvoiceWeekly(orders, dateRangeLabel) {
       <tbody>${bodyRows}</tbody>
       <tfoot>
         <tr style="background:#0a1530;color:#fff">
-          <td colspan="2" style="padding:12px 8px;border:1px solid #0a1530;text-align:right;font-weight:800;font-size:14px">รวมทั้งสิ้น (${grandOrders} ออเดอร์)</td>
+          <td colspan="2" style="padding:12px 8px;border:1px solid #0a1530;text-align:right;font-weight:800;font-size:14px">รวมทั้งสิ้น</td>
           <td style="padding:12px 8px;border:1px solid #0a1530;text-align:right;font-weight:900;font-size:14px">${grandCount}</td>
           <td style="padding:12px 8px;border:1px solid #0a1530;text-align:right;font-weight:900;font-size:16px">${fmtBaht(grandTotal)}</td>
         </tr>
