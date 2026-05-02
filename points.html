@@ -225,6 +225,9 @@ function renderLookup(errMsg) {
       ${errMsg ? `<div class="err-bar">${errMsg}</div>` : ''}
       <input type="tel" id="phoneInput" placeholder="0812345678" inputmode="numeric" autofocus>
       <button onclick="doLookup()">ดูแต้ม</button>
+      <div style="background:#fef3c7;border:1.5px solid #f59e0b;color:#78350f;padding:10px 12px;border-radius:10px;font-size:12px;margin-top:14px;line-height:1.5;text-align:left">
+        🔒 <b>ความปลอดภัย:</b> ถ้าใส่เบอร์บัญชีของคนอื่น (ไม่ใช่ของท่าน) ระบบจะขอ <b>ยืนยันด้วยวันเกิด</b> ของบัญชีนั้นก่อนเข้าใช้งาน
+      </div>
       <a href="menu.html" style="display:inline-block;margin-top:14px;color:#5c6982;font-size:13px;text-decoration:none">← กลับหน้าเมนู</a>
     </div>
   `;
@@ -539,7 +542,7 @@ function renderCustomer(customer, allOrders) {
     <div class="actions">
       <a href="menu.html?phone=${phone}" class="btn btn-primary">🍽️ สั่งอาหารเพิ่ม</a>
       <button onclick="saveMyLink()" class="btn btn-ghost" style="background:#fef3c7;color:#92400e;border:1.5px solid #fbbf24">📤 บันทึก/แชร์ลิงก์ของฉัน</button>
-      <a href="javascript:logout()" class="btn btn-ghost">เปลี่ยนเบอร์</a>
+      <a href="javascript:logout()" class="btn btn-ghost">🚪 ออกจากระบบ (เปลี่ยนเบอร์)</a>
     </div>
     <div id="shareStatus" style="font-size:12px;color:#5c6982;text-align:center;margin-top:6px"></div>
     <div style="text-align:center;margin-top:14px;font-size:11px;color:#9ca3af">
@@ -1009,7 +1012,10 @@ function setShareStatus(msg, color) {
 }
 
 function logout() {
+  if (!confirm('🚪 ออกจากระบบ?\n\n• ครั้งหน้าจะต้องกรอกเบอร์ใหม่\n• ถ้าใส่เบอร์บัญชีคนอื่น → ต้องยืนยันด้วยวันเกิดของบัญชีนั้น')) return;
   localStorage.removeItem('lastCustomerPhone');
+  // Note: deviceId is intentionally NOT cleared — that would let the user
+  // bypass the device verification gate by simply logging out and back in.
   location.href = 'points.html';
 }
 
