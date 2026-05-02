@@ -676,11 +676,28 @@
 
   <!-- Date range filter -->
   <div class="card" style="padding:12px;margin-bottom:12px">
-    <div style="display:flex;gap:6px;flex-wrap:wrap">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
       <button class="range-btn active" data-range="today" onclick="setRange('today')">วันนี้</button>
       <button class="range-btn" data-range="7d" onclick="setRange('7d')">7 วัน</button>
       <button class="range-btn" data-range="30d" onclick="setRange('30d')">30 วัน</button>
+      <button class="range-btn" data-range="month" onclick="setRange('month')">เดือนนี้</button>
       <button class="range-btn" data-range="all" onclick="setRange('all')">ทั้งหมด</button>
+      <button class="range-btn" data-range="custom" onclick="toggleCustomRange()">📅 เลือกเอง</button>
+    </div>
+    <!-- Custom date range picker (collapsed by default) -->
+    <div id="customRangeBox" style="display:none;background:#f7f8fb;padding:10px;border-radius:10px;border:1.5px solid #d1ddff">
+      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end">
+        <div>
+          <label style="font-size:12px;font-weight:600;margin-bottom:4px">📅 จากวันที่</label>
+          <input type="date" id="customRangeFrom" style="width:100%">
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;margin-bottom:4px">📅 ถึงวันที่</label>
+          <input type="date" id="customRangeTo" style="width:100%">
+        </div>
+        <button class="btn-primary" onclick="applyCustomRange()" style="padding:10px 16px;white-space:nowrap">🔄 ดูผล</button>
+      </div>
+      <div id="customRangeStatus" style="font-size:11px;color:#5c6982;margin-top:6px"></div>
     </div>
   </div>
 
@@ -2813,25 +2830,78 @@ function setReportMode(mode) {
   renderReports();
 }
 
+// Custom range state — only used when currentRange === 'custom'
+let customRange = { from: null, to: null };
+
 function setRange(r) {
   currentRange = r;
   document.querySelectorAll('.range-btn').forEach(b => b.classList.toggle('active', b.dataset.range === r));
+  // Hide custom-range box unless explicitly toggled open
+  if (r !== 'custom') document.getElementById('customRangeBox').style.display = 'none';
   renderReports();
+}
+
+function toggleCustomRange() {
+  const box = document.getElementById('customRangeBox');
+  const showing = box.style.display !== 'none';
+  if (showing) {
+    box.style.display = 'none';
+    return;
+  }
+  box.style.display = 'block';
+  // Pre-fill with last 7 days as default
+  const today = new Date();
+  const fmt = _localDateKey;
+  const fromEl = document.getElementById('customRangeFrom');
+  const toEl = document.getElementById('customRangeTo');
+  if (!fromEl.value) {
+    const s = new Date(today); s.setDate(s.getDate() - 6);
+    fromEl.value = fmt(s);
+  }
+  if (!toEl.value) toEl.value = fmt(today);
+  document.querySelectorAll('.range-btn').forEach(b => b.classList.toggle('active', b.dataset.range === 'custom'));
+}
+
+function applyCustomRange() {
+  const fromStr = document.getElementById('customRangeFrom').value;
+  const toStr = document.getElementById('customRangeTo').value;
+  if (!fromStr || !toStr) return toast('⚠️ เลือกทั้ง 2 วันที่', true);
+  const from = new Date(fromStr); from.setHours(0,0,0,0);
+  const to = new Date(toStr); to.setHours(23,59,59,999);
+  if (from > to) return toast('⚠️ วันที่เริ่มต้องอยู่ก่อนวันที่จบ', true);
+  customRange.from = from;
+  customRange.to = to;
+  const dayDiff = Math.round((to.getTime() - from.getTime()) / 86400000) + 1;
+  document.getElementById('customRangeStatus').innerHTML =
+    `✅ <b>${formatThaiDate(from)} ถึง ${formatThaiDate(to)}</b> (${dayDiff} วัน)`;
+  setRange('custom');
 }
 
 function rangeBounds(range) {
   const now = new Date();
   const today = startOfDay(new Date(now));
-  if (range === 'today') return { start: today, label: 'วันนี้' };
+  if (range === 'today') return { start: today, end: now, label: 'วันนี้' };
   if (range === '7d') {
     const s = startOfDay(new Date(now)); s.setDate(s.getDate() - 6);
-    return { start: s, label: '7 วันล่าสุด' };
+    return { start: s, end: now, label: '7 วันล่าสุด' };
   }
   if (range === '30d') {
     const s = startOfDay(new Date(now)); s.setDate(s.getDate() - 29);
-    return { start: s, label: '30 วันล่าสุด' };
+    return { start: s, end: now, label: '30 วันล่าสุด' };
   }
-  return { start: new Date(0), label: 'ทั้งหมด' };
+  if (range === 'month') {
+    const s = new Date(today.getFullYear(), today.getMonth(), 1);
+    return { start: s, end: now, label: today.toLocaleDateString('th-TH', {month:'long',year:'numeric'}) };
+  }
+  if (range === 'custom' && customRange.from && customRange.to) {
+    const dayDiff = Math.round((customRange.to.getTime() - customRange.from.getTime()) / 86400000) + 1;
+    const sameDay = customRange.from.toDateString() === customRange.to.toDateString();
+    const label = sameDay
+      ? formatThaiDate(customRange.from)
+      : `${formatThaiDate(customRange.from)} - ${formatThaiDate(customRange.to)} (${dayDiff} วัน)`;
+    return { start: customRange.from, end: customRange.to, label };
+  }
+  return { start: new Date(0), end: now, label: 'ทั้งหมด' };
 }
 
 // Cache for drill-down (populated by renderReports)
@@ -2846,7 +2916,8 @@ function renderReports() {
 
   const price = db.settings.pricePerBox || 50;
   const customers = Object.values(db.customers);
-  const { start, label } = rangeBounds(currentRange);
+  const { start, end, label } = rangeBounds(currentRange);
+  const endMs = end ? end.getTime() : Date.now();
 
   // Source of truth: completed orders from pendingOrders (cloud-synced) + legacy db.orders
   // ⛔ EXCLUDE factory orders — they have their own dashboard (credit, not paid revenue)
@@ -2863,7 +2934,10 @@ function renderReports() {
     )).map(o => ({ ...o, _useDate: o.completed_at || o.date })))
   ];
 
-  const inRange = allCompleted.filter(o => new Date(o._useDate) >= start);
+  const inRange = allCompleted.filter(o => {
+    const t = new Date(o._useDate).getTime();
+    return t >= start.getTime() && t <= endMs;
+  });
   const previousRange = (() => {
     if (currentRange === 'today') {
       const y = startOfDay(new Date()); y.setDate(y.getDate() - 1);
@@ -3037,7 +3111,7 @@ function renderReports() {
   // Use the SAME period as the dashboard range. Allocate rolling/recurring
   // expenses across days they apply to so daily P&L is realistic.
   const plExp = (typeof computeExpenseInRange === 'function')
-    ? computeExpenseInRange(start, new Date()).total
+    ? computeExpenseInRange(start, end || new Date()).total
     : 0;
   const plProfit = revenue - plExp;
   const plRevenueEl = document.getElementById('plRevenue');
@@ -3667,7 +3741,8 @@ function isFactoryOrder(o) {
 }
 
 function renderFactoryReports() {
-  const { start, label } = rangeBounds(currentRange);
+  const { start, end, label } = rangeBounds(currentRange);
+  const endMs = end ? end.getTime() : Date.now();
 
   // All factory orders that have been completed (status done/delivered)
   const allFact = [
@@ -3681,7 +3756,10 @@ function renderFactoryReports() {
     )).map(o => ({ ...o, _useDate: o.completed_at || o.date })))
   ];
 
-  const inRange = allFact.filter(o => new Date(o._useDate) >= start);
+  const inRange = allFact.filter(o => {
+    const t = new Date(o._useDate).getTime();
+    return t >= start.getTime() && t <= endMs;
+  });
   const now = Date.now();
   const dueMs = FACTORY_CREDIT_DAYS * 86400000;
 
