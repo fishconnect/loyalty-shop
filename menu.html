@@ -1486,9 +1486,15 @@ function renderInfoBanner() {
 
 // Tap behavior on the bottom info banner:
 //   - Known customer → go to my points + order history page
+//   - Rejected PDPA  → re-open the consent banner first (signup needs consent)
 //   - New visitor    → open the signup modal
 function onInfoBannerClick() {
   if (isShopMode || isFactoryMode) return;
+  if (typeof isPdpaRejected === 'function' && isPdpaRejected()) {
+    const b = document.getElementById('pdpaBanner');
+    if (b) { b.style.display = 'block'; toast('⚠️ กรุณายอมรับความยินยอม PDPA ก่อนสมัครสมาชิก'); }
+    return;
+  }
   if (lastPhone) {
     location.href = `points.html?phone=${encodeURIComponent(lastPhone)}`;
   } else {
@@ -3207,6 +3213,12 @@ function maybeShowPdpaBanner() {
   if (b) b.style.display = 'block';
 }
 
+// Helper to detect "rejected" state across the app
+function isPdpaRejected() {
+  const c = getPdpaConsent();
+  return c && c.version === PDPA_VERSION && c.accepted === false;
+}
+
 async function acceptPdpa(accepted) {
   const consent = {
     version: PDPA_VERSION,
@@ -3236,9 +3248,87 @@ async function acceptPdpa(accepted) {
       });
     } catch (e) { console.warn('consent log failed', e); }
   });
-  toast(accepted ? '✓ ขอบคุณที่ยอมรับเงื่อนไข' : '⚠️ คุณปฏิเสธ — บางฟีเจอร์อาจใช้งานไม่ได้');
+  if (accepted) {
+    toast('✅ ขอบคุณ — สมาชิก & สะสมแต้มใช้งานได้ครบ');
+    // Hide the floating reopener if it was visible
+    document.getElementById('pdpaReopen')?.remove();
+    refreshPdpaUiGates();
+  } else {
+    showPdpaRejectModal();
+    refreshPdpaUiGates();
+  }
 }
+
+// 📢 Modal explaining what changes when user rejects PDPA — clarity per PDPA spec
+function showPdpaRejectModal() {
+  let m = document.getElementById('pdpaRejectModal');
+  if (!m) {
+    m = document.createElement('div');
+    m.id = 'pdpaRejectModal';
+    m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px)';
+    m.onclick = (e) => { if (e.target === m) m.remove(); };
+    document.body.appendChild(m);
+  }
+  m.innerHTML = `
+    <div style="background:#fff;width:100%;max-width:440px;border-radius:20px;padding:24px;font-family:inherit;box-shadow:0 20px 60px rgba(0,0,0,.4)">
+      <div style="text-align:center;font-size:48px;margin-bottom:8px">🔒</div>
+      <h2 style="font-size:18px;font-weight:900;color:#0a1530;text-align:center;margin-bottom:14px">คุณเลือกปฏิเสธความยินยอม</h2>
+      <div style="background:#dcfce7;border:1.5px solid #16a34a;color:#166534;padding:12px;border-radius:10px;margin-bottom:10px;font-size:13.5px;line-height:1.6">
+        <b>✅ ยังใช้งานได้ตามปกติ</b><br>
+        • ดูเมนู · เพิ่มในตะกร้า · สั่งซื้อ<br>
+        • รับอาหารที่ร้าน หรือ จัดส่ง<br>
+        • โทรสั่งโดยตรงที่ <a href="tel:0619623696" style="color:#166534;font-weight:800">061-962-3696</a>
+      </div>
+      <div style="background:#fee2e2;border:1.5px solid #dc2626;color:#991b1b;padding:12px;border-radius:10px;margin-bottom:14px;font-size:13.5px;line-height:1.6">
+        <b>⚠️ ไม่สามารถใช้บริการเหล่านี้</b><br>
+        • 🎁 สมัครสมาชิก / สะสมแต้ม<br>
+        • 📍 บันทึกที่อยู่ไว้สั่งซ้ำ<br>
+        • 📷 รูปโปรไฟล์<br>
+        • 🎂 รางวัลในวันเกิด<br>
+        • 📞 ระบบจะไม่จดจำเบอร์ของคุณ
+      </div>
+      <div style="font-size:12px;color:#5c6982;text-align:center;margin-bottom:14px;line-height:1.6">
+        💡 เปลี่ยนใจได้ทุกเมื่อ — กดปุ่ม "🔒 ตั้งค่าความเป็นส่วนตัว" ที่มุมล่างของหน้าจอ
+      </div>
+      <div style="display:flex;gap:8px">
+        <button onclick="document.getElementById('pdpaRejectModal').remove();acceptPdpa(true)" style="flex:1;padding:13px;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border:none;border-radius:10px;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit">✅ เปลี่ยนใจ — ยอมรับ</button>
+        <button onclick="document.getElementById('pdpaRejectModal').remove()" style="padding:13px 18px;background:#f7f8fb;color:#6b7280;border:1.5px solid #e5e7eb;border-radius:10px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">เข้าใจแล้ว</button>
+      </div>
+    </div>
+  `;
+}
+
+// 🔧 When the user is in "rejected" state, gate optional features.
+// Essential features (ordering food) still work — fulfilling a contract
+// doesn't require consent under PDPA.
+function refreshPdpaUiGates() {
+  const rejected = isPdpaRejected();
+  // 1. Floating reopener — small button at bottom-left when rejected
+  let btn = document.getElementById('pdpaReopen');
+  if (rejected) {
+    if (!btn) {
+      btn = document.createElement('button');
+      btn.id = 'pdpaReopen';
+      btn.onclick = () => {
+        const b = document.getElementById('pdpaBanner');
+        if (b) b.style.display = 'block';
+      };
+      btn.innerHTML = '🔒 ตั้งค่าความเป็นส่วนตัว';
+      btn.style.cssText = 'position:fixed;bottom:14px;left:14px;z-index:80;background:#0a1530;color:#fff;border:1.5px solid #fbbf24;padding:8px 12px;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;box-shadow:0 4px 12px rgba(0,0,0,.3)';
+      document.body.appendChild(btn);
+    }
+  } else if (btn) {
+    btn.remove();
+  }
+  // 2. Hide the bottom info-banner CTA (signup) when rejected — nudges
+  // user to either accept or use guest ordering. Doesn't block ordering.
+  const banner = document.getElementById('infoBanner');
+  if (banner) banner.style.opacity = rejected ? '.55' : '';
+}
+
 window.acceptPdpa = acceptPdpa;
+window.isPdpaRejected = isPdpaRejected;
+window.refreshPdpaUiGates = refreshPdpaUiGates;
 window.PDPA_VERSION = PDPA_VERSION;
 
 // ============ Init ============
@@ -3251,6 +3341,7 @@ renderInfoBanner();
 initReturningCustomer();
 handleReorderUrlParam();   // ?reorder=<orderId> — load past order into cart, open cart for editing
 maybeShowPdpaBanner();     // 🔒 show PDPA cookie consent on first visit (or after policy update)
+refreshPdpaUiGates();      // 🔒 if previously rejected, show floating "เปลี่ยนการตั้งค่า" button
 
 // Always subscribe to orders for popular-section computation (even for new
 // visitors with no lastPhone) — initReturningCustomer skips if no phone.

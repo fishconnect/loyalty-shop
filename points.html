@@ -1040,6 +1040,9 @@ function maybeShowPdpaBanner() {
   const b = document.getElementById('pdpaBanner');
   if (b) b.style.display = 'block';
 }
+function isPdpaRejected() {
+  try { const c = JSON.parse(localStorage.getItem('pdpa_consent') || 'null'); return c && c.version === PDPA_VERSION && c.accepted === false; } catch (e) { return false; }
+}
 async function acceptPdpa(accepted) {
   const consent = { version: PDPA_VERSION, accepted: !!accepted, accepted_at: new Date().toISOString(), user_agent: navigator.userAgent, language: navigator.language };
   localStorage.setItem('pdpa_consent', JSON.stringify(consent));
@@ -1053,9 +1056,30 @@ async function acceptPdpa(accepted) {
       });
     } catch (e) {}
   });
+  if (accepted) document.getElementById('pdpaReopen')?.remove();
+  else showRejectInfoPoints();
+  refreshPdpaReopener();
+}
+function showRejectInfoPoints() {
+  alert('🔒 คุณเลือกปฏิเสธความยินยอม PDPA\n\n✅ ยังดูข้อมูลของคุณได้ตามปกติ\n⚠️ แต่จะไม่สามารถ:\n  • เพิ่มที่อยู่ใหม่ / แก้ไขโปรไฟล์ / อัพรูป\n\n💡 เปลี่ยนใจได้ทุกเมื่อ — กดปุ่ม "🔒 ตั้งค่าความเป็นส่วนตัว" มุมล่างซ้ายของหน้าจอ');
+}
+function refreshPdpaReopener() {
+  let btn = document.getElementById('pdpaReopen');
+  if (isPdpaRejected()) {
+    if (!btn) {
+      btn = document.createElement('button');
+      btn.id = 'pdpaReopen';
+      btn.onclick = () => { document.getElementById('pdpaBanner').style.display = 'block'; };
+      btn.innerHTML = '🔒 ตั้งค่าความเป็นส่วนตัว';
+      btn.style.cssText = 'position:fixed;bottom:14px;left:14px;z-index:80;background:#0a1530;color:#fff;border:1.5px solid #fbbf24;padding:8px 12px;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;box-shadow:0 4px 12px rgba(0,0,0,.3)';
+      document.body.appendChild(btn);
+    }
+  } else if (btn) { btn.remove(); }
 }
 window.acceptPdpa = acceptPdpa;
-window.addEventListener('load', () => setTimeout(maybeShowPdpaBanner, 800));
+window.isPdpaRejected = isPdpaRejected;
+window.refreshPdpaReopener = refreshPdpaReopener;
+window.addEventListener('load', () => setTimeout(() => { maybeShowPdpaBanner(); refreshPdpaReopener(); }, 800));
 </script>
 
 <!-- 🔒 PDPA cookie/consent banner -->
