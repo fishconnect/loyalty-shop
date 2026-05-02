@@ -3113,6 +3113,22 @@ function renderUserWidget(customer, pendingOrder, recentDoneOrder) {
 //   - Direct call from anywhere
 // Looks for the order in 4 places: cloud snapshot, local pendingOrders,
 // local orders[], and finally a getDoc fallback (TODO).
+// Convert an order item's flat options array (saved by submitOrder as
+// [{group:'เนื้อ', choice:'ไก่', price:0}, ...]) BACK into the cart's
+// object-keyed-by-group-index shape ({0:['ไก่'], 1:['ไม่เผ็ด']}).
+// This is the format that openCustomize / renderCartLines / submitOrder expect.
+function orderOptionsToCartShape(orderOptions, mainItem) {
+  const out = {};
+  if (!Array.isArray(orderOptions) || !mainItem?.optionGroups) return out;
+  orderOptions.forEach(o => {
+    const gi = mainItem.optionGroups.findIndex(g => g.label === o.group);
+    if (gi < 0) return;
+    if (!out[gi]) out[gi] = [];
+    out[gi].push(o.choice);
+  });
+  return out;
+}
+
 function reorderFromOrder(orderId) {
   if (!orderId) return false;
   let order = null;
@@ -3128,31 +3144,64 @@ function reorderFromOrder(orderId) {
   baseItems.forEach(it => {
     const found = findItem(it.id);
     if (!found) { missing++; return; }     // item removed from menu
+    const main = found.item;
     cart.push({
       cartId: 'c' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
       mainId: it.id,
       qty: it.qty || 1,
-      options: it.options ? JSON.parse(JSON.stringify(it.options)) : [],
-      note: it.note || ''
+      // 🔧 Convert flat order options → cart's keyed-by-group-index shape
+      options: orderOptionsToCartShape(it.options, main),
+      note: it.note || '',
     });
     added++;
   });
   if (!added) { toast('⚠️ เมนูเดิมไม่มีในร้านแล้ว — กรุณาเลือกใหม่', true); return false; }
   saveCart();
+
+  // 🚚 Restore delivery preferences from the past order.
+  // Address + GPS pin + pickup-vs-delivery — everything pre-filled so the
+  // customer literally just needs to confirm.
+  if (order.order_type === 'delivery') {
+    orderType = 'delivery';
+    if (order.delivery_location) {
+      deliveryLocation = { ...order.delivery_location };
+    }
+  } else {
+    orderType = 'pickup';
+  }
+
   renderMenu();
   renderCartLines();
   updateCartBar();
+
   // Auto-open cart so customer sees what was added + can edit.
-  // Belt-and-suspenders: also force-add the .show class directly, in case
-  // openCart() was called too early and the modal element wasn't ready.
+  // After opening, hydrate the delivery fields (they only exist in the cart
+  // modal DOM, so we must do this after openCart paints them).
   const openIt = () => {
     if (typeof openCart === 'function') openCart();
     document.getElementById('modalCart')?.classList.add('show');
+    if (typeof setOrderType === 'function') setOrderType(orderType);
+    // applyOrderType is called immediately (skips delivery warning) so chips update
+    if (typeof applyOrderType === 'function') applyOrderType(orderType);
+    // Fill delivery address textarea if applicable
+    if (orderType === 'delivery' && order.delivery_address) {
+      const ta = document.getElementById('deliveryAddress');
+      if (ta) ta.value = order.delivery_address;
+      const status = document.getElementById('deliveryLocationStatus');
+      if (status && order.delivery_location) {
+        status.innerHTML = `✅ ใช้ตำแหน่งจากออเดอร์เดิม · <a href="https://maps.google.com/?q=${order.delivery_location.lat},${order.delivery_location.lng}" target="_blank" style="color:#1652F0;text-decoration:underline">ดูบน Google Maps</a>`;
+      }
+    }
   };
   openIt();
   setTimeout(openIt, 250);     // second pass after page settles
-  const note = missing ? ` (${missing} เมนูไม่มีในร้านแล้ว)` : '';
-  toast(`✓ พร้อมสั่งแล้ว — ${added} รายการ · กด "เพิ่มเมนูอื่น" เพื่อสั่งเพิ่ม${note}`);
+  setTimeout(openIt, 600);     // third pass for slow in-app browsers
+
+  const parts = [`✓ พร้อมสั่งแล้ว — ${added} รายการ`];
+  if (order.order_type === 'delivery' && order.delivery_address) parts.push('🚚 ที่อยู่จัดส่งเดิม');
+  else if (order.order_type === 'pickup') parts.push('🏪 รับที่ร้าน');
+  if (missing) parts.push(`(${missing} เมนูไม่มีในร้านแล้ว)`);
+  toast(parts.join(' · '));
   return true;
 }
 // Backward-compat alias (still called from old reorder card if any)
