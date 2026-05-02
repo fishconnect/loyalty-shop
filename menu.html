@@ -1286,6 +1286,27 @@ function onMenuSearch() {
 
 // ============ Hero / Promo / Popular renderers ============
 
+// 📥 SMART QR save — Web Share on mobile (lands in Photos), download on desktop
+window._saveQRSmart = async function(qrSrc, amount) {
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  if (isMobile && navigator.canShare) {
+    try {
+      const r = await fetch(qrSrc);
+      const blob = await r.blob();
+      const file = new File([blob], `payment-qr-${amount}.jpg`, { type: blob.type || 'image/jpeg' });
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: `QR ชำระเงิน ฿${amount}`,
+          text: 'กด "Save to Photos" เพื่อบันทึกลงรูปภาพ',
+        });
+        return;
+      }
+    } catch (e) { if (e.name === 'AbortError') return; }
+  }
+  await window._dlPayQR(qrSrc, amount);
+};
+
 // 📥 Save QR image (works for data: URLs + file URLs · iOS Safari fallback)
 window._dlPayQR = async function(qrSrc, amount) {
   try {
@@ -3271,8 +3292,8 @@ async function submitOrder() {
         <img src="${qrSrc}" alt="QR" style="max-width:160px;width:100%;margin-top:8px;border-radius:10px;background:#fff;padding:6px" onerror="this.style.display='none'">
         <div style="font-size:11px;opacity:.85;margin-top:6px;line-height:1.4">📱 PromptPay · สแกนเพื่อชำระ${orderType==='delivery'?' หรือ COD':' หรือจ่ายตอนรับของ'}</div>
         <div style="display:flex;gap:6px;margin-top:10px">
-          <button onclick="event.stopPropagation();window._dlPayQR('${qrSrc}', ${finalTotal})" style="flex:1;padding:8px;background:#fff;color:#16a34a;border:none;border-radius:8px;font-weight:800;font-size:12px;cursor:pointer;font-family:inherit">📥 บันทึก QR</button>
-          <button onclick="event.stopPropagation();window._sharePayQR('${qrSrc}', ${finalTotal})" style="flex:1;padding:8px;background:rgba(255,255,255,.2);color:#fff;border:1.5px solid rgba(255,255,255,.4);border-radius:8px;font-weight:800;font-size:12px;cursor:pointer;font-family:inherit">📤 แชร์</button>
+          <button onclick="event.stopPropagation();window._saveQRSmart('${qrSrc}', ${finalTotal})" style="flex:1;padding:9px;background:#fff;color:#16a34a;border:none;border-radius:8px;font-weight:800;font-size:12px;cursor:pointer;font-family:inherit">📥 บันทึกในรูปภาพ</button>
+          <button onclick="event.stopPropagation();window._sharePayQR('${qrSrc}', ${finalTotal})" style="flex:1;padding:9px;background:rgba(255,255,255,.2);color:#fff;border:1.5px solid rgba(255,255,255,.4);border-radius:8px;font-weight:800;font-size:12px;cursor:pointer;font-family:inherit">📤 แชร์</button>
         </div>
       </div>
       <div style="font-size:11px;opacity:.7;margin-top:14px">⏳ กำลังพาคุณไปหน้าสถานะ + แจ้งเตือน...</div>

@@ -338,15 +338,53 @@ function renderPaymentSection(order) {
         📱 PromptPay · สแกนเพื่อชำระ ฿${order.total}<br>
         หลังโอน → โทรแจ้ง <a href="tel:0619623696" style="color:#1652F0;font-weight:700">061-962-3696</a>
       </div>
-      <!-- 📥 Save / share buttons — work on iOS + Android + desktop -->
+      <!-- 📥 Save QR — smart handler picks the right method per platform:
+           iOS/Android → Web Share (lands in Photos via "Save to Photos"),
+           Desktop → direct download to Downloads folder. -->
       <div style="display:flex;gap:8px;margin-top:10px;justify-content:center;flex-wrap:wrap">
-        <button onclick="downloadPaymentQR('${qrSrc}', ${order.total})" style="flex:1;min-width:120px;padding:9px 12px;background:#fff;color:#1652F0;border:1.5px solid #1652F0;border-radius:10px;font-weight:700;font-size:12.5px;cursor:pointer;font-family:inherit">📥 บันทึกรูป QR</button>
-        <button onclick="sharePaymentQR('${qrSrc}', ${order.total})" style="flex:1;min-width:120px;padding:9px 12px;background:linear-gradient(135deg,#1652F0,#0738C9);color:#fff;border:none;border-radius:10px;font-weight:700;font-size:12.5px;cursor:pointer;font-family:inherit">📤 แชร์ไปแอพอื่น</button>
+        <button onclick="saveQRtoGallery('${qrSrc}', ${order.total})" style="flex:1;min-width:140px;padding:11px 12px;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border:none;border-radius:10px;font-weight:800;font-size:13px;cursor:pointer;font-family:inherit">📥 บันทึกในรูปภาพ</button>
+        <button onclick="sharePaymentQR('${qrSrc}', ${order.total})" style="flex:1;min-width:120px;padding:11px 12px;background:#fff;color:#1652F0;border:1.5px solid #1652F0;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">📤 แชร์ไป LINE/อื่นๆ</button>
       </div>
-      <div style="font-size:11px;color:#9ca3af;margin-top:6px">💡 บันทึก → ใส่ในแอพธนาคาร → ชำระแบบ "สแกนรูปจากแกลเลอรี่"</div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:6px;line-height:1.5">💡 บันทึกแล้วเปิดแอพธนาคาร → "สแกนรูปจากแกลเลอรี่" → จ่ายได้เลย</div>
     </div>
   `;
 }
+
+// 📥 SMART save — picks the right method per platform so the QR actually
+// lands in the customer's photo library:
+//   ─ iOS Safari: <a download> doesn't work, so we use Web Share API which
+//     opens the iOS share sheet → user picks "Save to Photos" → done.
+//   ─ Android Chrome: same, Web Share lands in Files → "Save Image".
+//   ─ Desktop: Web Share isn't available, so fall through to direct download
+//     into the Downloads folder.
+// If Web Share fails or is cancelled, falls back to download as a safety net.
+async function saveQRtoGallery(qrSrc, amount) {
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  // On mobile: prefer Web Share (lands in Photos)
+  if (isMobile && navigator.canShare) {
+    try {
+      const r = await fetch(qrSrc);
+      const blob = await r.blob();
+      const file = new File([blob], `payment-qr-${amount}.jpg`, { type: blob.type || 'image/jpeg' });
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: `QR ชำระเงิน ฿${amount}`,
+          text: 'กด "Save to Photos" เพื่อบันทึกลงรูปภาพ → เปิดแอพธนาคาร → สแกนจากแกลเลอรี่',
+        });
+        // Subtle hint in case the user wasn't sure what to pick
+        showStatusChangeToast('💡 เลือก "Save to Photos"', 'หรือส่งให้ตัวเองทาง LINE / Note');
+        return;
+      }
+    } catch (e) {
+      if (e.name === 'AbortError') return;   // user cancelled, don't fall through
+      // any other error → fall through to download
+    }
+  }
+  // Desktop or Web Share unavailable: regular download
+  await downloadPaymentQR(qrSrc, amount);
+}
+window.saveQRtoGallery = saveQRtoGallery;
 
 // 📥 Download the QR image — works for both data URLs (cloud-uploaded) and
 // regular file URLs (payment-qr.jpg). Forces a download via a temporary <a>.
