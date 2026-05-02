@@ -1822,6 +1822,14 @@ function getEffectiveRegularMenu() {
   return window.applyMenuConfig ? window.applyMenuConfig(cfg) : (window.MENU || []);
 }
 
+// Image source for admin menu thumbnails: same cascade as customer menu
+//   1. it.image  (admin upload — base64)
+//   2. assets/menu/<id>.jpg  (committed to repo)
+//   3. category emoji  (final fallback shown in onerror)
+function _adminImgSrc(it) {
+  return it.image || `assets/menu/${it.id}.jpg`;
+}
+
 function renderRegularItemList() {
   const wrap = document.getElementById('regularItemList');
   const cats = getEffectiveRegularMenu();
@@ -1830,9 +1838,15 @@ function renderRegularItemList() {
     <div style="margin-bottom:18px">
       <h3 style="font-size:14px;color:#1652F0;font-weight:800;margin-bottom:8px">${cat.emoji} ${cat.cat} <span style="color:#9ca3af;font-size:11px;font-weight:500">(${cat.items.length})</span></h3>
       ${cat.items.map(it => `
-        <div style="background:#fff;border:1.5px solid #e2e7ef;border-radius:12px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:8px;${it.available===false?'opacity:.5':''}">
-          <div style="flex:1">
-            <div style="font-weight:700;font-size:14px">${it.name}${it.available===false?' <span style="color:#dc2626;font-size:11px">(หมด)</span>':''}</div>
+        <div style="background:#fff;border:1.5px solid #e2e7ef;border-radius:12px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:10px;${it.available===false?'opacity:.5':''}">
+          <!-- 📷 Thumbnail — clickable to edit (opens openItemEditor for image management).
+               Uses same fallback cascade as the customer menu. onerror swaps to the
+               category emoji block so missing files don't show a broken-image icon. -->
+          <div onclick="openItemEditor('${it.id}')" style="width:48px;height:48px;flex-shrink:0;border-radius:8px;overflow:hidden;background:linear-gradient(135deg,#ebf0ff,#c5d3ff);display:grid;place-items:center;font-size:22px;cursor:pointer;border:1.5px solid #d1ddff;position:relative" title="แตะเพื่อแก้ไขรูป">
+            <img src="${_adminImgSrc(it)}" style="width:100%;height:100%;object-fit:cover;display:block" onerror="this.style.display='none';this.parentElement.innerHTML='${cat.emoji}'+this.parentElement.innerHTML.replace(/<img[^>]*>/,'');">
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:700;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${it.name}${it.available===false?' <span style="color:#dc2626;font-size:11px">(หมด)</span>':''}</div>
             <div style="font-size:11px;color:#6b7280">ID: ${it.id}${(it.optionGroups && it.optionGroups.length) ? ' · มี '+it.optionGroups.length+' option' : ''}</div>
           </div>
           <input type="number" value="${it.price}" onchange="updateRegularItemPrice('${it.id}', this.value)" style="width:60px;padding:4px 6px;border:1.5px solid #d1d5db;border-radius:6px;font-size:13px;text-align:right;font-weight:700;color:#1652F0">
@@ -5262,11 +5276,12 @@ function renderMenuManager() {
       ${cat.items.map(it => {
         const isCustom = !!menuConfig.custom?.find(c=>c.id===it.id);
         const ov = menuConfig.overrides?.[it.id] || {};
-        const img = it.image || ov.image;
+        // Cascade: admin upload (it.image / ov.image) → filesystem assets/menu/<id>.jpg → emoji
+        const img = it.image || ov.image || `assets/menu/${it.id}.jpg`;
         return `
         <div onclick="openItemEditor('${it.id}')" style="background:#fff;border:1.5px solid ${it.available!==false?'#e2e7ef':'#fee2e2'};border-radius:12px;padding:10px;cursor:pointer;display:flex;gap:10px;align-items:center;position:relative;transition:border-color .15s">
           <div style="width:50px;height:50px;flex-shrink:0;border-radius:8px;overflow:hidden;background:linear-gradient(135deg,#ebf0ff,#c5d3ff);display:grid;place-items:center;font-size:24px">
-            ${img ? `<img src="${img}" style="width:100%;height:100%;object-fit:cover">` : (cat.emoji || '🍽️')}
+            <img src="${img}" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none';this.parentElement.innerHTML='${cat.emoji || '🍽️'}'">
           </div>
           <div style="flex:1;min-width:0">
             <div style="font-weight:700;font-size:13px;color:#0a1530;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${it.name}</div>
