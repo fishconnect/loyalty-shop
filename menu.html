@@ -1817,11 +1817,11 @@ function openCustomize(itemId, cartId) {
   updateCustTotal();
   const custModal = document.getElementById('modalCust');
   custModal.classList.add('show');
-  // 🔧 When opened from inside the cart (✏️ แก้), the customize modal is
-  // declared earlier in DOM than modalCart so it would render BEHIND the
-  // cart — invisible to the user. Bump z-index so it sits on top while open.
+  // 🔧 When opened from inside the cart (✏️ แก้), modalCust must sit above
+  // modalCart. modalCart can have z-index 100 (default openCart) OR 500
+  // (reorder's forceOpenCart). So we bump modalCust to 700 — above both.
   if (cartId) {
-    custModal.style.zIndex = '120';
+    custModal.style.zIndex = '700';
   } else {
     custModal.style.zIndex = '';
   }
