@@ -3802,21 +3802,24 @@ const INVOICE_CATEGORIES = [
       !isDrink && orderHour >= 8 && orderHour < 24 && Number(item.price) === 60 },
 ];
 
-// 🥤 Drink detection — strict whitelist from MENU (no regex false-positives like
-// "ผัดน้ำมันหอย" / "ผัดน้ำพริกเผา" matching just because they contain "น้ำ").
+// 🥤 Drink detection — strict whitelist from MENU + FACTORY_MENU (no regex
+// false-positives like "ผัดน้ำมันหอย" / "ผัดน้ำพริกเผา").
 let _drinkIdCache = null;
 function _isDrinkItem(item) {
   if (!item) return false;
   const id = String(item.id || '');
   // Built-in drink IDs always start with 'dr-'
   if (id.startsWith('dr-')) return true;
-  // Build cache from MENU once — items in any category whose name includes "เครื่องดื่ม"
+  // Build cache once — items in any category whose name contains "เครื่องดื่ม"
+  // across BOTH the regular MENU and FACTORY_MENU
   if (!_drinkIdCache) {
     _drinkIdCache = new Set();
-    (window.MENU || []).forEach(cat => {
-      if (cat.cat && cat.cat.includes('เครื่องดื่ม')) {
-        (cat.items || []).forEach(it => _drinkIdCache.add(it.id));
-      }
+    [window.MENU, window.FACTORY_MENU].forEach(menuList => {
+      (menuList || []).forEach(cat => {
+        if (cat.cat && cat.cat.includes('เครื่องดื่ม')) {
+          (cat.items || []).forEach(it => _drinkIdCache.add(it.id));
+        }
+      });
     });
   }
   return _drinkIdCache.has(id);
