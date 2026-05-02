@@ -687,6 +687,9 @@
 </style>
 
 <div class="page" id="page-reports">
+  <!-- 🌟 Today's Pulse — birthdays + scheduled orders + quick stats at a glance -->
+  <div id="todaysPulseSection" style="margin-bottom:10px"></div>
+
   <!-- 🍽 ร้าน vs 🏭 โรงงาน mode toggle -->
   <div class="card" style="padding:8px;margin-bottom:10px;background:#f7f8fb">
     <div style="display:flex;gap:6px">
@@ -2471,18 +2474,89 @@ function renderCustomerDetail() {
         }
       }).join('');
 
+  // 🎂 Birthday display + days-until counter (helps staff plan outreach)
+  let bdayLine = '';
+  if (c.birth_day && c.birth_month) {
+    const monthsTH = ['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+    const today = new Date();
+    let next = new Date(today.getFullYear(), c.birth_month - 1, c.birth_day);
+    if (next < today) next.setFullYear(today.getFullYear() + 1);
+    const daysToBday = Math.ceil((next - today) / 86400000);
+    const isToday = (today.getDate() === c.birth_day && (today.getMonth() + 1) === c.birth_month);
+    bdayLine = `<div style="opacity:.85;font-size:12px;margin-top:2px">🎂 ${c.birth_day} ${monthsTH[c.birth_month]}${isToday?' <span style="background:#fbbf24;color:#78350f;padding:1px 8px;border-radius:999px;font-weight:800;margin-left:4px">วันนี้!</span>':daysToBday<=14?` <span style="opacity:.85">(อีก ${daysToBday} วัน)</span>`:''}</div>`;
+  }
+
+  // 📷 Avatar — photo if uploaded, else first-letter chip
+  const avatarHtml = c.photo
+    ? `<img src="${c.photo}" onclick="window.open(this.src,'_blank')" style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:3px solid rgba(255,255,255,.95);box-shadow:0 3px 10px rgba(0,0,0,.2);cursor:zoom-in;flex-shrink:0">`
+    : `<div style="width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.18);color:#fff;display:grid;place-items:center;font-size:28px;font-weight:900;border:3px solid rgba(255,255,255,.95);flex-shrink:0">${(c.name||'?').slice(0,1)}</div>`;
+
+  // 📍 Saved delivery addresses
+  const addresses = c.delivery_addresses || [];
+  const addressesHtml = addresses.length ? `
+    <div class="cust-detail-section">
+      <h4>📍 ที่อยู่จัดส่งของลูกค้า <span style="font-size:11px;color:#9ca3af;font-weight:500">(${addresses.length})</span></h4>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        ${addresses.map(a => `
+          <div style="background:${a.isDefault?'#ebf0ff':'#f7f8fb'};border:1.5px solid ${a.isDefault?'#1652F0':'#e5e7eb'};border-radius:10px;padding:10px;display:flex;gap:8px;align-items:flex-start">
+            <div style="font-size:18px;flex-shrink:0">${a.label==='บ้าน'?'🏠':a.label==='ที่ทำงาน'?'💼':'📍'}</div>
+            <div style="flex:1;min-width:0;font-size:12.5px">
+              <div style="font-weight:800;color:#0a1530">${a.label}${a.isDefault?' <span style="background:#1652F0;color:#fff;font-size:9px;padding:1px 6px;border-radius:999px">DEFAULT</span>':''}</div>
+              <div style="color:#5c6982;margin-top:2px;line-height:1.4">${a.address}</div>
+              ${a.location ? `<a href="https://maps.google.com/?q=${a.location.lat},${a.location.lng}" target="_blank" style="color:#16a34a;font-weight:700;font-size:11px;text-decoration:underline">📍 เปิด Google Maps</a>` : ''}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  ` : '';
+
+  // 🔒 PDPA info — devices + consent
+  const linkedDevices = c.linked_devices || [];
+  const pdpaHtml = `
+    <div class="cust-detail-section">
+      <h4>🔒 PDPA & ความปลอดภัย</h4>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;font-size:12px">
+        <div style="padding:8px;background:#f7f8fb;border-radius:8px">
+          <div style="color:#5c6982">📱 อุปกรณ์ที่ผูกไว้</div>
+          <div style="font-weight:800;color:#0a1530;margin-top:2px">${linkedDevices.length} เครื่อง</div>
+        </div>
+        <div style="padding:8px;background:#f7f8fb;border-radius:8px">
+          <div style="color:#5c6982">📋 ยอมรับ PDPA</div>
+          <div style="font-weight:800;color:${c.pdpa_consent?'#16a34a':'#dc2626'};margin-top:2px">${c.pdpa_consent?'✅ ยอมรับแล้ว':'❌ ยังไม่ได้'}</div>
+        </div>
+      </div>
+      ${c.deletion_requested ? `<div style="background:#fee2e2;border:1.5px solid #dc2626;color:#991b1b;padding:8px 10px;border-radius:8px;margin-top:8px;font-size:12px">⚠️ <b>ลูกค้าขอลบบัญชี</b> · ${new Date(c.deletion_requested_at).toLocaleDateString('th-TH')}</div>` : ''}
+    </div>
+  `;
+
+  // Quick actions row (call / email / maps)
+  const quickActionsHtml = `
+    <div style="display:flex;gap:6px;margin-top:10px">
+      ${c.phone ? `<a href="tel:${c.phone}" class="btn-ghost" style="flex:1;text-align:center;background:#16a34a;color:#fff;border:none;padding:10px;border-radius:10px;font-weight:700;font-size:13px;text-decoration:none">📞 โทร</a>` : ''}
+      ${c.phone ? `<a href="https://line.me/R/ti/p/~${c.phone}" target="_blank" class="btn-ghost" style="flex:1;text-align:center;background:#06c755;color:#fff;border:none;padding:10px;border-radius:10px;font-weight:700;font-size:13px;text-decoration:none">💬 LINE</a>` : ''}
+      <button onclick="quickReorderForCustomer('${c.id}')" class="btn-ghost" style="flex:1;background:#1652F0;color:#fff;border:none;padding:10px;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">🛒 สั่งให้</button>
+    </div>
+  `;
+
   box.innerHTML = `
     <!-- Header -->
     <div class="cust-detail-section" style="background:linear-gradient(135deg,#1652F0,#0738C9);color:#fff;border:none">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start">
-        <div>
+      <div style="display:flex;gap:12px;align-items:flex-start">
+        ${avatarHtml}
+        <div style="flex:1;min-width:0">
           <div style="font-size:22px;font-weight:800">${c.name}</div>
           ${c.phone?`<div style="opacity:.85;font-size:13px;margin-top:2px">📞 ${c.phone}</div>`:'<div style="opacity:.7;font-size:12px;margin-top:2px">— ไม่มีเบอร์ —</div>'}
+          ${bdayLine}
           <div style="opacity:.7;font-size:11px;margin-top:6px">เริ่มสมาชิก ${joinedStr}${daysSinceLast!=null?` · ครั้งล่าสุด ${daysSinceLast===0?'วันนี้':daysSinceLast+' วันก่อน'}`:''}</div>
         </div>
-        <button class="btn-ghost" onclick="editCustomer('${c.id}')" style="background:rgba(255,255,255,.18);color:#fff;border-color:rgba(255,255,255,.3);padding:6px 12px;width:auto;font-size:12px">✏️ แก้ไข</button>
+        <button class="btn-ghost" onclick="editCustomer('${c.id}')" style="background:rgba(255,255,255,.18);color:#fff;border-color:rgba(255,255,255,.3);padding:6px 12px;width:auto;font-size:12px;flex-shrink:0">✏️ แก้</button>
       </div>
+      ${quickActionsHtml}
     </div>
+
+    ${addressesHtml}
+    ${pdpaHtml}
 
     <!-- KPI grid -->
     <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:10px">
@@ -3160,7 +3234,193 @@ function rangeBounds(range) {
 // Cache for drill-down (populated by renderReports)
 window._reportCache = null;
 
+// 🌟 Today's Pulse — birthdays + scheduled orders + actionable widgets
+//   Birthday widget: customers whose birthday is TODAY → call to wish + give bonus
+//   Scheduled orders: orders with scheduled_at in the future, grouped by day
+function renderTodaysPulse() {
+  const wrap = document.getElementById('todaysPulseSection');
+  if (!wrap) return;
+  const now = new Date();
+  const today = new Date(now); today.setHours(0,0,0,0);
+
+  // 🎂 Birthdays today
+  const customers = Object.values(db.customers || {});
+  const bdayCusts = customers.filter(c =>
+    c.birth_day === now.getDate() && c.birth_month === (now.getMonth() + 1)
+  );
+
+  // 📅 Scheduled orders (future)
+  const allOrders = db.pendingOrders || [];
+  const scheduled = allOrders
+    .filter(o => o.scheduled_at && o.status !== 'cancelled' && o.status !== 'delivered' && o.status !== 'done')
+    .filter(o => new Date(o.scheduled_at).getTime() >= now.getTime())
+    .sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at));
+
+  // Group scheduled by date bucket
+  const buckets = { today: [], tomorrow: [], later: [] };
+  const tomorrowKey = (() => { const d = new Date(today); d.setDate(d.getDate() + 1); return d.getTime(); })();
+  scheduled.forEach(o => {
+    const t = new Date(o.scheduled_at); t.setHours(0,0,0,0);
+    if (t.getTime() === today.getTime()) buckets.today.push(o);
+    else if (t.getTime() === tomorrowKey) buckets.tomorrow.push(o);
+    else buckets.later.push(o);
+  });
+
+  // Skip rendering if absolutely nothing interesting today
+  if (!bdayCusts.length && !scheduled.length) {
+    wrap.innerHTML = '';
+    return;
+  }
+
+  const monthsTH = ['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+
+  const bdayCard = bdayCusts.length ? `
+    <div class="card" style="background:linear-gradient(135deg,#fff7ed,#fde68a);border:1.5px solid #f59e0b;padding:12px 14px">
+      <h3 style="font-size:14px;color:#78350f;margin:0 0 8px;display:flex;align-items:center;gap:6px">🎂 วันเกิดวันนี้ <span style="background:#f59e0b;color:#fff;padding:2px 8px;border-radius:999px;font-size:11px">${bdayCusts.length} คน</span></h3>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        ${bdayCusts.map(c => `
+          <div style="display:flex;gap:10px;align-items:center;background:#fff;padding:8px 10px;border-radius:10px;border:1px solid #fde68a">
+            ${c.photo
+              ? `<img src="${c.photo}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0">`
+              : `<div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#fff;display:grid;place-items:center;font-size:14px;font-weight:900;flex-shrink:0">${(c.name||'?').slice(0,1)}</div>`}
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:800;font-size:13px;color:#0a1530">${c.name}</div>
+              <div style="font-size:11px;color:#78350f;font-weight:600">📞 ${c.phone || '—'} · ⭐ ${c.points || 0} แต้ม · 🎁 +5 อัตโนมัติเมื่อ login</div>
+            </div>
+            ${c.phone ? `
+              <a href="tel:${c.phone}" style="background:#16a34a;color:#fff;padding:7px 11px;border-radius:8px;font-size:12px;font-weight:800;text-decoration:none;flex-shrink:0">📞 โทร</a>
+              <a href="https://line.me/R/ti/p/~${c.phone}" target="_blank" style="background:#06c755;color:#fff;padding:7px 11px;border-radius:8px;font-size:12px;font-weight:800;text-decoration:none;flex-shrink:0">💬</a>
+            ` : ''}
+          </div>
+        `).join('')}
+      </div>
+      <div style="font-size:11px;color:#78350f;margin-top:8px;line-height:1.5">💡 อวยพร + แจ้งสิทธิประโยชน์ →  ลูกค้าประทับใจ → กลับมาซื้อ</div>
+    </div>
+  ` : '';
+
+  const renderSchedBucket = (label, list, accent) => list.length ? `
+    <div style="margin-bottom:8px">
+      <div style="font-size:12px;font-weight:800;color:${accent};margin-bottom:4px">${label} <span style="opacity:.6;font-weight:600">(${list.length})</span></div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        ${list.slice(0, 8).map(o => {
+          const t = new Date(o.scheduled_at);
+          const timeStr = t.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+          const dateStr = t.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
+          const itemsBrief = (o.items || []).slice(0, 2).map(i => `${i.qty}× ${i.mainName || i.name}`).join(', ');
+          const more = (o.items || []).length > 2 ? ` +${(o.items || []).length - 2}` : '';
+          return `
+            <div style="display:flex;gap:8px;align-items:center;background:#fff;padding:7px 10px;border-radius:8px;border:1px solid #e5e7eb;font-size:12px">
+              <div style="background:${accent};color:#fff;padding:4px 8px;border-radius:6px;font-weight:800;flex-shrink:0;font-size:11.5px">${timeStr}</div>
+              <div style="flex:1;min-width:0">
+                <div style="font-weight:700;color:#0a1530">${o.customer_name} · ฿${o.total}</div>
+                <div style="font-size:11px;color:#5c6982;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${itemsBrief}${more}</div>
+              </div>
+              <div style="font-size:10px;color:#9ca3af;flex-shrink:0">${dateStr}</div>
+            </div>
+          `;
+        }).join('')}
+        ${list.length > 8 ? `<div style="font-size:11px;color:#6b7280;text-align:center;padding:4px">+ อีก ${list.length - 8} ออเดอร์</div>` : ''}
+      </div>
+    </div>
+  ` : '';
+
+  const schedCard = scheduled.length ? `
+    <div class="card" style="background:linear-gradient(135deg,#ebf0ff,#c5d3ff);border:1.5px solid #1652F0;padding:12px 14px">
+      <h3 style="font-size:14px;color:#0738C9;margin:0 0 10px;display:flex;align-items:center;gap:6px">📅 ออเดอร์จองล่วงหน้า <span style="background:#1652F0;color:#fff;padding:2px 8px;border-radius:999px;font-size:11px">${scheduled.length}</span></h3>
+      ${renderSchedBucket('🌅 วันนี้', buckets.today, '#dc2626')}
+      ${renderSchedBucket('🌄 พรุ่งนี้', buckets.tomorrow, '#1652F0')}
+      ${renderSchedBucket('📆 ภายหลัง', buckets.later, '#6b7280')}
+    </div>
+  ` : '';
+
+  wrap.innerHTML = `
+    <div style="display:grid;gap:10px">
+      ${bdayCard}
+      ${schedCard}
+    </div>
+  `;
+}
+
+// 🛒 Quick Reorder for Staff — opens the customer's last order in a modal
+// so staff can re-submit it on behalf of the customer (phone orders).
+function quickReorderForCustomer(customerId) {
+  const cust = (db.customers || {})[customerId];
+  if (!cust) return alert('ไม่พบลูกค้า');
+  const orders = (db.pendingOrders || [])
+    .filter(o => o.customer_id === customerId || o.customer_phone === cust.phone)
+    .filter(o => (o.status === 'done' || o.status === 'delivered') && (o.items || []).length)
+    .sort((a, b) => new Date(b.completed_at || b.date) - new Date(a.completed_at || a.date));
+  if (!orders.length) return alert('ลูกค้านี้ยังไม่มีออเดอร์เก่าให้สั่งซ้ำ');
+
+  const recent = orders.slice(0, 5);
+  let modal = document.getElementById('quickReorderModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'quickReorderModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px)';
+    modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+    document.body.appendChild(modal);
+  }
+  modal.innerHTML = `
+    <div style="background:#fff;width:100%;max-width:540px;border-radius:24px 24px 0 0;max-height:88vh;overflow:hidden;display:flex;flex-direction:column;font-family:inherit;animation:slideUp .25s ease">
+      <style>@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}</style>
+      <div style="padding:16px 20px;background:linear-gradient(135deg,#1652F0,#0738C9);color:#fff;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-weight:900;font-size:16px">🛒 สั่งให้ ${cust.name}</div>
+          <div style="font-size:12px;opacity:.85;margin-top:2px">📞 ${cust.phone || '—'} · เลือกออเดอร์เก่ามาสั่งซ้ำ</div>
+        </div>
+        <button onclick="document.getElementById('quickReorderModal').remove()" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:34px;height:34px;border-radius:50%;font-size:18px;cursor:pointer">×</button>
+      </div>
+      <div style="padding:14px 18px;overflow-y:auto;flex:1">
+        <div style="font-size:12px;color:#5c6982;margin-bottom:10px">📋 ออเดอร์ล่าสุด ${recent.length} รายการ — แตะเพื่อสั่งซ้ำ</div>
+        ${recent.map(o => {
+          const itemsBrief = (o.original_items || o.items || []).filter(i => !i.isReward).slice(0, 3).map(i => `${i.qty}× ${i.mainName || i.name}`).join(', ');
+          const more = (o.items || []).length > 3 ? ` +${(o.items || []).length - 3}` : '';
+          const dateStr = new Date(o.completed_at || o.date).toLocaleDateString('th-TH', { day:'numeric', month:'short' });
+          return `
+            <button onclick="staffReorderSubmit('${o.id}', '${customerId}')" style="display:block;width:100%;text-align:left;padding:12px 14px;background:#fff;border:1.5px solid #d1ddff;border-radius:12px;margin-bottom:8px;cursor:pointer;font-family:inherit;transition:background .15s" onmouseenter="this.style.background='#ebf0ff'" onmouseleave="this.style.background='#fff'">
+              <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;color:#0a1530;font-weight:800">
+                <span>${dateStr}</span>
+                <span>฿${o.total}</span>
+              </div>
+              <div style="font-size:12px;color:#5c6982;margin-top:4px">${itemsBrief}${more}</div>
+              <div style="font-size:11px;color:#16a34a;font-weight:700;margin-top:4px">→ คลิกเพื่อสร้างออเดอร์ใหม่จากเมนูนี้</div>
+            </button>
+          `;
+        }).join('')}
+      </div>
+      <div style="padding:12px 20px;border-top:1px solid #e5e7eb;background:#f7f8fb">
+        <button onclick="document.getElementById('quickReorderModal').remove()" style="display:block;width:100%;padding:11px;background:#f7f8fb;color:#6b7280;border:1.5px solid #e5e7eb;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">ปิด</button>
+      </div>
+    </div>
+  `;
+  modal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+// 🛒 Staff submits a reorder for the customer — opens menu.html in shop-walkin
+// mode with the order pre-loaded via sessionStorage handoff (same mechanism
+// the customer reorder flow uses).
+function staffReorderSubmit(orderId, customerId) {
+  const order = (db.pendingOrders || []).find(o => o.id === orderId);
+  if (!order) return alert('ไม่พบออเดอร์เดิม');
+  try {
+    sessionStorage.setItem('pendingReorder', JSON.stringify({ order, handedOffAt: Date.now() }));
+  } catch (e) {}
+  // Use shop-walkin mode so staff doesn't need to confirm phone
+  const phone = order.customer_phone || customerId;
+  window.open(`menu.html?mode=shop&type=phone&phone=${encodeURIComponent(phone)}&reorder=${encodeURIComponent(orderId)}`, '_blank');
+  document.getElementById('quickReorderModal')?.remove();
+}
+
+window.renderTodaysPulse = renderTodaysPulse;
+window.quickReorderForCustomer = quickReorderForCustomer;
+window.staffReorderSubmit = staffReorderSubmit;
+
 function renderReports() {
+  // 🌟 Today's Pulse — render before mode-specific reports so it always shows
+  try { renderTodaysPulse(); } catch (e) { console.warn('[pulse]', e); }
+
   // 🏭 Factory mode → render the credit-based factory dashboard and bail
   if (reportMode === 'factory') {
     renderFactoryReports();
