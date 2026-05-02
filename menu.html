@@ -2137,28 +2137,17 @@ async function submitOrder() {
     }
   }
 
-  // Sync to cloud — AWAIT to guarantee write before redirect
   // 🔒 Lock the submit button + change text so customer sees the click registered
   const submitBtn = document.getElementById('submitOrderBtn');
   const submitText = document.getElementById('submitOrderText');
   if (submitBtn) submitBtn.disabled = true;
   if (submitText) submitText.textContent = '⏳ กำลังส่งครัว...';
-  toast('⏳ กำลังส่งครัว...');
-  await new Promise(resolve => {
-    whenCloudReady(async () => {
-      try {
-        await window.cloud.saveCustomer(customer);
-        if (referrerCustomer) await window.cloud.saveCustomer(referrerCustomer);
-        await window.cloud.saveOrder(orderObj);
-      } catch (e) { console.warn('cloud sync failed', e); }
-      resolve();
-    });
-    // Failsafe timeout — don't wait forever
-    setTimeout(resolve, 4000);
-  });
 
+  // ⚡ Clear cart + UI IMMEDIATELY (don't wait for cloud sync — order is already
+  // in localStorage). Cloud sync runs in background. This way the cart bar +
+  // badge disappear the instant the user clicks "ยืนยัน" — no refresh needed.
   cart = [];
-  sessionStorage.removeItem('cartV2');
+  sessionStorage.removeItem(_CART_KEY);  // 🔧 use correct key (was hardcoded 'cartV2' — broke factory mode)
   resetCartRewards();
   // Reset delivery state for next order
   orderType = 'pickup';
@@ -2170,28 +2159,44 @@ async function submitOrder() {
   scheduleMode = 'asap'; scheduledAt = null;
   if (typeof setSchedule === 'function') setSchedule('asap');
   if (typeof clearSlip === 'function') clearSlip();
+  // Hide cart bar + close modal + re-render menu (clears qty badges) — do this
+  // BEFORE cloud sync so UI is clean instantly.
+  closeCart();
+  renderMenu();
+  updateCartBar();
+  // Belt-and-suspenders: force-hide the bottom bar in case the .show toggle
+  // doesn't trigger a transition (some browsers can be flaky after a fast
+  // sequence of class changes).
+  const _bar = document.getElementById('cartBar');
+  if (_bar) { _bar.classList.remove('show'); _bar.style.transform = 'translateY(100%)'; }
+
+  toast('⏳ กำลังส่งครัว...');
+
+  // Sync to cloud in BACKGROUND — don't block the user
+  const cloudSync = new Promise(resolve => {
+    whenCloudReady(async () => {
+      try {
+        await window.cloud.saveCustomer(customer);
+        if (referrerCustomer) await window.cloud.saveCustomer(referrerCustomer);
+        await window.cloud.saveOrder(orderObj);
+      } catch (e) { console.warn('cloud sync failed', e); }
+      resolve();
+    });
+    setTimeout(resolve, 4000);  // failsafe timeout
+  });
 
   if (isShopMode) {
-    // Stay on menu, clear form, show toast
+    // Stay on menu, clear form, show toast — wait for sync so toast confirms
     document.getElementById('custPhone').value = '';
     document.getElementById('custFullName').value = '';
     document.getElementById('custFound').innerHTML = '';
-    // Reset submit button so the next walk-in/phone order can submit
     if (submitBtn) submitBtn.disabled = false;
     if (submitText) submitText.textContent = '✅ ยืนยันสั่งอาหาร';
-    closeCart();
-    renderMenu();
-    updateCartBar();
+    await cloudSync;
     toast(`✓ ส่งครัวแล้ว! ${customer.name} · ฿${total}${signupBonusGiven?' · 🎁 +5 แต้มสมัครใหม่!':''}${birthdayBonusGiven?' · 🎂 สุขสันต์วันเกิด +5 แต้ม!':''}${referrerCustomer?' · 🤝 +5 แต้มจากการแนะนำ!':''}`);
   } else {
-    // Customer-side: clear cart UI immediately, show fullscreen confirmation
-    // overlay, then redirect to status page so customer never sees the
-    // half-cleared menu underneath.
-    closeCart();
-    renderMenu();
-    updateCartBar();
-
-    // Fullscreen success overlay (z-index above everything)
+    // Customer-side: show fullscreen confirmation overlay immediately, redirect
+    // to status page after cloud sync completes (status page reads from cloud).
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;inset:0;background:linear-gradient(135deg,#16a34a,#15803d);z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;text-align:center;padding:30px;animation:fadeIn .25s ease';
     overlay.innerHTML = `
@@ -2204,9 +2209,11 @@ async function submitOrder() {
     `;
     document.body.appendChild(overlay);
 
+    // Wait for cloud sync (so status page can read the order), then redirect
+    await cloudSync;
     setTimeout(() => {
       window.location.href = `status.html?order=${orderId}&phone=${phone || customerId}`;
-    }, 1500);
+    }, 800);
   }
 }
 
