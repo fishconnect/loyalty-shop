@@ -1159,7 +1159,20 @@ function renderPromoStrip() {
   wrap.innerHTML = cards.join('');
 }
 
-// Compute top N popular items from cloud orders + local pending
+// 📌 POPULAR_PINS — manual overrides for specific positions in the
+// "เมนูยอดนิยม" grid. null = let auto-compute pick. String = item ID
+// pinned to that exact slot. Pinned IDs are removed from the auto-pool
+// so they don't double-appear.
+//   Slot order: [#1, #2, #3, #4]
+const POPULAR_PINS = [
+  null,        // #1 — auto (best-seller from order history)
+  'rd-003',    // #2 — ผัดพริกแกงราดข้าว (pinned by admin)
+  null,        // #3 — auto
+  'sk-002',    // #4 — สุกี้แห้ง (pinned by admin)
+];
+
+// Compute top N popular items from cloud orders + local pending,
+// then merge with POPULAR_PINS so pinned IDs land in their exact slot.
 let _popularItemIds = [];
 function computePopularItems(maxN) {
   const counts = {};
@@ -1182,11 +1195,26 @@ function computePopularItems(maxN) {
     .sort((a, b) => b[1] - a[1])
     .map(([id]) => id);
   // Filter to items still in EFFECTIVE_MENU and available
-  const valid = ranked.filter(id => {
+  const isValid = id => {
     const f = findItem(id);
     return f && f.item.available !== false && !f.cat?.isAddOn;
-  });
-  return valid.slice(0, maxN);
+  };
+  const pinnedIds = new Set(POPULAR_PINS.filter(Boolean));
+  const autoPool = ranked.filter(id => isValid(id) && !pinnedIds.has(id));
+  const slots = POPULAR_PINS.slice(0, maxN);
+  // If POPULAR_PINS is shorter than maxN, pad with nulls so auto-pool fills the rest
+  while (slots.length < maxN) slots.push(null);
+  // Fill in: pinned slots use their pin (if valid), null slots draw from autoPool
+  let autoCursor = 0;
+  const result = slots.map(slot => {
+    if (slot && isValid(slot)) return slot;
+    while (autoCursor < autoPool.length) {
+      const id = autoPool[autoCursor++];
+      if (id) return id;
+    }
+    return null;
+  }).filter(Boolean);
+  return result;
 }
 
 // Render the ⭐ popular section above main menu
