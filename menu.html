@@ -1558,20 +1558,27 @@ function renderPopularSection() {
   `;
 }
 
-// Render bottom info banner (points balance for known customer, else loyalty teaser)
+// Render bottom info banner (points balance for known customer, else loyalty teaser).
+// 🔒 PDPA: never reveal name + points to a device that hasn't verified for this
+// customer — that would let anyone with a customer's link see their data.
 function renderInfoBanner() {
   const left = document.getElementById('infoBannerLeft');
   const right = document.getElementById('infoBannerRight');
   if (!left || !right) return;
-  // Show customer points if known phone
   let cust = null;
   if (lastPhone) {
     const db = loadDB();
     cust = db.customers[lastPhone];
   }
-  if (cust) {
+  const trusted = cust && (window.isDeviceTrusted ? window.isDeviceTrusted(cust) : false);
+  if (cust && trusted) {
     left.innerHTML = `⭐ <b>${cust.name}</b> · ${cust.points || 0} แต้มสะสม`;
     right.textContent = '🎁 ดูแต้ม + ประวัติ ›';
+  } else if (cust && !trusted) {
+    // Account exists but device isn't trusted — show generic prompt, NOT the
+    // customer's name/points
+    left.innerHTML = `🔒 บัญชีนี้ต้องยืนยันตัวตน`;
+    right.textContent = 'แตะเพื่อยืนยัน ›';
   } else {
     left.innerHTML = `⭐ สมัครฟรี · รับ 5 แต้มสมัครใหม่`;
     right.textContent = 'แตะสมัคร ›';
@@ -1579,7 +1586,9 @@ function renderInfoBanner() {
 }
 
 // Tap behavior on the bottom info banner:
-//   - Known customer → go to my points + order history page
+//   - Known customer + trusted → go to my points + order history page
+//   - Known customer + UNTRUSTED → also go to points.html (which shows the
+//     verify gate; same destination, but the gate enforces the check)
 //   - Rejected PDPA  → re-open the consent banner first (signup needs consent)
 //   - New visitor    → open the signup modal
 function onInfoBannerClick() {
@@ -2689,16 +2698,24 @@ function checkCustomer() {
     if (trusted) {
       found.innerHTML = `<div class="customer-found ok">✅ ลูกค้าเดิม: <b>${c.name}</b> · 🌟 ${pts} แต้ม${extras}</div>`;
     } else {
-      // 🔒 Device not trusted — show warning + hide rewards/profile data
+      // 🔒 Device not trusted — DO NOT reveal name / points / birthday.
+      // The visitor (which might be a stranger with a shared link) only sees
+      // a generic "this account exists" message + verify CTA.
       found.innerHTML = `
         <div class="customer-found ok" style="background:#fef3c7;border:1.5px solid #f59e0b;color:#78350f">
-          ⚠️ บัญชี <b>${c.name}</b> ใช้งานจากอุปกรณ์ใหม่<br>
+          ⚠️ <b>บัญชีนี้ใช้งานจากอุปกรณ์ใหม่</b><br>
           <button onclick="onVerifyDeviceClick('${phone}')" style="margin-top:6px;padding:8px 14px;background:#dc2626;color:#fff;border:none;border-radius:8px;font-weight:800;font-size:12px;cursor:pointer;font-family:inherit">🔒 ยืนยันตัวตนเพื่อใช้แต้ม</button>
-          <div style="font-size:11px;color:#92400e;margin-top:6px">⚠️ ยังสั่งอาหารได้ปกติ แต่ไม่สามารถใช้แต้ม/ดูข้อมูลส่วนตัวได้จนกว่าจะยืนยัน</div>
+          <div style="font-size:11px;color:#92400e;margin-top:6px">⚠️ ยังสั่งอาหารได้ปกติ · ใช้แต้ม/ดูข้อมูลได้หลัง verify</div>
         </div>
       `;
     }
-    nameInput.value = c.name === 'ไม่ระบุชื่อ' ? '' : c.name;
+    // 🔒 Only auto-fill the name input if device is trusted — otherwise we'd
+    // leak the customer's name into the cart form for an unauthenticated visitor.
+    if (trusted) {
+      nameInput.value = c.name === 'ไม่ระบุชื่อ' ? '' : c.name;
+    } else {
+      nameInput.value = '';
+    }
     // Returning customer — hide birth + referral inputs (locked)
     if (birthBox) birthBox.style.display = 'none';
     if (refBox) refBox.style.display = 'none';
@@ -3321,6 +3338,23 @@ function renderUserWidget(customer, pendingOrder, recentDoneOrder) {
   const w = document.getElementById('userWidget');
   if (!w) return;
   if (isShopMode) { w.classList.remove('show'); return; } // Don't show in shop mode
+
+  // 🔒 PDPA: device must be trusted before we reveal name / points / rewards
+  // for an existing customer. Shared links (?phone=X opened on a different
+  // device) hit this — the widget hides until the visitor verifies.
+  const trusted = customer && (window.isDeviceTrusted ? window.isDeviceTrusted(customer) : true);
+  if (customer && !trusted && !pendingOrder && !recentDoneOrder) {
+    w.className = 'user-widget show';
+    w.innerHTML = `
+      <div class="avatar">🔒</div>
+      <div class="info">
+        <div class="name">บัญชีนี้ต้องยืนยันตัวตน</div>
+        <div class="meta">เพื่อความปลอดภัย — แตะเพื่อยืนยัน</div>
+      </div>
+      <a class="action" href="points.html?phone=${customer.phone || customer.id || ''}" style="background:#dc2626">🔒 ยืนยัน →</a>
+    `;
+    return;
+  }
 
   if (pendingOrder) {
     w.className = 'user-widget cooking show';
