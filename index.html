@@ -421,6 +421,7 @@
   <div class="tab" data-page="factory">🏭 โรงงาน</div>
   <div class="tab" data-page="kitchen">👨‍🍳 ครัว <span id="tabBadge" style="display:none;background:#dc2626;color:#fff;border-radius:999px;padding:0 5px;font-size:10px;margin-left:2px"></span></div>
   <div class="tab" data-page="customers">👥 ลูกค้า</div>
+  <div class="tab" data-page="expenses">💰 ค่าใช้จ่าย</div>
   <div class="tab" data-page="reports">📊 รายงาน</div>
   <div class="tab" data-page="settings">⚙️</div>
 </div>
@@ -528,6 +529,142 @@
 </div>
 
 <!-- ========== รายงาน ========== -->
+<!-- ========== 💰 ค่าใช้จ่าย ========== -->
+<div class="page" id="page-expenses">
+  <div class="card" style="background:linear-gradient(135deg,#fee2e2,#fecaca);border:none">
+    <h2 style="color:#dc2626;margin:0 0 6px">💰 ค่าใช้จ่ายรายวัน</h2>
+    <div style="font-size:12px;color:#7f1d1d">
+      บันทึกทุกรายจ่าย → ระบบคำนวณ <b>กำไร/ขาดทุน</b> ใน Dashboard ให้อัตโนมัติ<br>
+      💡 ค่าใช้จ่ายรายเดือน → ระบบหาร 30 วัน · วัตถุดิบที่ใช้หลายวัน → เลือก "ทยอยใช้" + จำนวนวัน
+    </div>
+  </div>
+
+  <button class="btn-primary" onclick="openExpenseEditor()" style="width:100%;padding:14px;font-size:15px;margin-bottom:12px">➕ เพิ่มค่าใช้จ่าย</button>
+
+  <!-- Date range filter -->
+  <div class="card" style="padding:12px;margin-bottom:12px">
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button class="exp-range-btn active" data-range="today" onclick="setExpenseRange('today')">วันนี้</button>
+      <button class="exp-range-btn" data-range="7d" onclick="setExpenseRange('7d')">7 วัน</button>
+      <button class="exp-range-btn" data-range="30d" onclick="setExpenseRange('30d')">30 วัน</button>
+      <button class="exp-range-btn" data-range="month" onclick="setExpenseRange('month')">เดือนนี้</button>
+      <button class="exp-range-btn" data-range="all" onclick="setExpenseRange('all')">ทั้งหมด</button>
+    </div>
+  </div>
+
+  <!-- KPI summary -->
+  <div class="kpi-grid" style="grid-template-columns:repeat(2,1fr)">
+    <div class="kpi-card" style="background:linear-gradient(135deg,#fee2e2,#fecaca)">
+      <div class="kpi-icon">💸</div>
+      <div class="kpi-value" id="kpiExpTotal" style="color:#dc2626">฿0</div>
+      <div class="kpi-label">รวมค่าใช้จ่ายในงวด</div>
+      <div class="kpi-sub" id="kpiExpCount">0 รายการ</div>
+    </div>
+    <div class="kpi-card" style="background:linear-gradient(135deg,#fef3c7,#fde68a)">
+      <div class="kpi-icon">📅</div>
+      <div class="kpi-value" id="kpiExpAvgDay" style="color:#92400e">฿0</div>
+      <div class="kpi-label">เฉลี่ยต่อวัน</div>
+      <div class="kpi-sub" id="kpiExpDays">— วัน</div>
+    </div>
+  </div>
+
+  <!-- Category breakdown -->
+  <div class="card">
+    <h2>📊 แยกตามหมวด</h2>
+    <div id="expenseCatBreakdown"></div>
+  </div>
+
+  <!-- Expense list -->
+  <div class="card">
+    <h2>📋 รายการ <span id="expenseCount" style="font-size:12px;color:#9ca3af;font-weight:500"></span></h2>
+    <div id="expenseList"></div>
+  </div>
+</div>
+
+<!-- 💰 Expense editor modal -->
+<div class="modal-bg" id="expenseEditorModal">
+  <div class="modal" style="max-width:500px;padding:0">
+    <div style="position:sticky;top:0;background:#fff;border-bottom:1px solid #e2e7ef;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;border-radius:14px 14px 0 0;z-index:10">
+      <h2 id="expEditorTitle" style="margin:0;font-size:18px">💰 เพิ่มค่าใช้จ่าย</h2>
+      <button onclick="closeExpenseEditor()" style="background:transparent;border:none;font-size:24px;color:#6b7280;cursor:pointer;padding:0">×</button>
+    </div>
+    <div style="padding:16px 20px">
+      <label>หมวดค่าใช้จ่าย <span style="color:#dc2626">*</span></label>
+      <select id="expCat" onchange="onExpCatChange()" style="width:100%;padding:10px 12px;border:1.5px solid #d1d5db;border-radius:8px;font-size:15px;background:#fff;font-family:inherit;margin-bottom:12px"></select>
+
+      <label>รายการย่อย <span style="font-size:11px;color:#9ca3af;font-weight:500">(เลือกหรือพิมพ์เอง)</span></label>
+      <input type="text" id="expSubcat" list="expSubcatList" placeholder="เช่น หมูสับ 5kg, ค่าไฟเดือน เม.ย." style="margin-bottom:12px">
+      <datalist id="expSubcatList"></datalist>
+
+      <label>จำนวนเงิน (บาท) <span style="color:#dc2626">*</span></label>
+      <input type="number" id="expAmount" min="0" step="0.01" placeholder="500" style="margin-bottom:12px">
+
+      <label>วันที่จ่าย <span style="font-size:11px;color:#9ca3af;font-weight:500">(เลือกย้อนหลังได้)</span></label>
+      <input type="date" id="expDate" style="margin-bottom:12px">
+
+      <label>หมายเหตุ</label>
+      <input type="text" id="expNote" placeholder="(ไม่บังคับ)" style="margin-bottom:12px">
+
+      <!-- Recurring / Rolling -->
+      <div style="background:#f7f8fb;padding:12px;border-radius:10px;margin-bottom:12px">
+        <label style="margin:0 0 8px;font-size:13px">⏱️ ลักษณะค่าใช้จ่าย</label>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <label style="display:flex;align-items:center;gap:8px;font-weight:500;font-size:13px;margin:0">
+            <input type="radio" name="expType" value="one_time" onchange="onExpTypeChange()" checked style="width:18px;height:18px;margin:0">
+            <span>💵 จ่ายครั้งเดียว — บันทึกที่วันที่จ่าย</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-weight:500;font-size:13px;margin:0">
+            <input type="radio" name="expType" value="rolling" onchange="onExpTypeChange()" style="width:18px;height:18px;margin:0">
+            <span>📦 ทยอยใช้หลายวัน — แบ่งเฉลี่ยตามจำนวนวัน</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-weight:500;font-size:13px;margin:0">
+            <input type="radio" name="expType" value="monthly" onchange="onExpTypeChange()" style="width:18px;height:18px;margin:0">
+            <span>📅 รายเดือน — หาร 30 วัน อัตโนมัติ</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-weight:500;font-size:13px;margin:0">
+            <input type="radio" name="expType" value="weekly" onchange="onExpTypeChange()" style="width:18px;height:18px;margin:0">
+            <span>📆 รายสัปดาห์ — หาร 7 วัน อัตโนมัติ</span>
+          </label>
+        </div>
+        <div id="expRollingDaysBox" style="display:none;margin-top:8px">
+          <label style="font-size:13px;margin-bottom:4px">ทยอยใช้กี่วัน?</label>
+          <input type="number" id="expRollingDays" min="1" max="365" value="3" placeholder="3">
+        </div>
+        <div id="expPerDayHint" style="margin-top:8px;font-size:12px;color:#5c6982;background:#fff;padding:8px 10px;border-radius:6px;border:1px dashed #d1d5db"></div>
+      </div>
+    </div>
+    <div style="padding:14px 20px;border-top:1px solid #e2e7ef;background:#f7f8fb;display:flex;flex-direction:column;gap:8px">
+      <button class="btn-primary" onclick="saveExpense()" style="width:100%">💾 บันทึก</button>
+      <button id="expDeleteBtn" class="btn-danger" onclick="deleteExpense()" style="width:100%;display:none">🗑️ ลบรายการนี้</button>
+      <button class="btn-ghost" onclick="closeExpenseEditor()" style="width:100%">ยกเลิก</button>
+    </div>
+  </div>
+</div>
+
+<style>
+.exp-range-btn {
+  padding: 8px 14px; border-radius: 999px;
+  background: #f7f8fb; color: #5c6982; border: 1.5px solid #e2e7ef;
+  font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit;
+}
+.exp-range-btn.active {
+  background: linear-gradient(135deg, #dc2626, #991b1b); color: #fff;
+  border-color: #dc2626; box-shadow: 0 3px 8px rgba(220,38,38,.25);
+}
+.expense-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 0; border-bottom: 1px solid #f3f4f6; cursor: pointer;
+}
+.expense-row:last-child { border-bottom: none; }
+.expense-row:hover { background: #fafbfd; }
+.expense-row .icon { font-size: 28px; flex-shrink: 0; width: 40px; text-align: center; }
+.expense-row .info { flex: 1; min-width: 0; }
+.expense-row .info .top { font-weight: 700; color: #0a1530; font-size: 14px; }
+.expense-row .info .meta { font-size: 11.5px; color: #5c6982; margin-top: 2px; }
+.expense-row .amt { color: #dc2626; font-weight: 800; font-size: 15px; flex-shrink: 0; }
+.expense-row .amt-recurring { font-size: 10px; color: #9ca3af; font-weight: 500; }
+</style>
+
 <div class="page" id="page-reports">
   <!-- 🍽 ร้าน vs 🏭 โรงงาน mode toggle -->
   <div class="card" style="padding:8px;margin-bottom:10px;background:#f7f8fb">
@@ -625,6 +762,30 @@
       <div class="kpi-label">ลูกค้าทั้งหมด</div>
       <div class="kpi-sub" id="kpiNewCustomers">+0 ใหม่</div>
     </div>
+  </div>
+
+  <!-- 💰💸📈 P&L summary — Revenue − Expense = Profit/Loss -->
+  <div class="card" id="plCard" style="border:2px solid #1652F0;background:linear-gradient(135deg,#fff,#ebf0ff);margin-bottom:12px;cursor:pointer" onclick="drillDown('pl')">
+    <h2 style="margin:0 0 10px;display:flex;justify-content:space-between;align-items:center">
+      <span>📈 กำไร / ขาดทุน <span style="font-size:11px;color:#9ca3af;font-weight:500">(แตะดูรายละเอียด)</span></span>
+    </h2>
+    <div style="display:grid;grid-template-columns:1fr auto 1fr auto 1fr;gap:8px;align-items:center;text-align:center">
+      <div>
+        <div style="font-size:11px;color:#5c6982">รายรับ</div>
+        <div id="plRevenue" style="font-size:20px;font-weight:900;color:#16a34a">฿0</div>
+      </div>
+      <div style="font-size:24px;color:#9ca3af">−</div>
+      <div>
+        <div style="font-size:11px;color:#5c6982">ค่าใช้จ่าย</div>
+        <div id="plExpense" style="font-size:20px;font-weight:900;color:#dc2626">฿0</div>
+      </div>
+      <div style="font-size:24px;color:#9ca3af">=</div>
+      <div>
+        <div style="font-size:11px;color:#5c6982">กำไร</div>
+        <div id="plProfit" style="font-size:24px;font-weight:900;color:#1652F0">฿0</div>
+      </div>
+    </div>
+    <div id="plMargin" style="text-align:center;font-size:12px;color:#5c6982;margin-top:8px"></div>
   </div>
 
   <!-- 💰 Cash vs Transfer + Discount summary (per-period) -->
@@ -1231,6 +1392,7 @@ document.querySelectorAll('.tab').forEach(t => {
     t.classList.add('active');
     document.getElementById('page-' + t.dataset.page).classList.add('active');
     if (t.dataset.page === 'customers') renderCustomers();
+    if (t.dataset.page === 'expenses') renderExpensesPage();
     if (t.dataset.page === 'reports') renderReports();
     if (t.dataset.page === 'settings') {
       document.getElementById('settingGoal').value = db.settings.goal;
@@ -2836,6 +2998,35 @@ function renderReports() {
     ? `${orderCount} ออเดอร์`
     : (aovDiff >= 0 ? `↑ ${aovDiff}% vs ก่อนหน้า` : `↓ ${Math.abs(aovDiff)}% vs ก่อนหน้า`);
 
+  // ===== 📈 P&L (Revenue − Expense = Profit) =====
+  // Use the SAME period as the dashboard range. Allocate rolling/recurring
+  // expenses across days they apply to so daily P&L is realistic.
+  const plExp = (typeof computeExpenseInRange === 'function')
+    ? computeExpenseInRange(start, new Date()).total
+    : 0;
+  const plProfit = revenue - plExp;
+  const plRevenueEl = document.getElementById('plRevenue');
+  const plExpenseEl = document.getElementById('plExpense');
+  const plProfitEl = document.getElementById('plProfit');
+  const plMarginEl = document.getElementById('plMargin');
+  if (plRevenueEl) plRevenueEl.textContent = fmtBaht(revenue);
+  if (plExpenseEl) plExpenseEl.textContent = fmtBaht(plExp);
+  if (plProfitEl) {
+    plProfitEl.textContent = (plProfit >= 0 ? '' : '−') + fmtBaht(Math.abs(plProfit));
+    plProfitEl.style.color = plProfit >= 0 ? '#1652F0' : '#dc2626';
+  }
+  if (plMarginEl) {
+    if (revenue > 0) {
+      const margin = (plProfit / revenue) * 100;
+      const emoji = margin >= 30 ? '✅' : margin >= 10 ? '⚠️' : margin >= 0 ? '😐' : '🔴';
+      plMarginEl.textContent = `${emoji} margin ${margin.toFixed(1)}% · ${label}`;
+    } else if (plExp > 0) {
+      plMarginEl.textContent = `🔴 ขาดทุน ${fmtBaht(plExp)} · ${label}`;
+    } else {
+      plMarginEl.textContent = `— ยังไม่มียอดขายและค่าใช้จ่ายในงวดนี้ —`;
+    }
+  }
+
   // ===== Cash / Transfer / Discount totals =====
   let cashAmt = 0, cashCount = 0, transferAmt = 0, transferCount = 0;
   let discountAmt = 0, discountCount = 0;
@@ -3274,6 +3465,55 @@ function drillDown(type, param) {
         return `<div class="order-item" onclick="closeDrill();editOrder('${o.id}')">
           <div style="flex:1"><b>${name}</b> · <span style="color:${isCash?'#16a34a':'#1652F0'};font-weight:700">${fmtBaht(o.total)}</span><div style="font-size:11px;color:#6b7280">${fmtDate(o._useDate)}</div></div></div>`;
       }).join('') || '<div class="empty">— ยังไม่มี —</div>'}
+    `;
+  } else if (type === 'pl') {
+    // P&L drill-down: full breakdown
+    const plRev = cache.revenue;
+    const { total: plExp, byCat, dailyMap } = (typeof computeExpenseInRange === 'function')
+      ? computeExpenseInRange(rangeBounds(cache.range).start, new Date())
+      : { total: 0, byCat: {}, dailyMap: {} };
+    const plProfit = plRev - plExp;
+    const plMargin = plRev > 0 ? (plProfit / plRev) * 100 : 0;
+    const cats = window.EXPENSE_CATEGORIES || [];
+    const catList = cats.map(c => ({...c, amount: byCat[c.id] || 0})).filter(c => c.amount > 0).sort((a,b) => b.amount - a.amount);
+    const maxCat = catList[0]?.amount || 1;
+    title = `📈 กำไร / ขาดทุน ${cache.label}`;
+    content = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+        <div style="padding:12px;background:#dcfce7;border-radius:10px;text-align:center">
+          <div style="font-size:11px;color:#5c6982">รายรับ</div>
+          <div style="font-size:22px;font-weight:900;color:#16a34a">${fmtBaht(plRev)}</div>
+          <div style="font-size:11px;color:#5c6982;margin-top:2px">${cache.orderCount} ออเดอร์</div>
+        </div>
+        <div style="padding:12px;background:#fee2e2;border-radius:10px;text-align:center">
+          <div style="font-size:11px;color:#5c6982">ค่าใช้จ่าย</div>
+          <div style="font-size:22px;font-weight:900;color:#dc2626">${fmtBaht(plExp)}</div>
+          <div style="font-size:11px;color:#5c6982;margin-top:2px">${catList.length} หมวด</div>
+        </div>
+      </div>
+      <div style="padding:14px;background:linear-gradient(135deg,${plProfit >= 0 ? '#ebf0ff,#c5d3ff' : '#fee2e2,#fecaca'});border-radius:12px;text-align:center;margin-bottom:14px">
+        <div style="font-size:12px;color:#5c6982">${plProfit >= 0 ? 'กำไร' : 'ขาดทุน'}</div>
+        <div style="font-size:32px;font-weight:900;color:${plProfit >= 0 ? '#1652F0' : '#dc2626'}">${plProfit >= 0 ? '' : '−'}${fmtBaht(Math.abs(plProfit))}</div>
+        <div style="font-size:13px;color:#5c6982;margin-top:4px">margin ${plMargin.toFixed(1)}%</div>
+      </div>
+      <h4 style="margin:8px 0">📊 ค่าใช้จ่ายแยกหมวด</h4>
+      ${catList.length ? catList.map(c => `
+        <div class="bar-row">
+          <div class="label-row">
+            <span class="name">${c.emoji} ${c.name}</span>
+            <span class="val" style="color:${c.color}">${fmtBaht(c.amount)} <span style="font-size:10px;color:#9ca3af">(${(c.amount/plExp*100).toFixed(0)}%)</span></span>
+          </div>
+          <div class="bar-bg"><div class="bar-fill" style="width:${(c.amount/maxCat)*100}%;background:linear-gradient(90deg,${c.color}80,${c.color})"></div></div>
+        </div>
+      `).join('') : '<div class="empty">— ยังไม่มีค่าใช้จ่าย —</div>'}
+      <div style="margin-top:14px;padding:10px;background:#f7f8fb;border-radius:8px;font-size:12px;color:#5c6982;line-height:1.6">
+        💡 <b>ค่าใช้จ่ายที่คำนวณ:</b><br>
+        • รายเดือน → หาร 30 วัน คิดต่อวัน<br>
+        • รายสัปดาห์ → หาร 7 วัน<br>
+        • ทยอยใช้ X วัน → หาร X วัน<br>
+        • จ่ายครั้งเดียว → คิดที่วันที่ระบุ<br>
+        จัดการรายการได้ที่แท็บ 💰 ค่าใช้จ่าย
+      </div>
     `;
   } else if (type === 'factory_unpaid' || type === 'factory_overdue' || type === 'factory_paid') {
     const fc = window._factoryReportCache || { allFact: [], allUnpaid: [] };
@@ -4728,6 +4968,261 @@ document.getElementById('modal').addEventListener('click', e => {
   if (e.target.id === 'modal') closeModal();
 });
 
+// ============================================
+// 💰 EXPENSES — daily P&L tracking
+// ============================================
+let expenses = JSON.parse(localStorage.getItem('expenses') || '[]');
+let expenseRange = 'today';
+let editingExpenseId = null;
+
+function setExpenseRange(r) {
+  expenseRange = r;
+  document.querySelectorAll('.exp-range-btn').forEach(b => b.classList.toggle('active', b.dataset.range === r));
+  renderExpensesPage();
+}
+
+function expenseRangeBounds(r) {
+  const now = new Date();
+  const today = new Date(now); today.setHours(0,0,0,0);
+  if (r === 'today') return { start: today, end: now, label: 'วันนี้' };
+  if (r === '7d') {
+    const s = new Date(today); s.setDate(s.getDate() - 6);
+    return { start: s, end: now, label: '7 วันล่าสุด' };
+  }
+  if (r === '30d') {
+    const s = new Date(today); s.setDate(s.getDate() - 29);
+    return { start: s, end: now, label: '30 วันล่าสุด' };
+  }
+  if (r === 'month') {
+    const s = new Date(today.getFullYear(), today.getMonth(), 1);
+    return { start: s, end: now, label: today.toLocaleDateString('th-TH', {month:'long',year:'numeric'}) };
+  }
+  return { start: new Date(0), end: now, label: 'ทั้งหมด' };
+}
+
+// Compute total expense allocated to a date range, optionally grouped by category
+function computeExpenseInRange(startDate, endDate) {
+  let total = 0;
+  const byCat = {};
+  const dailyMap = {};
+  (expenses || []).forEach(exp => {
+    const allocations = window.allocateExpenseAcrossDays(exp, startDate, endDate);
+    allocations.forEach(a => {
+      total += a.amount;
+      byCat[exp.category] = (byCat[exp.category] || 0) + a.amount;
+      dailyMap[a.date] = (dailyMap[a.date] || 0) + a.amount;
+    });
+  });
+  return { total, byCat, dailyMap };
+}
+
+function findCategory(catId) {
+  return (window.EXPENSE_CATEGORIES || []).find(c => c.id === catId);
+}
+
+// ========== Render expenses page ==========
+function renderExpensesPage() {
+  const { start, end, label } = expenseRangeBounds(expenseRange);
+  const { total, byCat } = computeExpenseInRange(start, end);
+  const dayCount = Math.max(1, Math.ceil((end - start) / 86400000));
+  const inRangeRaw = (expenses || []).filter(e => {
+    const d = new Date(e.date || e.paid_at);
+    return d >= start && d <= end;
+  });
+
+  document.getElementById('kpiExpTotal').textContent = fmtBaht(total);
+  document.getElementById('kpiExpCount').textContent = `${inRangeRaw.length} รายการ`;
+  document.getElementById('kpiExpAvgDay').textContent = fmtBaht(total / dayCount);
+  document.getElementById('kpiExpDays').textContent = `${dayCount} วัน · ${label}`;
+
+  // Category breakdown
+  const cats = window.EXPENSE_CATEGORIES || [];
+  const catList = cats.map(c => ({ ...c, amount: byCat[c.id] || 0 })).filter(c => c.amount > 0).sort((a,b) => b.amount - a.amount);
+  const catWrap = document.getElementById('expenseCatBreakdown');
+  if (!catList.length) {
+    catWrap.innerHTML = '<div class="empty">— ยังไม่มีค่าใช้จ่ายในงวดนี้ —</div>';
+  } else {
+    const max = catList[0].amount;
+    catWrap.innerHTML = catList.map(c => `
+      <div class="bar-row">
+        <div class="label-row">
+          <span class="name">${c.emoji} ${c.name}</span>
+          <span class="val" style="color:${c.color}">${fmtBaht(c.amount)}</span>
+        </div>
+        <div class="bar-bg"><div class="bar-fill" style="width:${(c.amount/max)*100}%;background:linear-gradient(90deg,${c.color}80,${c.color})"></div></div>
+      </div>
+    `).join('');
+  }
+
+  // Expense list
+  const listWrap = document.getElementById('expenseList');
+  document.getElementById('expenseCount').textContent = `(${inRangeRaw.length} รายการในงวดนี้)`;
+  const list = [...inRangeRaw].sort((a,b) => new Date(b.date || b.paid_at) - new Date(a.date || a.paid_at));
+  if (!list.length) {
+    listWrap.innerHTML = '<div class="empty">— ยังไม่มีค่าใช้จ่าย —</div>';
+    return;
+  }
+  listWrap.innerHTML = list.map(e => {
+    const cat = findCategory(e.category) || { emoji: '📝', name: 'อื่นๆ', color: '#6b7280' };
+    let badge = '';
+    if (e.recurring === 'monthly') badge = ` <span style="background:#ebf0ff;color:#1652F0;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:700">รายเดือน · ${(e.amount/30).toFixed(0)}฿/วัน</span>`;
+    else if (e.recurring === 'weekly') badge = ` <span style="background:#ebf0ff;color:#1652F0;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:700">รายสัปดาห์ · ${(e.amount/7).toFixed(0)}฿/วัน</span>`;
+    else if (e.rolling && e.rolling_days > 1) badge = ` <span style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:700">ทยอย ${e.rolling_days} วัน · ${(e.amount/e.rolling_days).toFixed(0)}฿/วัน</span>`;
+    return `
+      <div class="expense-row" onclick="openExpenseEditor('${e.id}')">
+        <div class="icon">${cat.emoji}</div>
+        <div class="info">
+          <div class="top">${e.subcategory || cat.name}${e.note ? ` · ${e.note}` : ''}</div>
+          <div class="meta">${cat.name} · ${new Date(e.date || e.paid_at).toLocaleDateString('th-TH', {day:'numeric',month:'short',year:'2-digit'})}${badge}</div>
+        </div>
+        <div style="text-align:right">
+          <div class="amt">${fmtBaht(e.amount)}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ========== Expense editor ==========
+function openExpenseEditor(id) {
+  editingExpenseId = id || null;
+  const exp = id ? (expenses || []).find(e => e.id === id) : null;
+  document.getElementById('expEditorTitle').textContent = exp ? '✏️ แก้ไขค่าใช้จ่าย' : '💰 เพิ่มค่าใช้จ่าย';
+
+  // Populate category dropdown
+  const cats = window.EXPENSE_CATEGORIES || [];
+  document.getElementById('expCat').innerHTML = cats.map(c =>
+    `<option value="${c.id}">${c.emoji} ${c.name}</option>`
+  ).join('');
+
+  // Fill values
+  document.getElementById('expCat').value = exp?.category || 'food';
+  document.getElementById('expSubcat').value = exp?.subcategory || '';
+  document.getElementById('expAmount').value = exp?.amount || '';
+  document.getElementById('expDate').value = (exp?.date || exp?.paid_at || new Date().toISOString().slice(0,10));
+  document.getElementById('expNote').value = exp?.note || '';
+
+  // Type radio
+  let type = 'one_time';
+  if (exp?.recurring === 'monthly') type = 'monthly';
+  else if (exp?.recurring === 'weekly') type = 'weekly';
+  else if (exp?.rolling) type = 'rolling';
+  document.querySelectorAll('input[name="expType"]').forEach(r => r.checked = r.value === type);
+  document.getElementById('expRollingDays').value = exp?.rolling_days || 3;
+
+  document.getElementById('expDeleteBtn').style.display = exp ? 'block' : 'none';
+  onExpCatChange();
+  onExpTypeChange();
+  document.getElementById('expenseEditorModal').classList.add('show');
+}
+
+function closeExpenseEditor() {
+  editingExpenseId = null;
+  document.getElementById('expenseEditorModal').classList.remove('show');
+}
+
+function onExpCatChange() {
+  const catId = document.getElementById('expCat').value;
+  const cat = findCategory(catId);
+  const subList = document.getElementById('expSubcatList');
+  if (subList && cat?.subcats) {
+    subList.innerHTML = cat.subcats.map(s => `<option value="${s}">`).join('');
+  }
+  // Suggest default recurring for cats like rent/utilities
+  if (cat?.defaultRecurring && !editingExpenseId) {
+    const r = document.querySelector(`input[name="expType"][value="${cat.defaultRecurring}"]`);
+    if (r) { r.checked = true; onExpTypeChange(); }
+  }
+}
+
+function onExpTypeChange() {
+  const type = document.querySelector('input[name="expType"]:checked')?.value;
+  document.getElementById('expRollingDaysBox').style.display = (type === 'rolling') ? 'block' : 'none';
+  updateExpPerDayHint();
+}
+function updateExpPerDayHint() {
+  const amt = parseFloat(document.getElementById('expAmount').value) || 0;
+  const type = document.querySelector('input[name="expType"]:checked')?.value;
+  const hint = document.getElementById('expPerDayHint');
+  if (!amt) { hint.textContent = '— กรอกจำนวนเงินก่อน เพื่อดู preview —'; return; }
+  let perDay, totalDays, msg;
+  if (type === 'monthly') {
+    perDay = amt / 30; totalDays = 30;
+    msg = `📅 ${fmtBaht(amt)} ÷ 30 วัน = <b style="color:#dc2626">${fmtBaht(perDay)}/วัน</b> นาน 30 วัน`;
+  } else if (type === 'weekly') {
+    perDay = amt / 7; totalDays = 7;
+    msg = `📆 ${fmtBaht(amt)} ÷ 7 วัน = <b style="color:#dc2626">${fmtBaht(perDay)}/วัน</b> นาน 7 วัน`;
+  } else if (type === 'rolling') {
+    const days = parseInt(document.getElementById('expRollingDays').value) || 1;
+    perDay = amt / days; totalDays = days;
+    msg = `📦 ${fmtBaht(amt)} ÷ ${days} วัน = <b style="color:#dc2626">${fmtBaht(perDay)}/วัน</b> นาน ${days} วัน`;
+  } else {
+    msg = `💵 บันทึก <b style="color:#dc2626">${fmtBaht(amt)}</b> ที่วันที่ระบุเท่านั้น`;
+  }
+  hint.innerHTML = msg;
+}
+document.addEventListener('input', e => {
+  if (e.target?.id === 'expAmount' || e.target?.id === 'expRollingDays') updateExpPerDayHint();
+});
+
+async function saveExpense() {
+  const cat = document.getElementById('expCat').value;
+  const sub = document.getElementById('expSubcat').value.trim();
+  const amount = parseFloat(document.getElementById('expAmount').value);
+  const date = document.getElementById('expDate').value;
+  const note = document.getElementById('expNote').value.trim();
+  const type = document.querySelector('input[name="expType"]:checked')?.value || 'one_time';
+
+  if (!amount || amount <= 0) return toast('⚠️ จำนวนเงินไม่ถูกต้อง', true);
+  if (!date) return toast('⚠️ เลือกวันที่', true);
+
+  const exp = {
+    id: editingExpenseId || ('EXP-' + Date.now() + '-' + Math.random().toString(36).slice(2,6)),
+    category: cat,
+    subcategory: sub,
+    amount: amount,
+    date: date,
+    paid_at: date,
+    note: note,
+    recurring: (type === 'monthly' || type === 'weekly') ? type : 'one_time',
+    rolling: type === 'rolling',
+    rolling_days: type === 'rolling' ? (parseInt(document.getElementById('expRollingDays').value) || 1) : 1,
+    created_at: editingExpenseId ? (expenses.find(e => e.id === editingExpenseId)?.created_at || Date.now()) : Date.now()
+  };
+
+  // Save local
+  const idx = expenses.findIndex(e => e.id === exp.id);
+  if (idx >= 0) expenses[idx] = exp;
+  else expenses.push(exp);
+  localStorage.setItem('expenses', JSON.stringify(expenses));
+
+  // Cloud
+  if (window.cloud?.saveExpense) {
+    try { await window.cloud.saveExpense(exp); } catch (e) { console.warn('cloud expense save', e); }
+  }
+
+  toast(`✅ บันทึกแล้ว · ${fmtBaht(amount)}`);
+  closeExpenseEditor();
+  renderExpensesPage();
+  if (typeof renderReports === 'function') try { renderReports(); } catch (e) {}
+}
+
+async function deleteExpense() {
+  if (!editingExpenseId) return;
+  const exp = expenses.find(e => e.id === editingExpenseId);
+  if (!exp) return;
+  if (!confirm(`ลบรายการนี้?\n\n${exp.subcategory || ''} · ${fmtBaht(exp.amount)}`)) return;
+  expenses = expenses.filter(e => e.id !== editingExpenseId);
+  localStorage.setItem('expenses', JSON.stringify(expenses));
+  if (window.cloud?.deleteExpense) {
+    try { await window.cloud.deleteExpense(editingExpenseId); } catch (e) {}
+  }
+  toast('🗑️ ลบแล้ว');
+  closeExpenseEditor();
+  renderExpensesPage();
+  if (typeof renderReports === 'function') try { renderReports(); } catch (e) {}
+}
+
 // ========== Init ==========
 document.getElementById('goalDisplay').textContent = db.settings.goal || 20;
 
@@ -4770,6 +5265,16 @@ whenCloudReady(() => {
         localStorage.setItem('featureFlags', JSON.stringify(flags));
         if (typeof initFeatureFlagsUI === 'function') try { initFeatureFlagsUI(); } catch(e) {}
       }
+    });
+  }
+
+  // 💰 Expenses sync
+  if (window.cloud.onExpenses) {
+    window.cloud.onExpenses(cloudExp => {
+      expenses = cloudExp || [];
+      localStorage.setItem('expenses', JSON.stringify(expenses));
+      if (document.querySelector('[data-page=expenses]')?.classList.contains('active')) renderExpensesPage();
+      if (document.querySelector('[data-page=reports]')?.classList.contains('active')) renderReports();
     });
   }
 

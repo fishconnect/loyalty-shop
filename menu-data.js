@@ -523,6 +523,78 @@ window.countMainDishes = function(items) {
   return count;
 };
 
+// 💰 Expense categories — for ค่าใช้จ่ายรายวัน + P&L dashboard
+window.EXPENSE_CATEGORIES = [
+  { id: 'food',       name: 'ต้นทุนวัตถุดิบ',  emoji: '🥩', color: '#dc2626',
+    subcats: ['ข้าวสาร', 'หมู', 'ไก่', 'เนื้อวัว', 'ปลา', 'อาหารทะเล', 'ผักสด', 'เครื่องปรุง (ซอส/น้ำปลา/น้ำมัน)', 'ไข่', 'น้ำดื่ม/เครื่องดื่ม'] },
+  { id: 'packaging',  name: 'บรรจุภัณฑ์',     emoji: '📦', color: '#f59e0b',
+    subcats: ['กล่องอาหาร', 'ถุงหิ้ว', 'ช้อนส้อม/ตะเกียบ', 'ถุงซอส/ซองพริก', 'แก้ว/ฝา/หลอด'] },
+  { id: 'labor',      name: 'ค่าแรงงาน',      emoji: '👷', color: '#1652F0',
+    subcats: ['พนักงานครัว', 'พนักงานเสิร์ฟ', 'ทำความสะอาด', 'จัดส่ง'] },
+  { id: 'rent',       name: 'ค่าเช่า/สถานที่', emoji: '🏠', color: '#8b5cf6',
+    subcats: ['ค่าเช่าร้าน', 'ค่าส่วนกลาง'],
+    defaultRecurring: 'monthly' },
+  { id: 'utilities',  name: 'สาธารณูปโภค',    emoji: '⚡', color: '#06b6d4',
+    subcats: ['ไฟฟ้า', 'น้ำประปา', 'แก๊สหุงต้ม', 'อินเทอร์เน็ต/โทรศัพท์'],
+    defaultRecurring: 'monthly' },
+  { id: 'equipment',  name: 'อุปกรณ์/ภาชนะ',   emoji: '🍳', color: '#16a34a',
+    subcats: ['หม้อ/กระทะ', 'เตา/ตู้เย็น', 'จานชาม', 'ผ้าเช็ดมือ/ผ้าเช็ดโต๊ะ', 'ถุงขยะ', 'น้ำยาล้างจาน'] },
+  { id: 'marketing',  name: 'โฆษณา/การตลาด',  emoji: '📢', color: '#ec4899',
+    subcats: ['Facebook ads', 'LINE OA', 'พิมพ์โบรชัวร์/ป้าย', 'โปรโมชั่น'] },
+  { id: 'other',      name: 'อื่นๆ',           emoji: '📝', color: '#6b7280',
+    subcats: ['ซ่อมบำรุง', 'เบ็ดเตล็ด'] }
+];
+
+// 💰 Allocate an expense across the day(s) it actually applies to.
+// Returns array of { date: 'YYYY-MM-DD', amount: number } per day.
+//   one_time + rolling=N → split equally across [date, date+1, ..., date+N-1]
+//   monthly              → amount/30 applied per day going forward
+//   weekly               → amount/7 applied per day going forward
+//   one_time (no rolling)→ full amount on the single date
+window.allocateExpenseAcrossDays = function(exp, fromDate, toDate) {
+  if (!exp || !exp.amount) return [];
+  const start = new Date(exp.date || exp.paid_at);
+  if (isNaN(start)) return [];
+  start.setHours(0,0,0,0);
+  const out = [];
+  const fromMs = fromDate ? new Date(fromDate).setHours(0,0,0,0) : 0;
+  const toMs   = toDate   ? new Date(toDate).setHours(23,59,59,999) : Date.now();
+
+  if (exp.recurring === 'monthly') {
+    // amount/30 applied to every day from start (inclusive) until... end of next month
+    const perDay = exp.amount / 30;
+    for (let i = 0; i < 30; i++) {
+      const d = new Date(start.getTime() + i * 86400000);
+      if (d.getTime() >= fromMs && d.getTime() <= toMs) {
+        out.push({ date: d.toISOString().slice(0,10), amount: perDay });
+      }
+    }
+  } else if (exp.recurring === 'weekly') {
+    const perDay = exp.amount / 7;
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(start.getTime() + i * 86400000);
+      if (d.getTime() >= fromMs && d.getTime() <= toMs) {
+        out.push({ date: d.toISOString().slice(0,10), amount: perDay });
+      }
+    }
+  } else if (exp.rolling && exp.rolling_days > 1) {
+    const days = Math.max(1, exp.rolling_days);
+    const perDay = exp.amount / days;
+    for (let i = 0; i < days; i++) {
+      const d = new Date(start.getTime() + i * 86400000);
+      if (d.getTime() >= fromMs && d.getTime() <= toMs) {
+        out.push({ date: d.toISOString().slice(0,10), amount: perDay });
+      }
+    }
+  } else {
+    // One-time, single day
+    if (start.getTime() >= fromMs && start.getTime() <= toMs) {
+      out.push({ date: start.toISOString().slice(0,10), amount: exp.amount });
+    }
+  }
+  return out;
+};
+
 window.STATUSES = {
   pending:    { label: 'รอยืนยัน',     custLabel: 'รอร้านยืนยันรายการ', icon: '⏳', color: '#f59e0b', next: 'confirmed', nextLabel: '✓ ยืนยันรายการ', stage: 1 },
   confirmed:  { label: 'ยืนยันแล้ว',    custLabel: 'ร้านยืนยันแล้ว — เตรียมทำอาหาร', icon: '📋', color: '#1652F0', next: 'cooking', nextLabel: '🔥 เริ่มทำอาหาร', stage: 2 },

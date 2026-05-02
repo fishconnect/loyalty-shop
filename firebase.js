@@ -202,6 +202,24 @@ window.cloud = {
     });
   },
 
+  // 💰 Expenses (food cost, packaging, labor, rent, utilities, etc.)
+  async saveExpense(e) {
+    if (!e?.id) return;
+    try { await setDoc(doc(fdb, 'expenses', String(e.id)), e, { merge: true }); }
+    catch (err) { console.warn('[cloud] saveExpense', err); throw err; }
+  },
+  async deleteExpense(id) {
+    try { await deleteDoc(doc(fdb, 'expenses', String(id))); }
+    catch (err) { console.warn('[cloud] deleteExpense', err); }
+  },
+  onExpenses(cb) {
+    return onSnapshot(collection(fdb, 'expenses'), snap => {
+      const out = [];
+      snap.forEach(d => out.push(d.data()));
+      cb(out);
+    }, err => console.warn('[cloud] onExpenses', err));
+  },
+
   // Chat / contact button config (customer-facing chat link)
   async saveContactConfig(cfg) {
     try { await setDoc(doc(fdb, 'settings', 'contact'), cfg, { merge: true }); }
