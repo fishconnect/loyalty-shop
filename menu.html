@@ -1001,6 +1001,9 @@
 
         <!-- ⏰ เวลาที่ต้องการ (จัดส่งเลย / จองเวลา) -->
         <label style="margin-top:12px;font-weight:800;color:#0a1530">⏰ ต้องการอาหารตอนไหน?</label>
+        <div id="schedClosedHint" style="display:none;background:linear-gradient(135deg,#fef3c7,#fde68a);border:1.5px solid #f59e0b;color:#78350f;padding:9px 12px;border-radius:10px;font-size:12.5px;font-weight:700;margin-top:6px;line-height:1.5">
+          🔴 ร้านปิดอยู่ — เลือก "จองเวลา" เพื่อสั่งล่วงหน้าได้
+        </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;margin-bottom:8px">
           <div id="schedASAP" class="order-type-btn active" onclick="setSchedule('asap')">
             <div style="font-size:24px">🚀</div>
@@ -1010,7 +1013,7 @@
           <div id="schedLater" class="order-type-btn" onclick="setSchedule('later')">
             <div style="font-size:24px">📅</div>
             <div style="font-weight:800;font-size:14px">จองเวลา</div>
-            <div style="font-size:11px;color:#5c6982">วันนี้ในชั่วโมง...</div>
+            <div style="font-size:11px;color:#5c6982">เลือกวันและเวลา</div>
           </div>
         </div>
         <div id="schedSlotBox" style="display:none;margin-bottom:8px">
@@ -1742,6 +1745,15 @@ function openCart() {
   if (typeof checkCustomer === 'function') checkCustomer();
   if (typeof renderRewardsBox === 'function') renderRewardsBox();
   if (typeof renderOrderBreakdown === 'function') renderOrderBreakdown();
+  // 🔴 If shop is closed → auto-switch to "จองเวลา" so the slot dropdown shows
+  // and the customer doesn't need to figure it out themselves.
+  const isShopMode = new URLSearchParams(location.search).get('mode') === 'shop';
+  const closed = !isShopMode && !isFactoryMode && !isShopOpenNow();
+  const hint = document.getElementById('schedClosedHint');
+  if (hint) hint.style.display = closed ? 'block' : 'none';
+  if (closed && scheduleMode === 'asap' && typeof setSchedule === 'function') {
+    setSchedule('later');
+  }
 }
 function closeCart() { document.getElementById('modalCart').classList.remove('show'); }
 
@@ -1941,59 +1953,70 @@ function setSchedule(mode) {
   buildSchedSlots();
 }
 
-// Build available 30-min slots within shop hours, ≥1hr from now, today only
+// Build available 30-min slots within shop hours, ≥1hr from now.
+// Now spans MULTIPLE DAYS — if today's hours are over (or it's Sunday),
+// keep advancing to the next non-closed day until we find one with slots.
+// This is what lets customers place an order at 19:00 for tomorrow 10:00.
 function buildSchedSlots() {
   const sel = document.getElementById('schedSlot');
   const hint = document.getElementById('schedHint');
   if (!sel) return;
   const now = new Date();
-  // Round up to next 30-min slot ≥ now+1hr
-  const earliestMs = now.getTime() + 60 * 60 * 1000;
-  let slot = new Date(earliestMs);
-  // Round up to next 30-min boundary
-  if (slot.getMinutes() <= 30) slot.setMinutes(30, 0, 0);
-  else { slot.setHours(slot.getHours() + 1); slot.setMinutes(0, 0, 0); }
+  // Earliest pickup = now + 1hr, rounded up to the next 30-min boundary
+  let earliest = new Date(now.getTime() + 60 * 60 * 1000);
+  if (earliest.getMinutes() <= 30) earliest.setMinutes(30, 0, 0);
+  else { earliest.setHours(earliest.getHours() + 1); earliest.setMinutes(0, 0, 0); }
 
-  const today = new Date();
-  today.setHours(0,0,0,0);
-  const dayCloseMs = (() => {
-    const d = new Date(today);
-    d.setHours(SHOP_HOURS.closeH, SHOP_HOURS.closeM, 0, 0);
-    return d.getTime();
-  })();
-  const dayOpenMs = (() => {
-    const d = new Date(today);
-    d.setHours(SHOP_HOURS.openH, SHOP_HOURS.openM, 0, 0);
-    return d.getTime();
-  })();
+  const dayLabel = (d) => {
+    const todayKey = (() => { const t = new Date(); t.setHours(0,0,0,0); return t.getTime(); })();
+    const dayKey = (() => { const t = new Date(d); t.setHours(0,0,0,0); return t.getTime(); })();
+    const diffDays = Math.round((dayKey - todayKey) / 86400000);
+    if (diffDays === 0) return '';
+    if (diffDays === 1) return 'พรุ่งนี้ ';
+    const wkd = ['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัส','ศุกร์','เสาร์'][d.getDay()];
+    return `${wkd} ${d.getDate()}/${d.getMonth() + 1} `;
+  };
 
-  // Closed today?
-  if (SHOP_CLOSED_DAYS.includes(now.getDay())) {
-    sel.innerHTML = `<option value="">— วันนี้ร้านปิด (อาทิตย์) —</option>`;
-    hint.textContent = '🔴 วันนี้ร้านปิด ไม่สามารถจองเวลาวันนี้ได้';
-    hint.style.color = '#dc2626';
-    return;
-  }
-  // Past closing time?
-  if (slot.getTime() > dayCloseMs) {
-    sel.innerHTML = `<option value="">— เลยเวลาทำการแล้ว —</option>`;
-    hint.textContent = `🔴 ร้านปิดเวลา ${SHOP_HOURS.closeH}:${String(SHOP_HOURS.closeM).padStart(2,'0')} น. — ลองเลือก "เอาเลย" แทน`;
-    hint.style.color = '#dc2626';
-    return;
-  }
-  // Adjust if before opening
-  if (slot.getTime() < dayOpenMs) slot = new Date(dayOpenMs);
-
-  // Build slot options
   const opts = ['<option value="">— เลือกเวลา —</option>'];
-  while (slot.getTime() <= dayCloseMs) {
-    const t = `${String(slot.getHours()).padStart(2,'0')}:${String(slot.getMinutes()).padStart(2,'0')}`;
-    opts.push(`<option value="${slot.toISOString()}">${t} น.</option>`);
-    slot = new Date(slot.getTime() + 30 * 60 * 1000);
+  let cursor = new Date(earliest);
+  let firstDayUsed = null;
+
+  // Walk forward up to 7 days to find slots
+  for (let dayOffset = 0; dayOffset < 7 && opts.length < 25; dayOffset++) {
+    const day = new Date(now); day.setHours(0,0,0,0); day.setDate(day.getDate() + dayOffset);
+    if (SHOP_CLOSED_DAYS.includes(day.getDay())) continue;
+    const dayOpen = new Date(day); dayOpen.setHours(SHOP_HOURS.openH, SHOP_HOURS.openM, 0, 0);
+    const dayClose = new Date(day); dayClose.setHours(SHOP_HOURS.closeH, SHOP_HOURS.closeM, 0, 0);
+    // First slot of this day = max(earliest, dayOpen)
+    let slot = (cursor.getTime() < dayOpen.getTime()) ? new Date(dayOpen) : new Date(cursor);
+    // Round up to 30-min boundary again (if cursor was mid-hour)
+    if (slot.getMinutes() > 0 && slot.getMinutes() < 30) slot.setMinutes(30, 0, 0);
+    else if (slot.getMinutes() > 30) { slot.setHours(slot.getHours() + 1); slot.setMinutes(0, 0, 0); }
+    if (slot.getTime() > dayClose.getTime()) { cursor = new Date(dayOpen); cursor.setDate(cursor.getDate() + 1); continue; }
+    if (!firstDayUsed) firstDayUsed = day;
+    const prefix = dayLabel(slot);
+    while (slot.getTime() <= dayClose.getTime() && opts.length < 25) {
+      const t = `${String(slot.getHours()).padStart(2,'0')}:${String(slot.getMinutes()).padStart(2,'0')}`;
+      opts.push(`<option value="${slot.toISOString()}">${prefix}${t} น.</option>`);
+      slot = new Date(slot.getTime() + 30 * 60 * 1000);
+    }
+    // Move cursor to the next day's open
+    cursor = new Date(dayOpen); cursor.setDate(cursor.getDate() + 1);
   }
+
+  if (opts.length === 1) {
+    sel.innerHTML = `<option value="">— ไม่มีเวลาว่างใน 7 วันนี้ —</option>`;
+    hint.textContent = '🔴 ไม่พบเวลาว่าง — ลองโทรสอบถามที่ร้าน';
+    hint.style.color = '#dc2626';
+    return;
+  }
+
   sel.innerHTML = opts.join('');
-  hint.textContent = `เลือกเวลาที่อยากให้ครัวเริ่มทำ — ขั้นต่ำ 1 ชม. จากตอนนี้ · ทุก 30 นาที`;
-  hint.style.color = '#5c6982';
+  const isToday = firstDayUsed && (() => { const t = new Date(); t.setHours(0,0,0,0); return t.getTime() === firstDayUsed.getTime(); })();
+  hint.textContent = isToday
+    ? 'เลือกเวลาที่อยากให้ครัวเริ่มทำ — ขั้นต่ำ 1 ชม. จากตอนนี้ · ทุก 30 นาที'
+    : '🕒 ร้านปิดอยู่ — สั่งล่วงหน้าสำหรับวันถัดไปได้ เลือกเวลาด้านบน';
+  hint.style.color = isToday ? '#5c6982' : '#0738C9';
 }
 function onSchedSlotChange() {
   const sel = document.getElementById('schedSlot');
@@ -2257,24 +2280,29 @@ function selectRewardDrink(drinkId) {
 }
 
 // Render order breakdown (subtotal, discount, total)
-// Reflect closed-shop state on the cart submit button (gray + new text).
-// Called whenever the cart is updated and inside renderOrderBreakdown.
+// Reflect closed-shop / scheduled state on the cart submit button.
+// Three states:
+//   1. Open                            → "✅ ยืนยันสั่งอาหาร"
+//   2. Closed + ASAP (no schedule)     → disabled, prompts to use "สั่งล่วงหน้า"
+//   3. Closed + Later + valid time     → enabled, "✅ ยืนยันสั่งล่วงหน้า"
 function refreshSubmitButtonClosedState() {
   const isShopMode = new URLSearchParams(location.search).get('mode') === 'shop';
   if (isShopMode || isFactoryMode) return;
   const btn = document.getElementById('submitOrderBtn');
   const txt = document.getElementById('submitOrderText');
   if (!btn || !txt) return;
-  if (!isShopOpenNow()) {
+  const closed = !isShopOpenNow();
+  const hasValidSchedule = scheduleMode === 'later' && scheduledAt;
+  if (closed && !hasValidSchedule) {
     btn.disabled = true;
     btn.style.opacity = '.55';
     btn.style.cursor = 'not-allowed';
-    txt.textContent = '🔴 ร้านปิดอยู่ — สั่งไม่ได้';
+    txt.textContent = '🔴 ร้านปิด — เลือก "สั่งล่วงหน้า" ↓';
   } else {
     btn.disabled = false;
     btn.style.opacity = '';
     btn.style.cursor = '';
-    if (txt.textContent.includes('ร้านปิด')) txt.textContent = '✅ ยืนยันสั่งอาหาร';
+    txt.textContent = (closed || hasValidSchedule) ? '✅ ยืนยันสั่งล่วงหน้า' : '✅ ยืนยันสั่งอาหาร';
   }
 }
 
@@ -2330,19 +2358,16 @@ async function submitOrder() {
   const name = document.getElementById('custFullName').value.trim();
   if (!cart.length) return toast('⚠️ ตะกร้าว่าง', true);
 
-  // 🔴 Block ordering when shop is closed (admin override OR outside hours).
-  // Walk-in / phone / factory modes can still order — staff is operating those.
+  // 🔴 Shop closed?  Block ASAP orders, but ALLOW pre-orders (sched=later
+  // with a valid scheduled time — buildSchedSlots only offers slots inside
+  // shop hours so the scheduled time is guaranteed valid). Walk-in / phone /
+  // factory bypass entirely (staff operating those).
   if (!isShopMode && !isFactoryMode && !isShopOpenNow()) {
-    const cfg = JSON.parse(localStorage.getItem('menuConfig') || '{}');
-    const adminClosed = cfg.shopOpen === false;
-    const now = new Date();
-    const isSunday = now.getDay() === 0;
-    let why;
-    if (adminClosed)   why = 'ร้านปิดชั่วคราว · กลับมาเปิดเร็วๆ นี้';
-    else if (isSunday) why = 'วันอาทิตย์ร้านหยุด · เปิดอีกครั้งจันทร์ 9.30 น.';
-    else               why = 'นอกเวลาทำการ · เปิดทุกวัน 9.30 - 17.30 น.';
-    toast(`🔴 ร้านปิดอยู่ — ${why}`, true);
-    return;
+    const hasValidSchedule = scheduleMode === 'later' && scheduledAt;
+    if (!hasValidSchedule) {
+      toast('🔴 ร้านปิดอยู่ — เลือก "สั่งล่วงหน้า" แล้วเลือกเวลา เพื่อสั่งได้', true);
+      return;
+    }
   }
 
   // Validation per mode:
