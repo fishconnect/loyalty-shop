@@ -841,6 +841,15 @@
     <div id="plMargin" style="text-align:center;font-size:12px;color:#5c6982;margin-top:8px"></div>
   </div>
 
+  <!-- 🏥 P&L Health Check — restaurant-industry-standard analysis + recommendations -->
+  <div class="card" id="plHealthCard" style="margin-bottom:12px;border:2px solid #16a34a">
+    <h2 style="margin:0 0 6px;display:flex;justify-content:space-between;align-items:center">
+      <span>🏥 วิเคราะห์สุขภาพร้าน <span style="font-size:11px;color:#9ca3af;font-weight:500">(P&L Health Check)</span></span>
+      <span id="plHealthScore" style="font-size:14px;padding:4px 12px;border-radius:999px;background:#dcfce7;color:#16a34a;font-weight:800">— /100</span>
+    </h2>
+    <div id="plHealthBody" style="font-size:13px"></div>
+  </div>
+
   <!-- 💰 Cash vs Transfer + Discount summary (per-period) -->
   <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr)">
     <div class="kpi-card clickable" onclick="drillDown('payment','cash')" style="background:linear-gradient(135deg,#dcfce7,#bbf7d0)">
@@ -3119,9 +3128,11 @@ function renderReports() {
   // ===== 📈 P&L (Revenue − Expense = Profit) =====
   // Use the SAME period as the dashboard range. Allocate rolling/recurring
   // expenses across days they apply to so daily P&L is realistic.
-  const plExp = (typeof computeExpenseInRange === 'function')
-    ? computeExpenseInRange(start, end || new Date()).total
-    : 0;
+  const plExpData = (typeof computeExpenseInRange === 'function')
+    ? computeExpenseInRange(start, end || new Date())
+    : { total: 0, byCat: {} };
+  const plExp = plExpData.total;
+  const plExpByCat = plExpData.byCat;
   const plProfit = revenue - plExp;
   const plRevenueEl = document.getElementById('plRevenue');
   const plExpenseEl = document.getElementById('plExpense');
@@ -3144,6 +3155,9 @@ function renderReports() {
       plMarginEl.textContent = `— ยังไม่มียอดขายและค่าใช้จ่ายในงวดนี้ —`;
     }
   }
+
+  // ===== 🏥 P&L Health Check (restaurant-industry standards) =====
+  renderPLHealth(revenue, plExp, plProfit, plExpByCat, label);
 
   // ===== Cash / Transfer / Discount totals =====
   let cashAmt = 0, cashCount = 0, transferAmt = 0, transferCount = 0;
@@ -3740,6 +3754,159 @@ document.addEventListener('click', (ev) => {
   if (!t) return;
   drillDown('item', t.getAttribute('data-drill-item'));
 });
+
+// ============================================
+// 🏥 P&L Health Check — restaurant-industry standards from Thai F&B literature
+// Benchmarks (% of revenue):
+//   Food cost:      30–35%   (วัตถุดิบ + บรรจุภัณฑ์)
+//   Labor cost:     20–25%   (ค่าแรงพนักงานทุกประเภท)
+//   Rent:           10–20%
+//   Utilities:      3–6%     (ไฟ น้ำ แก๊ส อินเทอร์เน็ต)
+//   Marketing:      2–5%
+//   Net profit:     ≥10%     (ดี · 15%+ ดีมาก · <5% ต้องระวัง)
+// ============================================
+const PL_BENCHMARKS = [
+  { key: 'food',      label: 'ต้นทุนวัตถุดิบ (Food Cost)', emoji: '🥩',
+    catIds: ['food', 'packaging'],
+    min: 30, max: 35, color: '#dc2626',
+    tooHigh: 'ต้นทุนวัตถุดิบสูงเกินมาตรฐาน — ลองเช็คราคาซัพพลายเออร์, ลด waste, หรือทบทวนเมนูที่ต้นทุนสูง',
+    tooLow:  'ต้นทุนวัตถุดิบต่ำมาก — ดี! แต่ระวังคุณภาพ/ปริมาณที่ลูกค้าจะได้รับ' },
+  { key: 'labor',     label: 'ค่าแรงงาน (Labor Cost)',     emoji: '👷',
+    catIds: ['labor'],
+    min: 20, max: 25, color: '#1652F0',
+    tooHigh: 'ค่าแรงสูง — พิจารณา: ลด OT, ปรับเวรตามช่วงเวลาที่ลูกค้าน้อย, หรือ cross-train พนักงาน',
+    tooLow:  'ค่าแรงต่ำดี — แต่ระวังพนักงานทำหนักเกินไปจะลาออก' },
+  { key: 'rent',      label: 'ค่าเช่า (Rent)',              emoji: '🏠',
+    catIds: ['rent'],
+    min: 10, max: 20, color: '#8b5cf6',
+    tooHigh: 'ค่าเช่าสูง — ระยะยาวควรพิจารณาต่อรองสัญญา หรือเพิ่มยอดขายให้ลด ratio',
+    tooLow:  'ค่าเช่าพอดี ✓' },
+  { key: 'utilities', label: 'สาธารณูปโภค (Utilities)',     emoji: '⚡',
+    catIds: ['utilities'],
+    min: 3, max: 6, color: '#06b6d4',
+    tooHigh: 'ค่าน้ำ-ไฟ-แก๊ส สูง — ตรวจสอบเครื่องใช้ไฟฟ้าเก่า, หรี่แอร์ตอนปิด, ปรับเตาแก๊สให้พอดี',
+    tooLow:  'จัดการสาธารณูปโภคได้ดี ✓' },
+  { key: 'marketing', label: 'การตลาด (Marketing)',          emoji: '📢',
+    catIds: ['marketing'],
+    min: 2, max: 5, color: '#ec4899',
+    tooHigh: 'งบโฆษณามาก — ตรวจ ROI ให้แน่ใจว่า Facebook ads/LINE OA คุ้มกับยอดที่เพิ่ม',
+    tooLow:  'ลงทุนการตลาดน้อยเกินไป — ลอง Facebook ads เล็กๆ หรือ LINE broadcast ดูจะช่วยเพิ่มยอด' }
+];
+
+function renderPLHealth(revenue, totalExpense, profit, expByCat, label) {
+  const wrap = document.getElementById('plHealthBody');
+  const scoreEl = document.getElementById('plHealthScore');
+  if (!wrap) return;
+
+  if (revenue === 0) {
+    wrap.innerHTML = `<div class="empty">— ยังไม่มียอดขายในงวดนี้ · เพิ่มข้อมูลก่อนถึงจะวิเคราะห์ได้ —</div>`;
+    if (scoreEl) { scoreEl.textContent = '— /100'; scoreEl.style.background = '#f3f4f6'; scoreEl.style.color = '#6b7280'; }
+    return;
+  }
+
+  // Compute each ratio + verdict
+  const rows = PL_BENCHMARKS.map(b => {
+    const amt = b.catIds.reduce((s, id) => s + (expByCat[id] || 0), 0);
+    const pct = revenue > 0 ? (amt / revenue) * 100 : 0;
+    let verdict, color, emoji, advice;
+    if (amt === 0) {
+      verdict = 'ยังไม่มีข้อมูล'; color = '#9ca3af'; emoji = '⚪';
+      advice = `กรอกค่าใช้จ่ายหมวดนี้ในแท็บ 💰 ค่าใช้จ่าย เพื่อให้วิเคราะห์ได้แม่น`;
+    } else if (pct < b.min) {
+      verdict = 'ต่ำกว่ามาตรฐาน'; color = '#16a34a'; emoji = '✅';
+      advice = b.tooLow;
+    } else if (pct <= b.max) {
+      verdict = 'พอดี (ในเกณฑ์)'; color = '#16a34a'; emoji = '✅';
+      advice = '✓ อยู่ในเกณฑ์ดี — รักษาระดับนี้ไว้';
+    } else if (pct <= b.max * 1.3) {
+      verdict = 'สูงกว่ามาตรฐาน'; color = '#f59e0b'; emoji = '⚠️';
+      advice = b.tooHigh;
+    } else {
+      verdict = 'สูงมาก ⚠️'; color = '#dc2626'; emoji = '🔴';
+      advice = b.tooHigh + ' · เป็นจุดต้องแก้ด่วน!';
+    }
+    return { ...b, amt, pct, verdict, color, emoji, advice };
+  });
+
+  // Net profit margin
+  const netMargin = revenue > 0 ? (profit / revenue) * 100 : 0;
+  let netVerdict, netColor, netEmoji, netAdvice;
+  if (netMargin >= 15) { netVerdict = 'ดีเยี่ยม'; netColor = '#16a34a'; netEmoji = '🟢'; netAdvice = 'กำไรเยี่ยม! รักษาประสิทธิภาพนี้ไว้ และพิจารณา reinvest ขยายร้าน หรือเพิ่มเมนูใหม่'; }
+  else if (netMargin >= 10) { netVerdict = 'ดี (ตามมาตรฐาน)'; netColor = '#16a34a'; netEmoji = '🟢'; netAdvice = 'กำไรอยู่ในเกณฑ์ดีของอุตสาหกรรมร้านอาหาร — เน้นรักษาคุณภาพและความสม่ำเสมอ'; }
+  else if (netMargin >= 5) { netVerdict = 'พอใช้'; netColor = '#f59e0b'; netEmoji = '😐'; netAdvice = 'กำไรน้อยกว่ามาตรฐาน 10% — ดูว่าหมวดไหนต้นทุนสูงผิดปกติแล้วลด หรือเพิ่มราคาเมนูที่ต้นทุนสูง'; }
+  else if (netMargin >= 0) { netVerdict = 'น้อยมาก'; netColor = '#dc2626'; netEmoji = '⚠️'; netAdvice = 'แทบไม่มีกำไร — ต้องลดต้นทุนหรือเพิ่มยอดขาย ภายใน 1-2 เดือน ไม่งั้นเสี่ยงขาดทุน'; }
+  else { netVerdict = 'ขาดทุน 🔴'; netColor = '#dc2626'; netEmoji = '🔴'; netAdvice = 'ขาดทุนแล้ว — ต้องวางแผนเร่งด่วน: ลด cost ที่ไม่จำเป็น, ปรับเมนู, หรือทบทวนกลยุทธ์การตลาด'; }
+
+  // Health score: 0-100 based on how many ratios are in range + net margin
+  let score = 50;
+  rows.forEach(r => {
+    if (r.amt === 0) return;
+    if (r.emoji === '✅') score += 8;
+    else if (r.emoji === '⚠️') score -= 4;
+    else if (r.emoji === '🔴') score -= 12;
+  });
+  score += Math.min(20, Math.max(-30, netMargin * 2));
+  score = Math.max(0, Math.min(100, Math.round(score)));
+
+  // Score badge
+  let scoreColor, scoreBg, scoreLabel;
+  if (score >= 80)      { scoreColor = '#16a34a'; scoreBg = '#dcfce7'; scoreLabel = 'สุขภาพดีมาก'; }
+  else if (score >= 65) { scoreColor = '#16a34a'; scoreBg = '#dcfce7'; scoreLabel = 'สุขภาพดี'; }
+  else if (score >= 45) { scoreColor = '#f59e0b'; scoreBg = '#fef3c7'; scoreLabel = 'พอใช้'; }
+  else if (score >= 25) { scoreColor = '#dc2626'; scoreBg = '#fee2e2'; scoreLabel = 'ต้องระวัง'; }
+  else                  { scoreColor = '#dc2626'; scoreBg = '#fee2e2'; scoreLabel = 'วิกฤต ⚠️'; }
+  if (scoreEl) {
+    scoreEl.textContent = `${score}/100 · ${scoreLabel}`;
+    scoreEl.style.background = scoreBg;
+    scoreEl.style.color = scoreColor;
+  }
+
+  // Build the body: ratio table + recommendations
+  wrap.innerHTML = `
+    <div style="background:#f7f8fb;padding:10px;border-radius:10px;margin-bottom:10px">
+      <div style="font-size:11px;color:#5c6982;margin-bottom:6px">📈 อัตราส่วนสำคัญ (% ของยอดขาย ${fmtBaht(revenue)})</div>
+      ${rows.map(r => `
+        <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #e5e7eb">
+          <div style="font-size:18px;flex-shrink:0">${r.emoji}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:700;color:#0a1530">${r.label}
+              <span style="font-size:11px;color:#9ca3af;font-weight:500">มาตรฐาน ${r.min}-${r.max}%</span>
+            </div>
+            <div style="font-size:11.5px;color:#5c6982;line-height:1.4;margin-top:2px">${r.advice}</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            <div style="font-size:16px;font-weight:900;color:${r.color}">${r.pct.toFixed(1)}%</div>
+            <div style="font-size:10px;color:#9ca3af">${fmtBaht(r.amt)}</div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+
+    <div style="background:linear-gradient(135deg,${netMargin >= 10 ? '#dcfce7,#bbf7d0' : netMargin >= 0 ? '#fef3c7,#fde68a' : '#fee2e2,#fecaca'});padding:12px;border-radius:10px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div style="font-size:13px;font-weight:800;color:#0a1530">${netEmoji} กำไรสุทธิ (Net Profit Margin)</div>
+        <div style="font-size:18px;font-weight:900;color:${netColor}">${netMargin.toFixed(1)}%</div>
+      </div>
+      <div style="font-size:12px;color:#0a1530;margin-bottom:4px"><b>${netVerdict}</b> · มาตรฐานร้านอาหาร ≥ 10%</div>
+      <div style="font-size:12px;color:#374151;line-height:1.5">💡 ${netAdvice}</div>
+    </div>
+
+    <details style="font-size:12px;color:#5c6982">
+      <summary style="cursor:pointer;font-weight:700">📚 มาตรฐานอุตสาหกรรมร้านอาหาร (อ้างอิง)</summary>
+      <div style="background:#f7f8fb;padding:10px;border-radius:8px;margin-top:6px;line-height:1.7">
+        <b>กำไรขั้นต้น</b> = ยอดขาย − ต้นทุนวัตถุดิบ (ควรเป็น 65-70% ของยอดขาย)<br>
+        <b>ต้นทุนวัตถุดิบ + แพ็คเก็จ</b> 30-35%<br>
+        <b>ค่าแรงงาน</b> (รวม OT, สวัสดิการ) 20-25%<br>
+        <b>ค่าเช่าพื้นที่</b> 10-20%<br>
+        <b>สาธารณูปโภค + ดำเนินงาน</b> 3-6%<br>
+        <b>การตลาด</b> 2-5%<br>
+        <b>กำไรสุทธิ</b> ≥ 10% (ดี) · ≥ 15% (ดีมาก)<br>
+        <br>
+        💡 ตรวจ P&L ทุกเดือน · บันทึกค่าใช้จ่ายให้ครบทุกหมวด · วิเคราะห์เมนูที่ทำกำไรสูง vs ขาดทุน
+      </div>
+    </details>
+  `;
+}
 
 // ========== 🏭 Factory Dashboard (credit-based · 15 days) ==========
 const FACTORY_CREDIT_DAYS = 15;
