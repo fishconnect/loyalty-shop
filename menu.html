@@ -1285,6 +1285,42 @@ function onMenuSearch() {
 
 // ============ Hero / Promo / Popular renderers ============
 
+// 📥 Save QR image (works for data: URLs + file URLs · iOS Safari fallback)
+window._dlPayQR = async function(qrSrc, amount) {
+  try {
+    let url = qrSrc, isObj = false;
+    if (!qrSrc.startsWith('data:')) {
+      const r = await fetch(qrSrc);
+      const blob = await r.blob();
+      url = URL.createObjectURL(blob); isObj = true;
+    }
+    const a = document.createElement('a');
+    a.href = url; a.download = `payment-qr-${amount}.jpg`;
+    document.body.appendChild(a); a.click(); a.remove();
+    if (isObj) setTimeout(() => URL.revokeObjectURL(url), 1500);
+    toast('✅ บันทึก QR แล้ว — ใส่แอพธนาคาร สแกนรูปจากแกลเลอรี่');
+  } catch (e) {
+    window.open(qrSrc, '_blank');
+    setTimeout(() => alert('💡 กดค้างที่รูป → "บันทึกในรูปภาพ"'), 300);
+  }
+};
+// 📤 Native share sheet
+window._sharePayQR = async function(qrSrc, amount) {
+  try {
+    if (navigator.canShare) {
+      const r = await fetch(qrSrc);
+      const blob = await r.blob();
+      const file = new File([blob], `payment-qr-${amount}.jpg`, { type: blob.type || 'image/jpeg' });
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: `ชำระเงิน ฿${amount}`, text: `QR ชำระเงิน ฿${amount}` });
+        return;
+      }
+    }
+    if (navigator.share) { await navigator.share({ title: 'ชำระเงิน', url: location.href }); return; }
+    window._dlPayQR(qrSrc, amount);
+  } catch (e) { if (e.name !== 'AbortError') window._dlPayQR(qrSrc, amount); }
+};
+
 // 🔍 Image lightbox — tap a menu item photo to view it full-screen
 function openLightbox(src) {
   if (!src) return;
@@ -3082,11 +3118,15 @@ async function submitOrder() {
       <div style="font-size:72px;animation:popCheck .5s ease-out">✅</div>
       <div style="font-size:24px;font-weight:900;margin-top:10px">ท่านได้กดสั่งอาหารแล้ว</div>
       <div style="font-size:14px;opacity:.9;margin-top:6px">Order #${orderId.slice(-6)} · ${customer.name}</div>
-      <div style="background:rgba(255,255,255,.18);border:1.5px solid rgba(255,255,255,.35);backdrop-filter:blur(6px);border-radius:14px;padding:14px 18px;margin-top:16px;max-width:300px;width:100%">
+      <div style="background:rgba(255,255,255,.18);border:1.5px solid rgba(255,255,255,.35);backdrop-filter:blur(6px);border-radius:14px;padding:14px 18px;margin-top:16px;max-width:320px;width:100%">
         <div style="font-size:11px;opacity:.85;margin-bottom:4px">ยอดที่ต้องชำระ</div>
         <div style="font-size:32px;font-weight:900">฿${finalTotal}</div>
         <img src="${qrSrc}" alt="QR" style="max-width:160px;width:100%;margin-top:8px;border-radius:10px;background:#fff;padding:6px" onerror="this.style.display='none'">
         <div style="font-size:11px;opacity:.85;margin-top:6px;line-height:1.4">📱 PromptPay · สแกนเพื่อชำระ${orderType==='delivery'?' หรือ COD':' หรือจ่ายตอนรับของ'}</div>
+        <div style="display:flex;gap:6px;margin-top:10px">
+          <button onclick="event.stopPropagation();window._dlPayQR('${qrSrc}', ${finalTotal})" style="flex:1;padding:8px;background:#fff;color:#16a34a;border:none;border-radius:8px;font-weight:800;font-size:12px;cursor:pointer;font-family:inherit">📥 บันทึก QR</button>
+          <button onclick="event.stopPropagation();window._sharePayQR('${qrSrc}', ${finalTotal})" style="flex:1;padding:8px;background:rgba(255,255,255,.2);color:#fff;border:1.5px solid rgba(255,255,255,.4);border-radius:8px;font-weight:800;font-size:12px;cursor:pointer;font-family:inherit">📤 แชร์</button>
+        </div>
       </div>
       <div style="font-size:11px;opacity:.7;margin-top:14px">⏳ กำลังพาคุณไปหน้าสถานะ + แจ้งเตือน...</div>
     `;
