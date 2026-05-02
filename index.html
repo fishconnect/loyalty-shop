@@ -467,7 +467,7 @@
     <div id="factoryAddOnList"></div>
   </div>
   <div id="factory-order-view" style="display:none">
-    <iframe id="factoryFrame" src="about:blank" style="border:0;width:100%;height:calc(100vh - 230px);display:block" title="Factory Menu"></iframe>
+    <iframe id="factoryFrame" src="about:blank" style="border:0;width:100%;height:calc(100vh - 130px);display:block" title="Factory Menu"></iframe>
   </div>
 </div>
 
@@ -478,18 +478,21 @@
 
 <!-- ========== บันทึกออเดอร์ ========== -->
 <div class="page active" id="page-order" style="padding:0">
-  <div style="padding:14px 14px 6px;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff">
-    <h2 style="font-size:18px;margin:0">📝 บันทึก Order หน้าร้าน / โทรสั่ง</h2>
-    <div style="font-size:12px;opacity:.9;margin-top:4px">เลือกประเภทลูกค้าด้านล่าง → กดเมนู → ใส่ในตะกร้า → ยืนยันสั่ง</div>
-  </div>
-  <div style="padding:10px 14px;background:#f7f8fb;border-bottom:1px solid #e5e7eb;display:flex;gap:8px;align-items:center">
-    <label style="font-weight:700;color:#0a1530;font-size:13px;flex-shrink:0">ประเภทลูกค้า:</label>
-    <select id="walkinTypeSelect" onchange="reloadWalkinFrame()" style="flex:1;padding:8px;border:1.5px solid #d1d5db;border-radius:8px;font-size:14px;font-weight:700;font-family:inherit;background:#fff">
-      <option value="walkin">🏪 ลูกค้าหน้าร้าน (ไม่ระบุเบอร์/ชื่อ)</option>
-      <option value="phone">📞 โทรสั่ง (ระบุเบอร์)</option>
+  <div style="padding:8px 12px;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <div style="flex:1;min-width:160px">
+      <div style="font-size:14px;font-weight:800">📝 บันทึก Order</div>
+      <div style="font-size:11px;opacity:.9">หน้าร้าน / โทรสั่ง</div>
+    </div>
+    <select id="walkinTypeSelect" onchange="reloadWalkinFrame()" style="flex:1;min-width:140px;padding:7px;border:1.5px solid rgba(255,255,255,.4);border-radius:8px;font-size:12.5px;font-weight:700;font-family:inherit;background:rgba(255,255,255,.95);color:#0a1530">
+      <option value="walkin">🏪 หน้าร้าน</option>
+      <option value="phone">📞 โทรสั่ง</option>
     </select>
+    <button onclick="openWalkinFullscreen()" style="padding:7px 11px;background:rgba(255,255,255,.2);color:#fff;border:1.5px solid rgba(255,255,255,.4);border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit" title="เปิดในแท็บใหม่ (เต็มจอ)">🔳 เต็มจอ</button>
   </div>
-  <iframe id="walkinFrame" src="about:blank" style="border:0;width:100%;height:calc(100vh - 200px);display:block" title="Walk-in / Phone order"></iframe>
+  <!-- Iframe stretched to fill available height (was calc(100vh-200px) = too short).
+       Now subtracts only the tab bar (~50px) + the header above (~52px) so the
+       customer cart modal inside has nearly the whole viewport to scroll in. -->
+  <iframe id="walkinFrame" src="about:blank" style="border:0;width:100%;height:calc(100vh - 105px);display:block" title="Walk-in / Phone order"></iframe>
 </div>
 
 <!-- ========== ลูกค้า (รวม เช็ก + ทะเบียน) ========== -->
@@ -5757,6 +5760,16 @@ function reloadWalkinFrame() {
   f.src = 'menu.html?embed=1&mode=shop&type=' + t + '&t=' + Date.now();
   f.dataset.loaded = '1';
 }
+
+// 🔳 Open the order entry in a NEW TAB at full size — useful when staff need
+// the cart modal to have the whole screen to scroll in (rather than the
+// constrained iframe height).
+function openWalkinFullscreen() {
+  const t = document.getElementById('walkinTypeSelect')?.value || 'walkin';
+  // No ?embed=1 here so the page renders its own header + bottom info banner
+  window.open('menu.html?mode=shop&type=' + t, '_blank');
+}
+window.openWalkinFullscreen = openWalkinFullscreen;
 
 // 🟢/🔴 Shop open/closed toggle
 async function saveShopOpen() {
