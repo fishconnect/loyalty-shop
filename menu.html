@@ -83,14 +83,37 @@
     display: flex; gap: 10px;
     width: max-content;
     padding-left: 14px;
+    /* GPU-accelerated transform — works reliably in LINE/IG in-app browsers
+       which sometimes silently drop CSS animations that don't promote a layer */
+    will-change: transform;
+    -webkit-transform: translate3d(0, 0, 0);
+    transform: translate3d(0, 0, 0);
+    -webkit-animation: promo-scroll 32s linear infinite;
     animation: promo-scroll 32s linear infinite;
+    -webkit-animation-play-state: running;
+    animation-play-state: running;
   }
   /* Pause on hover/touch so people can read */
   .promo-strip:hover .promo-strip-inner,
-  .promo-strip:active .promo-strip-inner { animation-play-state: paused; }
+  .promo-strip:active .promo-strip-inner {
+    -webkit-animation-play-state: paused;
+    animation-play-state: paused;
+  }
+  @-webkit-keyframes promo-scroll {
+    from { -webkit-transform: translate3d(0, 0, 0); transform: translate3d(0, 0, 0); }
+    to   { -webkit-transform: translate3d(-50%, 0, 0); transform: translate3d(-50%, 0, 0); }
+  }
   @keyframes promo-scroll {
-    from { transform: translateX(0); }
-    to   { transform: translateX(-50%); }   /* loop point — content is duplicated */
+    from { -webkit-transform: translate3d(0, 0, 0); transform: translate3d(0, 0, 0); }
+    to   { -webkit-transform: translate3d(-50%, 0, 0); transform: translate3d(-50%, 0, 0); }
+  }
+  /* Even if user has prefers-reduced-motion, keep this gentle scroll —
+     it's an information ticker, not decoration. But slow it down. */
+  @media (prefers-reduced-motion: reduce) {
+    .promo-strip-inner {
+      -webkit-animation-duration: 60s;
+      animation-duration: 60s;
+    }
   }
   .promo-card {
     background: linear-gradient(135deg, #fff7ed, #fef3c7);
@@ -1364,6 +1387,19 @@ function renderPromoStrip() {
   // Duplicate the cards so the CSS marquee can loop seamlessly (translateX -50%
   // hits the end of the first copy exactly when the second copy is in position).
   wrap.innerHTML = cards.join('') + cards.join('');
+
+  // 🔧 Some in-app browsers (LINE / Instagram / Facebook webview) load the
+  // CSS animation rule but never start it because the element existed at
+  // parse time with no content. Force-kick the animation by toggling the
+  // CSS class one frame after content lands.
+  requestAnimationFrame(() => {
+    wrap.style.animation = 'none';
+    wrap.style.webkitAnimation = 'none';
+    // Force reflow
+    void wrap.offsetWidth;
+    wrap.style.animation = '';
+    wrap.style.webkitAnimation = '';
+  });
 }
 
 // 📌 POPULAR_PINS — manual overrides for specific positions in the
