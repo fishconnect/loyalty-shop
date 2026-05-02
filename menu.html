@@ -775,8 +775,6 @@
         <!-- Order summary breakdown (totals + discount + points-to-earn) -->
         <div id="orderBreakdown" style="margin-top:14px;padding:12px 14px;background:#f7f8fb;border-radius:12px;font-size:14px"></div>
 
-        <!-- (สลิปโอนเงินย้ายไปหน้า status.html — ลูกค้าอัพโหลดได้หลังจากสั่งซื้อ ไม่บังคับ) -->
-
         <button id="submitOrderBtn" class="btn btn-confirm" onclick="submitOrder()" style="margin-top:14px">
           <span id="submitOrderText">✅ ยืนยันสั่งอาหาร</span> <span id="confirmTotal" style="font-weight:900"></span>
         </button>
@@ -1437,9 +1435,6 @@ function getFeatureFlags() {
 let scheduleMode = 'asap';
 let scheduledAt = null;          // ISO string when scheduleMode === 'later'
 
-// Payment slip — base64 data URL
-let paymentSlipData = null;
-
 // SHOP HOURS — used to validate schedule slots
 const SHOP_HOURS = { openH: 9, openM: 30, closeH: 17, closeM: 30 };
 const SHOP_CLOSED_DAYS = [0]; // 0 = Sunday
@@ -1511,42 +1506,6 @@ function onSchedSlotChange() {
   const sel = document.getElementById('schedSlot');
   scheduledAt = sel.value || null;
   renderOrderBreakdown();
-}
-
-// ============ Slip Upload ============
-async function onSlipSelected(ev) {
-  const file = ev.target.files?.[0];
-  if (!file) return;
-  if (file.size > 5 * 1024 * 1024) { toast('⚠️ ไฟล์ใหญ่เกิน 5MB', true); return; }
-  // Compress to ~800px wide JPG
-  const img = new Image();
-  const reader = new FileReader();
-  reader.onload = () => { img.src = reader.result; };
-  img.onload = () => {
-    const maxW = 800;
-    const ratio = Math.min(1, maxW / img.width);
-    const c = document.createElement('canvas');
-    c.width = img.width * ratio;
-    c.height = img.height * ratio;
-    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-    paymentSlipData = c.toDataURL('image/jpeg', 0.7);
-    const prev = document.getElementById('slipPreview');
-    prev.style.display = 'block';
-    prev.innerHTML = `
-      <div style="display:inline-block;position:relative;border-radius:10px;overflow:hidden;border:2px solid #16a34a;max-width:200px">
-        <img src="${paymentSlipData}" style="width:100%;display:block">
-        <button type="button" onclick="clearSlip()" style="position:absolute;top:4px;right:4px;background:#dc2626;color:#fff;border:none;border-radius:50%;width:24px;height:24px;font-size:14px;cursor:pointer">×</button>
-      </div>
-      <div style="font-size:12px;color:#16a34a;font-weight:700;margin-top:4px">✓ แนบสลิปแล้ว</div>
-    `;
-  };
-  reader.readAsDataURL(file);
-}
-function clearSlip() {
-  paymentSlipData = null;
-  document.getElementById('paymentSlipInput').value = '';
-  const prev = document.getElementById('slipPreview');
-  prev.style.display = 'none'; prev.innerHTML = '';
 }
 
 // Birth-day select options (lazy-init when cart opens)
@@ -2166,10 +2125,9 @@ async function submitOrder() {
   const _da = document.getElementById('deliveryAddress'); if (_da) _da.value = '';
   const _dls = document.getElementById('deliveryLocationStatus'); if (_dls) _dls.innerHTML = '';
   if (typeof setOrderType === 'function') setOrderType('pickup');
-  // Reset schedule + slip state
+  // Reset schedule state
   scheduleMode = 'asap'; scheduledAt = null;
   if (typeof setSchedule === 'function') setSchedule('asap');
-  if (typeof clearSlip === 'function') clearSlip();
 
   if (isShopMode) {
     // Stay on menu, clear form, show toast

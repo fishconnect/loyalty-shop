@@ -291,89 +291,8 @@ function renderActive(order, status) {
       ${progressHtml}
       ${order.free_boxes_used ? `<div style="background:#dcfce7;color:#166534;padding:10px;border-radius:10px;margin-bottom:10px;font-weight:700">🎁 ได้ข้าวฟรี ${order.free_boxes_used} กล่อง · ลด ฿${order.discount}</div>` : ''}
       ${renderItemsHTML(order)}
-      ${renderSlipUploadHTML(order)}
     </div>
   `;
-}
-
-// 💸 Slip upload widget — usable any time after order is placed (incl. after delivered).
-// Optional: many customers scan & pay the rider directly, so we don't require it.
-function renderSlipUploadHTML(order) {
-  const has = !!order.payment_slip;
-  return `
-    <div style="margin-top:14px;padding:14px;background:#f7f8fb;border:1.5px dashed #d1ddff;border-radius:12px">
-      <div style="display:flex;align-items:center;gap:6px;font-weight:700;color:#0a1530;font-size:14px;margin-bottom:6px">
-        💸 สลิปโอนเงิน <span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:800">ไม่บังคับ</span>
-      </div>
-      <div style="font-size:12px;color:#5c6982;margin-bottom:10px;line-height:1.5">
-        ถ้าโอนแล้วและอยากให้ทางร้านเห็นสลิป — แนบรูปได้เลย<br>
-        ✅ แนบเมื่อไหร่ก็ได้ — ตั้งแต่สั่งจนได้รับของ และแก้ไขได้ตลอด
-      </div>
-      <input type="file" id="slipFile" accept="image/*" capture="environment" style="display:none" onchange="onSlipUpload(event,'${order.id}')">
-      ${has ? `
-        <div style="text-align:center">
-          <a href="${order.payment_slip}" target="_blank">
-            <img src="${order.payment_slip}" style="max-width:200px;max-height:280px;border-radius:10px;border:2px solid #16a34a;box-shadow:0 4px 12px rgba(0,0,0,.08)">
-          </a>
-          <div style="font-size:12px;color:#16a34a;font-weight:700;margin-top:6px">✓ แนบสลิปแล้ว · แตะที่รูปเพื่อดูใหญ่</div>
-          <button onclick="document.getElementById('slipFile').click()" style="margin-top:8px;background:#fff;color:#1652F0;border:1.5px solid #1652F0;border-radius:10px;padding:8px 18px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">🔄 เปลี่ยนสลิป</button>
-        </div>
-      ` : `
-        <button onclick="document.getElementById('slipFile').click()" style="width:100%;padding:14px;background:#fff;color:#1652F0;border:1.5px dashed #1652F0;border-radius:10px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">
-          📷 แนบสลิปจากแกลเลอรี่ / กล้อง
-        </button>
-      `}
-      <div id="slipUploadStatus" style="font-size:12px;color:#5c6982;text-align:center;margin-top:6px"></div>
-    </div>
-  `;
-}
-
-async function onSlipUpload(ev, orderId) {
-  const file = ev.target.files?.[0];
-  if (!file) return;
-  if (file.size > 10 * 1024 * 1024) { setSlipStatus('❌ ไฟล์ใหญ่เกิน 10MB — ลองรูปอื่น', '#dc2626'); return; }
-  setSlipStatus('⏳ กำลังอัพโหลด...', '#1652F0');
-  try {
-    const dataUrl = await compressImageToBase64(file, 1000, 0.7);
-    // Save to Firestore via cloud.updateOrder
-    if (window.cloud?.updateOrder) {
-      await window.cloud.updateOrder(orderId, { payment_slip: dataUrl });
-    }
-    // Mirror locally
-    const db = loadDB();
-    const idx = (db.pendingOrders || []).findIndex(o => o.id === orderId);
-    if (idx >= 0) { db.pendingOrders[idx].payment_slip = dataUrl; saveDB(db); }
-    if (cloudOrder) cloudOrder.payment_slip = dataUrl;
-    setSlipStatus('✅ แนบสลิปสำเร็จ — ทางร้านจะเห็นสลิปของคุณ', '#16a34a');
-    render();
-  } catch (e) {
-    console.error('slip upload', e);
-    setSlipStatus('❌ อัพโหลดล้มเหลว — ลองใหม่อีกครั้ง', '#dc2626');
-  }
-}
-function setSlipStatus(msg, color) {
-  const el = document.getElementById('slipUploadStatus');
-  if (el) { el.textContent = msg; el.style.color = color || '#5c6982'; }
-}
-function compressImageToBase64(file, maxW, quality) {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => {
-      const img = new Image();
-      img.onload = () => {
-        const ratio = Math.min(1, maxW / img.width);
-        const c = document.createElement('canvas');
-        c.width = img.width * ratio;
-        c.height = img.height * ratio;
-        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-        resolve(c.toDataURL('image/jpeg', quality || 0.7));
-      };
-      img.onerror = reject;
-      img.src = r.result;
-    };
-    r.onerror = reject;
-    r.readAsDataURL(file);
-  });
 }
 
 function renderCancelled(order) {
@@ -516,8 +435,6 @@ function renderDone(order, db) {
         </div>
       ` : ''}
       ${rewardBanner}
-
-      ${renderSlipUploadHTML(order)}
 
       ${myOrders.length > 1 ? `
         <div style="margin-top:14px;text-align:left">
