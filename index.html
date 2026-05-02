@@ -2511,21 +2511,40 @@ function renderCustomerDetail() {
     </div>
   ` : '';
 
-  // 🔒 PDPA info — devices + consent
+  // 🔒 PDPA info — devices + consent. Reads BOTH the customer doc snapshot
+  // AND the live /consent_logs collection in cloud, so even legacy customers
+  // who don't have linked_devices/pdpa_consent fields on their doc still
+  // show their actual consent + device-link history.
   const linkedDevices = c.linked_devices || [];
+  const fmtDeviceShort = (id) => id ? id.slice(0, 14) + '…' : '?';
   const pdpaHtml = `
-    <div class="cust-detail-section">
-      <h4>🔒 PDPA & ความปลอดภัย</h4>
+    <div class="cust-detail-section" id="pdpaSection-${c.id}">
+      <h4>🔒 PDPA & ความปลอดภัย <button onclick="refreshCustomerPdpa('${c.id}')" style="float:right;background:#ebf0ff;color:#1652F0;border:1.5px solid #c5d3ff;padding:3px 8px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:700;font-family:inherit">🔄 รีเฟรช</button></h4>
+
       <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;font-size:12px">
         <div style="padding:8px;background:#f7f8fb;border-radius:8px">
-          <div style="color:#5c6982">📱 อุปกรณ์ที่ผูกไว้</div>
+          <div style="color:#5c6982">📱 อุปกรณ์ที่ผูก (จาก customer doc)</div>
           <div style="font-weight:800;color:#0a1530;margin-top:2px">${linkedDevices.length} เครื่อง</div>
         </div>
         <div style="padding:8px;background:#f7f8fb;border-radius:8px">
-          <div style="color:#5c6982">📋 ยอมรับ PDPA</div>
-          <div style="font-weight:800;color:${c.pdpa_consent?'#16a34a':'#dc2626'};margin-top:2px">${c.pdpa_consent?'✅ ยอมรับแล้ว':'❌ ยังไม่ได้'}</div>
+          <div style="color:#5c6982">📋 ยอมรับ PDPA (snapshot)</div>
+          <div style="font-weight:800;color:${c.pdpa_consent?'#16a34a':'#dc2626'};margin-top:2px">${c.pdpa_consent?'✅ ยอมรับแล้ว':'⚠️ ไม่มีในเอกสาร'}</div>
         </div>
       </div>
+
+      ${linkedDevices.length ? `
+        <div style="margin-top:8px;padding:8px;background:#f7f8fb;border-radius:8px;font-size:11.5px">
+          <div style="color:#5c6982;font-weight:700;margin-bottom:4px">รายการ device IDs:</div>
+          ${linkedDevices.map(d => `<div style="font-family:monospace;color:#0a1530;font-size:11px">• ${fmtDeviceShort(d)}</div>`).join('')}
+          ${c.last_device_link_at ? `<div style="color:#9ca3af;margin-top:4px;font-size:10.5px">ผูกล่าสุด: ${new Date(c.last_device_link_at).toLocaleString('th-TH')}</div>` : ''}
+        </div>
+      ` : '<div style="margin-top:6px;padding:8px;background:#fef3c7;border:1px solid #f59e0b;color:#78350f;border-radius:8px;font-size:11.5px">⚠️ ยังไม่มี device ผูกไว้ใน customer doc — แต่อาจมีใน consent_logs (กดรีเฟรชด้านล่าง)</div>'}
+
+      <!-- 📜 Live consent logs from /consent_logs collection -->
+      <div id="consentLogsFor-${c.id}" style="margin-top:8px;padding:8px;background:#ebf0ff;border:1px solid #c5d3ff;border-radius:8px;font-size:11.5px">
+        <div style="color:#1652F0;font-weight:700;margin-bottom:4px">📜 บันทึกการยินยอม (loading...)</div>
+      </div>
+
       ${c.deletion_requested ? `<div style="background:#fee2e2;border:1.5px solid #dc2626;color:#991b1b;padding:8px 10px;border-radius:8px;margin-top:8px;font-size:12px">⚠️ <b>ลูกค้าขอลบบัญชี</b> · ${new Date(c.deletion_requested_at).toLocaleDateString('th-TH')}</div>` : ''}
     </div>
   `;
@@ -2642,6 +2661,10 @@ function renderCustomerDetail() {
     <button class="btn-ghost" style="width:100%;margin-top:8px" onclick="editCustomer('${c.id}')">✏️ แก้ไขชื่อ/เบอร์ลูกค้า</button>
     <button class="btn-danger" style="width:100%;margin-top:8px;background:#fee2e2;color:#dc2626;border:1.5px solid #dc2626" onclick="deleteCustomerHistory('${c.id}')">🧹 ลบประวัติออเดอร์ทั้งหมด (test data)</button>
   `;
+  // 🔒 Fetch live consent logs for this customer (PDPA section)
+  if (typeof loadConsentLogsFor === 'function') {
+    setTimeout(() => loadConsentLogsFor(c.id), 50);
+  }
   } catch (err) {
     console.error('[renderCustomerDetail] failed', err);
     box.innerHTML = `<div class="empty" style="color:#dc2626">⚠️ แสดงรายละเอียดไม่สำเร็จ<br><small>${(err.message||err)}</small></div>`;
@@ -3416,6 +3439,80 @@ function staffReorderSubmit(orderId, customerId) {
 window.renderTodaysPulse = renderTodaysPulse;
 window.quickReorderForCustomer = quickReorderForCustomer;
 window.staffReorderSubmit = staffReorderSubmit;
+
+// 📜 Pull live consent logs for a customer + render inline in their 360° card.
+// Triggered automatically after renderCustomerDetail paints, AND when admin
+// clicks the "🔄 รีเฟรช" button (which also re-fetches the customer doc).
+async function loadConsentLogsFor(customerId) {
+  const wrap = document.getElementById('consentLogsFor-' + customerId);
+  if (!wrap) return;
+  if (!window.cloud?.getConsentLogsForCustomer) {
+    wrap.innerHTML = '<div style="color:#dc2626">⚠️ Cloud not ready</div>';
+    return;
+  }
+  try {
+    const logs = await window.cloud.getConsentLogsForCustomer(customerId);
+    if (!logs.length) {
+      wrap.innerHTML = `
+        <div style="color:#1652F0;font-weight:700;margin-bottom:4px">📜 บันทึกการยินยอม</div>
+        <div style="color:#5c6982;font-size:11px">ไม่มี consent log สำหรับเบอร์นี้</div>
+        <div style="color:#9ca3af;font-size:10.5px;margin-top:4px">หมายเหตุ: ลูกค้าเก่า (สมัครก่อน PDPA) จะไม่มี log อัตโนมัติ — ปกติ</div>
+      `;
+      return;
+    }
+    const types = {
+      signup_privacy_acceptance: { ic: '🆕', label: 'สมัคร + ยอมรับ PDPA', color: '#16a34a' },
+      cookies_and_privacy:       { ic: '🍪', label: 'Cookie banner',      color: '#16a34a' },
+      device_linked:             { ic: '🔗', label: 'ผูก device ใหม่',   color: '#1652F0' },
+      device_verify_failed:      { ic: '⛔', label: 'verify ผิด',         color: '#dc2626' },
+      data_access_request:       { ic: '📥', label: 'ขอข้อมูล',           color: '#1652F0' },
+      account_deletion_request:  { ic: '🗑️', label: 'ขอลบบัญชี',          color: '#dc2626' },
+      account_deletion_cancelled:{ ic: '↩️', label: 'ยกเลิกขอลบบัญชี',  color: '#16a34a' },
+    };
+    const accepted = logs.filter(l => l.type === 'signup_privacy_acceptance' || (l.type === 'cookies_and_privacy' && l.accepted));
+    const lastAccept = accepted[0];
+    wrap.innerHTML = `
+      <div style="color:#1652F0;font-weight:700;margin-bottom:6px">📜 บันทึกการยินยอม (${logs.length} รายการ)</div>
+      ${lastAccept ? `<div style="background:#dcfce7;border:1px solid #16a34a;color:#166534;padding:6px 8px;border-radius:6px;margin-bottom:6px;font-size:11px"><b>✅ ยอมรับ PDPA</b> v${lastAccept.version || '?'} · ${new Date(lastAccept.timestamp).toLocaleString('th-TH')}</div>` : '<div style="background:#fef3c7;border:1px solid #f59e0b;color:#78350f;padding:6px 8px;border-radius:6px;margin-bottom:6px;font-size:11px">⚠️ ยังไม่มี log การยอมรับ PDPA — ลูกค้าเก่า / signup ก่อน feature นี้</div>'}
+      <div style="max-height:180px;overflow-y:auto;border:1px solid #c5d3ff;border-radius:6px;background:#fff">
+        ${logs.slice(0, 25).map(l => {
+          const meta = types[l.type] || { ic: '•', label: l.type, color: '#6b7280' };
+          return `
+            <div style="padding:6px 8px;border-bottom:1px solid #f3f4f6;font-size:11px;display:flex;gap:6px;align-items:flex-start">
+              <span style="font-size:13px;flex-shrink:0">${meta.ic}</span>
+              <div style="flex:1;min-width:0">
+                <div style="font-weight:700;color:${meta.color}">${meta.label}${l.accepted === false ? ' ❌' : ''}</div>
+                <div style="color:#5c6982;font-size:10.5px">${new Date(l.timestamp).toLocaleString('th-TH')}${l.version ? ' · v' + l.version : ''}</div>
+              </div>
+            </div>
+          `;
+        }).join('')}
+        ${logs.length > 25 ? `<div style="padding:6px;color:#9ca3af;font-size:10.5px;text-align:center">+ อีก ${logs.length - 25} รายการ</div>` : ''}
+      </div>
+    `;
+  } catch (e) {
+    wrap.innerHTML = '<div style="color:#dc2626">⚠️ โหลดไม่สำเร็จ: ' + e.message + '</div>';
+  }
+}
+
+// 🔄 Refresh customer + consent logs from cloud — useful when admin sees stale
+// data on a customer's 360° card.
+async function refreshCustomerPdpa(customerId) {
+  if (window.cloud?.getCustomer) {
+    try {
+      const fresh = await window.cloud.getCustomer(customerId);
+      if (fresh) {
+        db.customers[customerId] = fresh;
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); } catch (e) {}
+        if (typeof renderCustomerDetail === 'function') renderCustomerDetail();
+      }
+    } catch (e) { console.warn('refresh customer fail', e); }
+  }
+  loadConsentLogsFor(customerId);
+}
+
+window.loadConsentLogsFor = loadConsentLogsFor;
+window.refreshCustomerPdpa = refreshCustomerPdpa;
 
 function renderReports() {
   // 🌟 Today's Pulse — render before mode-specific reports so it always shows
