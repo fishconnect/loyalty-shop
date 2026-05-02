@@ -1641,6 +1641,7 @@ async function submitSignup() {
     accepted_at: new Date().toISOString(),
     user_agent: navigator.userAgent.slice(0, 200),
   };
+  const myDeviceId = (typeof getDeviceId === 'function') ? getDeviceId() : null;
   const customer = {
     id: phone, name, phone,
     points: SIGNUP,
@@ -1653,6 +1654,8 @@ async function submitSignup() {
     joined: new Date().toISOString(),
     referral_code: phone.slice(-6).toUpperCase(),
     pdpa_consent: consentRecord,           // 🔒 PDPA — proof of consent on the customer object
+    // 🔒 Trust the device used to sign up — gates future access from other devices
+    ...(myDeviceId ? { linked_devices: [myDeviceId] } : {}),
     ...(bd && bm ? { birth_day: bd, birth_month: bm, birth_locked: true } : {}),
   };
   db.customers[phone] = customer;
@@ -2509,6 +2512,132 @@ function resetCartRewards() {
   cartRewards = { useDiscount: false, useDrink: false, selectedDrinkId: null };
 }
 
+// 🔒 PDPA — Device verification modal. Customer enters birthday → if it
+// matches the customer doc, this device is added to linked_devices in cloud
+// (one-time verification, persists). Used to gate access to existing accounts
+// from new devices.
+//
+//   verifyDeviceWithBirthday(customer, onSuccess, onCancel)
+function verifyDeviceWithBirthday(customer, onSuccess, onCancel) {
+  if (!customer) { onCancel?.(); return; }
+  const hasBirthday = !!(customer.birth_day && customer.birth_month);
+  let modal = document.getElementById('verifyDeviceModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'verifyDeviceModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px)';
+    document.body.appendChild(modal);
+  }
+  modal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+
+  const close = (ok) => {
+    modal.style.display = 'none';
+    document.body.style.overflow = '';
+    if (ok) onSuccess?.();
+    else onCancel?.();
+  };
+
+  const months = ['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  let dayOpts = '<option value="">— วัน —</option>';
+  for (let d = 1; d <= 31; d++) dayOpts += `<option value="${d}">${d}</option>`;
+  let monthOpts = '<option value="">— เดือน —</option>';
+  for (let m = 1; m <= 12; m++) monthOpts += `<option value="${m}">${months[m]}</option>`;
+
+  const mailto = `mailto:admin@fishconnect.co?subject=${encodeURIComponent('ขอยืนยันตัวตน - ' + customer.phone)}&body=${encodeURIComponent('ชื่อ: ' + (customer.name || '') + '\nเบอร์: ' + customer.phone + '\nต้องการเข้าใช้บัญชีจากอุปกรณ์ใหม่ — กรุณาช่วยยืนยันตัวตน')}`;
+
+  modal.innerHTML = `
+    <div style="background:#fff;width:100%;max-width:440px;border-radius:20px;overflow:hidden;font-family:inherit;animation:fadeIn .25s ease;box-shadow:0 20px 60px rgba(0,0,0,.4)">
+      <style>@keyframes fadeIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}</style>
+      <div style="padding:20px;background:linear-gradient(135deg,#dc2626,#991b1b);color:#fff;text-align:center">
+        <div style="font-size:48px">🔒</div>
+        <div style="font-weight:900;font-size:18px;margin-top:6px">ยืนยันตัวตน</div>
+        <div style="font-size:12.5px;opacity:.9;margin-top:4px">บัญชีนี้ใช้งานจากอุปกรณ์ใหม่ครั้งแรก</div>
+      </div>
+      <div style="padding:18px 20px">
+        <div style="background:#f7f8fb;border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:13px;color:#0a1530">
+          <div>👤 <b>${customer.name || customer.phone}</b></div>
+          <div style="color:#5c6982;font-size:12px;margin-top:2px">📱 ${customer.phone}</div>
+        </div>
+        ${hasBirthday ? `
+          <label style="font-weight:700;color:#0a1530;font-size:13px;display:block;margin-bottom:8px">
+            🎂 กรุณาใส่วันเกิดของท่านที่ลงทะเบียนไว้
+          </label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <select id="vfDay" style="padding:12px;border:1.5px solid #d1ddff;border-radius:10px;font-size:14px;font-family:inherit;background:#fff">${dayOpts}</select>
+            <select id="vfMonth" style="padding:12px;border:1.5px solid #d1ddff;border-radius:10px;font-size:14px;font-family:inherit;background:#fff">${monthOpts}</select>
+          </div>
+          <div id="vfStatus" style="font-size:13px;font-weight:700;text-align:center;margin-top:8px;min-height:18px"></div>
+        ` : `
+          <div style="background:#fef3c7;border:1.5px solid #f59e0b;color:#78350f;padding:12px;border-radius:10px;font-size:13px;line-height:1.6">
+            ⚠️ บัญชีนี้ไม่ได้ตั้งค่า "วันเกิด" ไว้ จึงไม่สามารถยืนยันด้วยตนเองได้<br><br>
+            กรุณาติดต่อ <a href="${mailto}" style="color:#92400e;font-weight:800;text-decoration:underline">admin@fishconnect.co</a> เพื่อขอยืนยันตัวตน
+          </div>
+        `}
+      </div>
+      <div style="padding:14px 20px;border-top:1px solid #e5e7eb;background:#f7f8fb;display:flex;flex-direction:column;gap:6px">
+        ${hasBirthday
+          ? `<button id="vfSubmit" style="display:block;width:100%;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;padding:13px;border:none;border-radius:12px;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit">✅ ยืนยัน</button>`
+          : `<a href="${mailto}" style="display:block;width:100%;background:linear-gradient(135deg,#1652F0,#0738C9);color:#fff;padding:13px;border-radius:12px;font-weight:800;font-size:14px;text-align:center;text-decoration:none;font-family:inherit">📧 ติดต่อ admin</a>`}
+        <button id="vfCancel" style="display:block;width:100%;padding:10px;background:transparent;color:#6b7280;border:none;font-size:13px;cursor:pointer;font-family:inherit">ยกเลิก</button>
+      </div>
+    </div>
+  `;
+
+  modal.querySelector('#vfCancel')?.addEventListener('click', () => close(false));
+  modal.onclick = (e) => { if (e.target === modal) close(false); };
+
+  if (hasBirthday) {
+    const submitBtn = modal.querySelector('#vfSubmit');
+    let attempts = 0;
+    submitBtn?.addEventListener('click', async () => {
+      const d = parseInt(modal.querySelector('#vfDay').value);
+      const m = parseInt(modal.querySelector('#vfMonth').value);
+      const status = modal.querySelector('#vfStatus');
+      if (!d || !m) { status.style.color = '#dc2626'; status.textContent = '⚠️ เลือกทั้งวันและเดือน'; return; }
+      attempts++;
+      if (d === customer.birth_day && m === customer.birth_month) {
+        status.style.color = '#16a34a'; status.textContent = '✅ ยืนยันสำเร็จ — กำลังเปิดบัญชี...';
+        // Link this device to the customer in cloud
+        try {
+          if (window.cloud?.linkDeviceToCustomer) {
+            await window.cloud.linkDeviceToCustomer(customer.phone, getDeviceId(), 'birthday');
+          }
+          // Also mirror locally
+          const db = loadDB();
+          if (db.customers[customer.phone]) {
+            db.customers[customer.phone].linked_devices = [...(db.customers[customer.phone].linked_devices || []), getDeviceId()];
+            saveDB(db);
+          }
+        } catch (e) { console.warn('linkDevice fail', e); }
+        setTimeout(() => close(true), 700);
+      } else {
+        status.style.color = '#dc2626';
+        if (attempts >= 3) {
+          status.innerHTML = `❌ ไม่ตรง — ลองครบ 3 ครั้งแล้ว · <a href="${mailto}" style="color:#1652F0;text-decoration:underline">ติดต่อ admin</a>`;
+          submitBtn.disabled = true; submitBtn.style.opacity = '.5';
+        } else {
+          status.textContent = `❌ ไม่ตรง — เหลืออีก ${3 - attempts} ครั้ง`;
+        }
+      }
+    });
+  }
+}
+window.verifyDeviceWithBirthday = verifyDeviceWithBirthday;
+
+// Click handler from the customer-found warning chip in the cart
+function onVerifyDeviceClick(phone) {
+  const cust = loadDB().customers[phone];
+  if (!cust) return;
+  verifyDeviceWithBirthday(cust, () => {
+    toast('✅ ยืนยันสำเร็จ — อุปกรณ์นี้เชื่อถือได้แล้ว');
+    checkCustomer();        // re-render the customer-found chip
+    renderRewardsBox();     // unhide rewards
+    renderOrderBreakdown();
+  });
+}
+window.onVerifyDeviceClick = onVerifyDeviceClick;
+
 function checkCustomer() {
   const phone = normPhone(document.getElementById('custPhone').value);
   const found = document.getElementById('custFound');
@@ -2528,13 +2657,25 @@ function checkCustomer() {
   const c = db.customers[phone];
   if (c) {
     const pts = c.points || 0;
+    const trusted = window.isDeviceTrusted ? window.isDeviceTrusted(c) : false;
     let extras = '';
     if (c.birth_day && c.birth_month) {
       const monthNames = ['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
       extras += ` · 🎂 ${c.birth_day} ${monthNames[c.birth_month]}`;
     }
     if (c.referral_code) extras += ` · 🤝 รหัสคุณ: <b>${c.referral_code}</b>`;
-    found.innerHTML = `<div class="customer-found ok">✅ ลูกค้าเดิม: <b>${c.name}</b> · 🌟 ${pts} แต้ม${extras}</div>`;
+    if (trusted) {
+      found.innerHTML = `<div class="customer-found ok">✅ ลูกค้าเดิม: <b>${c.name}</b> · 🌟 ${pts} แต้ม${extras}</div>`;
+    } else {
+      // 🔒 Device not trusted — show warning + hide rewards/profile data
+      found.innerHTML = `
+        <div class="customer-found ok" style="background:#fef3c7;border:1.5px solid #f59e0b;color:#78350f">
+          ⚠️ บัญชี <b>${c.name}</b> ใช้งานจากอุปกรณ์ใหม่<br>
+          <button onclick="onVerifyDeviceClick('${phone}')" style="margin-top:6px;padding:8px 14px;background:#dc2626;color:#fff;border:none;border-radius:8px;font-weight:800;font-size:12px;cursor:pointer;font-family:inherit">🔒 ยืนยันตัวตนเพื่อใช้แต้ม</button>
+          <div style="font-size:11px;color:#92400e;margin-top:6px">⚠️ ยังสั่งอาหารได้ปกติ แต่ไม่สามารถใช้แต้ม/ดูข้อมูลส่วนตัวได้จนกว่าจะยืนยัน</div>
+        </div>
+      `;
+    }
     nameInput.value = c.name === 'ไม่ระบุชื่อ' ? '' : c.name;
     // Returning customer — hide birth + referral inputs (locked)
     if (birthBox) birthBox.style.display = 'none';
@@ -2564,6 +2705,11 @@ function renderRewardsBox() {
   if (phone.length < 9) { box.style.display = 'none'; return; }
   const c = loadDB().customers[phone];
   if (!c) { box.style.display = 'none'; return; }
+  // 🔒 Device not trusted → block redemption to prevent stranger from spending
+  // someone else's points. They can still ORDER (which earns points for the
+  // account holder), just not REDEEM.
+  const trusted = window.isDeviceTrusted ? window.isDeviceTrusted(c) : true;
+  if (!trusted) { box.style.display = 'none'; resetCartRewards(); return; }
   const pts = c.points || 0;
   if (pts < LOYALTY.REWARD_DRINK_POINTS) { box.style.display = 'none'; return; }
 

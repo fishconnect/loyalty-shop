@@ -253,6 +253,36 @@ window.cloud = {
     });
   },
 
+  // 🔒 Add a device ID to the customer's trusted devices list. Called after
+  // a successful birthday-verification on a new device. Idempotent.
+  async linkDeviceToCustomer(phoneOrId, deviceId, verifiedBy) {
+    if (!phoneOrId || !deviceId) return false;
+    try {
+      const ref = doc(fdb, 'customers', String(phoneOrId));
+      const snap = await getDoc(ref);
+      if (!snap.exists()) return false;
+      const cust = snap.data();
+      const linked = Array.isArray(cust.linked_devices) ? cust.linked_devices : [];
+      if (linked.includes(deviceId)) return true;
+      linked.push(deviceId);
+      await updateDoc(ref, {
+        linked_devices: linked,
+        last_device_link_at: new Date().toISOString(),
+        last_device_link_by: verifiedBy || 'birthday',
+      });
+      // Also log it in consent_logs for audit trail (PDPA)
+      await this.saveConsentLog?.({
+        type: 'device_linked',
+        customer_id: String(phoneOrId),
+        customer_phone: String(phoneOrId),
+        version: '1.0',
+        accepted: true,
+        details: { device_id: deviceId, method: verifiedBy || 'birthday', user_agent: navigator.userAgent.slice(0, 200) },
+      });
+      return true;
+    } catch (e) { console.warn('[cloud] linkDeviceToCustomer', e); return false; }
+  },
+
   // 🔒 PDPA consent log — every time a customer accepts/rejects a policy version,
   // we write an immutable record to /consent_logs so we can prove later that
   // consent was obtained (which version, when, what device, what they agreed to).

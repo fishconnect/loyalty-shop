@@ -1026,7 +1026,7 @@ function tryRender() {
   const allOrders = db.pendingOrders || [];
 
   if (customer) {
-    renderCustomer(customer, allOrders);
+    if (gateOrRender(customer, allOrders)) return;
   } else {
     // Try cloud
     whenCloudReady(async () => {
@@ -1034,19 +1034,115 @@ function tryRender() {
       if (cloudCust) {
         db.customers[phone] = cloudCust;
         saveDB(db);
-        renderCustomer(cloudCust, allOrders);
+        gateOrRender(cloudCust, allOrders);
       } else {
         renderLookup('ไม่พบเบอร์นี้ในระบบ — เริ่มสะสมโดยสั่งอาหาร');
       }
     });
     // Fallback: if cloud not ready in 3 sec, show lookup with err
     setTimeout(() => {
-      if (!document.querySelector('.hero-card')) {
+      if (!document.querySelector('.hero-card') && !document.getElementById('verifyDeviceGate')) {
         if (!db.customers[phone]) renderLookup('ไม่พบเบอร์นี้ — กรอกใหม่ หรือสั่งอาหารเพื่อเริ่มสะสม');
       }
     }, 3000);
   }
 }
+
+// 🔒 PDPA — gate the entire points page until this device is trusted by the
+// customer. First call: if not trusted, show a fullscreen verify form.
+// Returns true if gate is showing (caller should NOT render normally).
+function gateOrRender(customer, allOrders) {
+  const myDevice = (typeof getDeviceId === 'function') ? getDeviceId() : null;
+  const trusted = (customer.linked_devices || []).includes(myDevice);
+  if (trusted) {
+    renderCustomer(customer, allOrders);
+    return false;
+  }
+  // Show verify gate
+  showVerifyGate(customer, allOrders);
+  return true;
+}
+
+function showVerifyGate(customer, allOrders) {
+  const hasBirthday = !!(customer.birth_day && customer.birth_month);
+  const months = ['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  let dayOpts = '<option value="">— วัน —</option>';
+  for (let d = 1; d <= 31; d++) dayOpts += `<option value="${d}">${d}</option>`;
+  let monthOpts = '<option value="">— เดือน —</option>';
+  for (let m = 1; m <= 12; m++) monthOpts += `<option value="${m}">${months[m]}</option>`;
+  const mailto = `mailto:admin@fishconnect.co?subject=${encodeURIComponent('ขอยืนยันตัวตน - ' + (customer.phone || phone))}&body=${encodeURIComponent('ชื่อ: ' + (customer.name || '') + '\nเบอร์: ' + (customer.phone || phone) + '\nต้องการเข้าใช้บัญชีจากอุปกรณ์ใหม่ — กรุณาช่วยยืนยันตัวตน')}`;
+
+  document.getElementById('main').innerHTML = `
+    <div id="verifyDeviceGate" style="background:#fff;border-radius:20px;padding:24px;box-shadow:0 8px 24px rgba(0,0,0,.08);text-align:center">
+      <div style="font-size:64px">🔒</div>
+      <h2 style="font-size:20px;font-weight:900;color:#0a1530;margin:8px 0 4px">ยืนยันตัวตน</h2>
+      <p style="font-size:13px;color:#5c6982;line-height:1.5;margin-bottom:14px">บัญชีนี้ยังไม่เคยใช้งานจากอุปกรณ์นี้<br>เพื่อความปลอดภัย กรุณายืนยันก่อนดูข้อมูล</p>
+      <div style="background:#f7f8fb;border-radius:12px;padding:12px;margin-bottom:18px">
+        <div style="font-weight:800;color:#0a1530">👤 ${customer.name || customer.phone}</div>
+        <div style="font-size:12px;color:#5c6982;margin-top:2px">📱 ${customer.phone || phone}</div>
+      </div>
+      ${hasBirthday ? `
+        <label style="font-weight:700;color:#0a1530;font-size:13px;display:block;margin-bottom:8px;text-align:left">🎂 วันเกิดของท่าน (ที่ลงทะเบียนไว้)</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+          <select id="gateDay" style="padding:13px;border:1.5px solid #d1ddff;border-radius:10px;font-size:14px;font-family:inherit;background:#fff">${dayOpts}</select>
+          <select id="gateMonth" style="padding:13px;border:1.5px solid #d1ddff;border-radius:10px;font-size:14px;font-family:inherit;background:#fff">${monthOpts}</select>
+        </div>
+        <div id="gateStatus" style="font-size:13px;font-weight:700;text-align:center;min-height:18px;margin-bottom:10px"></div>
+        <button onclick="submitVerifyGate()" style="display:block;width:100%;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;padding:14px;border:none;border-radius:12px;font-weight:800;font-size:15px;cursor:pointer;font-family:inherit">✅ ยืนยันและเข้าใช้งาน</button>
+      ` : `
+        <div style="background:#fef3c7;border:1.5px solid #f59e0b;color:#78350f;padding:12px;border-radius:10px;font-size:13px;line-height:1.6;text-align:left;margin-bottom:14px">
+          ⚠️ บัญชีนี้ไม่ได้ตั้ง "วันเกิด" ไว้ จึงยืนยันด้วยตนเองไม่ได้<br>
+          กรุณาติดต่อ admin เพื่อขอยืนยันตัวตน
+        </div>
+        <a href="${mailto}" style="display:block;width:100%;background:linear-gradient(135deg,#1652F0,#0738C9);color:#fff;padding:14px;border-radius:12px;font-weight:800;font-size:15px;text-align:center;text-decoration:none;font-family:inherit">📧 ติดต่อ admin@fishconnect.co</a>
+      `}
+      <a href="javascript:logout()" style="display:block;margin-top:12px;color:#6b7280;font-size:12px;text-decoration:underline">ใช้เบอร์อื่น</a>
+    </div>
+  `;
+  // Stash for the submit handler
+  window._gateCustomer = customer;
+  window._gateAllOrders = allOrders;
+}
+
+async function submitVerifyGate() {
+  const cust = window._gateCustomer;
+  if (!cust) return;
+  const d = parseInt(document.getElementById('gateDay').value);
+  const m = parseInt(document.getElementById('gateMonth').value);
+  const status = document.getElementById('gateStatus');
+  if (!d || !m) { status.style.color = '#dc2626'; status.textContent = '⚠️ เลือกทั้งวันและเดือน'; return; }
+  if (d !== cust.birth_day || m !== cust.birth_month) {
+    status.style.color = '#dc2626';
+    status.textContent = '❌ วันเกิดไม่ตรง — ลองใหม่';
+    // Log failed verification attempt for audit trail
+    try {
+      if (window.cloud?.saveConsentLog) {
+        await window.cloud.saveConsentLog({
+          type: 'device_verify_failed',
+          customer_id: cust.phone, customer_phone: cust.phone,
+          version: '1.0', accepted: false,
+          details: { tried_day: d, tried_month: m, user_agent: navigator.userAgent.slice(0, 200) },
+        });
+      }
+    } catch (e) {}
+    return;
+  }
+  status.style.color = '#16a34a'; status.textContent = '✅ ถูกต้อง — กำลังเข้าระบบ...';
+  // Add this device to linked_devices
+  try {
+    if (window.cloud?.linkDeviceToCustomer) {
+      await window.cloud.linkDeviceToCustomer(cust.phone, getDeviceId(), 'birthday');
+    }
+    // Mirror locally
+    const db = loadDB();
+    const c = db.customers[cust.phone] || cust;
+    c.linked_devices = [...new Set([...(c.linked_devices || []), getDeviceId()])];
+    db.customers[cust.phone] = c;
+    saveDB(db);
+  } catch (e) {}
+  setTimeout(() => renderCustomer(cust, window._gateAllOrders || []), 600);
+}
+window.submitVerifyGate = submitVerifyGate;
 
 tryRender();
 
@@ -1059,7 +1155,14 @@ whenCloudReady(() => {
       db.customers[phone] = customers[phone];
       saveDB(db);
       const allOrders = db.pendingOrders || [];
-      renderCustomer(customers[phone], allOrders);
+      // Skip re-render while the verify gate is showing — we don't want
+      // realtime updates to overwrite the gate UI
+      if (document.getElementById('verifyDeviceGate')) {
+        // Just update the cached customer for the gate's submit handler
+        window._gateCustomer = customers[phone];
+        return;
+      }
+      gateOrRender(customers[phone], allOrders);
     }
   });
   window.cloud.onOrders(orders => {

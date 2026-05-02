@@ -12,6 +12,29 @@ window.SHOP_INFO = {
   deliveryRadiusKm: 7, // hard limit — orders beyond this distance are blocked
 };
 
+// 🔒 Device ID — random per browser, stored in localStorage. Used to identify
+// "is this device trusted by this customer?" for PDPA-compliant access control.
+// Same device across visits → same ID. Cleared if user clears browser data.
+window.getDeviceId = function() {
+  let id = '';
+  try { id = localStorage.getItem('deviceId') || ''; } catch (e) {}
+  if (!id) {
+    id = 'd-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+    try { localStorage.setItem('deviceId', id); } catch (e) {}
+  }
+  return id;
+};
+
+// 🔒 Check if this device is trusted by the given customer.
+// First device that signed up is auto-trusted. Other devices need
+// to verify (birthday or admin contact) → then get added to linked_devices.
+window.isDeviceTrusted = function(customer) {
+  if (!customer) return false;
+  const myId = window.getDeviceId();
+  const linked = customer.linked_devices || [];
+  return linked.includes(myId);
+};
+
 // 📍 Haversine — distance in km between two {lat, lng} points
 window.haversineKm = function(a, b) {
   if (!a || !b) return Infinity;
