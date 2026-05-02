@@ -250,6 +250,20 @@ function doLookup() {
 }
 
 function renderCustomer(customer, allOrders) {
+  // 🔒 SAFETY NET — never render full customer data unless this device is
+  // trusted. Multiple call sites (snapshot listeners, action handlers, race
+  // conditions) might invoke renderCustomer before/after the gate; this
+  // central check blocks the leak even if a caller forgets to gate.
+  // Exception: customer just finished verifying — _gateCustomer is consumed
+  // by submitVerifyGate and renderCustomer is called explicitly there.
+  const myDevice = (typeof getDeviceId === 'function') ? getDeviceId() : null;
+  const trusted = (customer.linked_devices || []).includes(myDevice);
+  if (!trusted) {
+    // Untrusted — show / re-show the verify gate instead
+    if (typeof showVerifyGate === 'function') showVerifyGate(customer, allOrders);
+    return;
+  }
+
   // 🎂 Birthday auto-grant — fire on FIRST page-load of the day if customer has
   // a birthday on file and we haven't already granted this year. No need for
   // them to actually order on their birthday to claim the bonus.
@@ -1135,16 +1149,17 @@ async function submitVerifyGate() {
     return;
   }
   status.style.color = '#16a34a'; status.textContent = '✅ ถูกต้อง — กำลังเข้าระบบ...';
-  // Add this device to linked_devices
+  // Add this device to linked_devices — also mutates cust IN-PLACE so the
+  // upcoming renderCustomer(cust, ...) sees the new linked_devices and
+  // won't loop back to showing the gate via the safety net check.
   try {
     if (window.cloud?.linkDeviceToCustomer) {
       await window.cloud.linkDeviceToCustomer(cust.phone, getDeviceId(), 'birthday');
     }
-    // Mirror locally
+    // Mirror locally + mutate the original cust reference
+    cust.linked_devices = [...new Set([...(cust.linked_devices || []), getDeviceId()])];
     const db = loadDB();
-    const c = db.customers[cust.phone] || cust;
-    c.linked_devices = [...new Set([...(c.linked_devices || []), getDeviceId()])];
-    db.customers[cust.phone] = c;
+    db.customers[cust.phone] = cust;
     saveDB(db);
   } catch (e) {}
   setTimeout(() => renderCustomer(cust, window._gateAllOrders || []), 600);
@@ -1177,7 +1192,18 @@ whenCloudReady(() => {
     db.pendingOrders = orders;
     saveDB(db);
     window._allOrders = orders;       // expose for reorder modal lookup
-    if (db.customers[phone]) renderCustomer(db.customers[phone], orders);
+    if (db.customers[phone]) {
+      // 🔒 If the verify gate is currently showing, do NOT call renderCustomer
+      // directly — that would overwrite the gate. Just stash the latest orders
+      // for the gate's submit handler to use after verification passes.
+      if (document.getElementById('verifyDeviceGate')) {
+        window._gateAllOrders = orders;
+        return;
+      }
+      // Use gateOrRender (not renderCustomer) so untrusted devices still get
+      // the gate even if the snapshot fires after the initial render.
+      gateOrRender(db.customers[phone], orders);
+    }
   });
 });
 
