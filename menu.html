@@ -3174,27 +3174,36 @@ function reorderFromOrder(orderId) {
   renderCartLines();
   updateCartBar();
 
-  // 🔧 BULLETPROOF cart open — call openCart() AND directly force display
-  // styles, AND elevate z-index above any other modal/banner. We also log
-  // each step so the console makes the failure (if any) visible.
+  // 🔧 Open the cart bulletproof-ly. The HEAVY work (openCart() which re-
+  // renders cart lines, applyOrderType, fill address fields) only runs ONCE
+  // — on the first call. Subsequent guard-passes ONLY verify the modal is
+  // still visible without re-rendering, so re-paints don't steal the user's
+  // click on ✏️ แก้ buttons.
+  let openedOnce = false;
   const forceOpenCart = () => {
     const m = document.getElementById('modalCart');
     if (!m) { console.error('[reorder] #modalCart not in DOM!'); return; }
+    if (openedOnce) {
+      // Lightweight pass — just make sure it's visible, don't re-render
+      if (!m.classList.contains('show')) {
+        m.classList.add('show');
+        m.style.display = 'flex';
+        m.style.zIndex = '500';
+      }
+      return;
+    }
+    // First-and-only full open
+    openedOnce = true;
     try { if (typeof openCart === 'function') openCart(); } catch (e) { console.error('[reorder] openCart threw', e); }
-    // Belt: explicit class + style (defeats CSS specificity / z-index issues)
     m.classList.add('show');
     m.style.display = 'flex';
-    m.style.zIndex = '500';     // above shopClosedOverlay (99998 was removed) + pdpaBanner (200)
+    m.style.zIndex = '500';     // above pdpaBanner (200)
     // Hide PDPA banner if it's covering the cart
     const pdpa = document.getElementById('pdpaBanner');
     if (pdpa && pdpa.style.display !== 'none') pdpa.style.display = 'none';
     // Update delivery / pickup chip visuals
-    if (typeof setOrderType === 'function') {
-      try { setOrderType(orderType); } catch (e) {}
-    }
-    if (typeof applyOrderType === 'function') {
-      try { applyOrderType(orderType); } catch (e) {}
-    }
+    if (typeof setOrderType === 'function') { try { setOrderType(orderType); } catch (e) {} }
+    if (typeof applyOrderType === 'function') { try { applyOrderType(orderType); } catch (e) {} }
     // Fill delivery address textarea if applicable
     if (orderType === 'delivery' && order.delivery_address) {
       const ta = document.getElementById('deliveryAddress');
@@ -3207,9 +3216,9 @@ function reorderFromOrder(orderId) {
     console.log('[reorder] cart opened · items:', cart.length);
   };
   forceOpenCart();
-  setTimeout(forceOpenCart, 200);
-  setTimeout(forceOpenCart, 600);
-  setTimeout(forceOpenCart, 1200);     // catch slowest in-app browsers
+  // Guard passes — only act if the cart somehow got hidden between paints
+  setTimeout(forceOpenCart, 300);
+  setTimeout(forceOpenCart, 900);
 
   const parts = [`✓ พร้อมสั่งแล้ว — ${added} รายการ`];
   if (order.order_type === 'delivery' && order.delivery_address) parts.push('🚚 ที่อยู่จัดส่งเดิม');
