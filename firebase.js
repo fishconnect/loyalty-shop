@@ -253,6 +253,85 @@ window.cloud = {
     });
   },
 
+  // 🔒 PDPA RECOVERY — admin-initiated unlock for customers who lost access
+  // (forgot birthday, switched devices and can't verify, etc.). Every action
+  // is logged for the audit trail.
+  async resetCustomerBirthday(phoneOrId, adminNote) {
+    if (!phoneOrId) return false;
+    try {
+      await updateDoc(doc(fdb, 'customers', String(phoneOrId)), {
+        birth_day: null,
+        birth_month: null,
+        birth_locked: false,
+        birth_reset_at: new Date().toISOString(),
+        birth_reset_note: adminNote || 'admin reset',
+      });
+      await this.saveConsentLog?.({
+        type: 'admin_birthday_reset',
+        customer_id: String(phoneOrId),
+        customer_phone: String(phoneOrId),
+        version: '1.1',
+        accepted: true,
+        details: { admin_note: adminNote || '', user_agent: navigator.userAgent.slice(0, 200) },
+      });
+      return true;
+    } catch (e) { console.warn('[cloud] resetCustomerBirthday', e); return false; }
+  },
+
+  async clearCustomerLinkedDevices(phoneOrId, adminNote) {
+    if (!phoneOrId) return false;
+    try {
+      await updateDoc(doc(fdb, 'customers', String(phoneOrId)), {
+        linked_devices: [],
+        devices_cleared_at: new Date().toISOString(),
+        devices_cleared_note: adminNote || 'admin cleared',
+      });
+      await this.saveConsentLog?.({
+        type: 'admin_devices_cleared',
+        customer_id: String(phoneOrId),
+        customer_phone: String(phoneOrId),
+        version: '1.1',
+        accepted: true,
+        details: { admin_note: adminNote || '', user_agent: navigator.userAgent.slice(0, 200) },
+      });
+      return true;
+    } catch (e) { console.warn('[cloud] clearCustomerLinkedDevices', e); return false; }
+  },
+
+  // 🧹 PDPA CLEANUP — anonymize a customer per retention policy
+  // (after 3 years inactive). Strips PII but keeps an empty shell so
+  // historical orders still aggregate correctly.
+  async anonymizeCustomer(phoneOrId, reason) {
+    if (!phoneOrId) return false;
+    try {
+      // Generate a random anon id so future order aggregations still work
+      const anonId = 'anon-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+      await updateDoc(doc(fdb, 'customers', String(phoneOrId)), {
+        name: '[ANONYMIZED]',
+        phone: '',
+        photo: null,
+        birth_day: null,
+        birth_month: null,
+        birth_locked: false,
+        delivery_addresses: [],
+        linked_devices: [],
+        anonymized: true,
+        anonymized_at: new Date().toISOString(),
+        anonymized_reason: reason || 'retention_policy',
+        anon_id: anonId,
+      });
+      await this.saveConsentLog?.({
+        type: 'customer_anonymized',
+        customer_id: String(phoneOrId),
+        customer_phone: '',
+        version: '1.1',
+        accepted: true,
+        details: { reason: reason || 'retention_policy', anon_id: anonId },
+      });
+      return true;
+    } catch (e) { console.warn('[cloud] anonymizeCustomer', e); return false; }
+  },
+
   // 🔒 Add a device ID to the customer's trusted devices list. Called after
   // a successful birthday-verification on a new device. Idempotent.
   async linkDeviceToCustomer(phoneOrId, deviceId, verifiedBy) {

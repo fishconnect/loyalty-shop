@@ -3678,7 +3678,7 @@ openCart = function() {
 
 // ============ 🔒 PDPA consent banner ============
 // PDPA_VERSION — bump when policy changes; old consents become stale
-const PDPA_VERSION = '1.0';
+const PDPA_VERSION = '1.1';
 
 function getPdpaConsent() {
   try { return JSON.parse(localStorage.getItem('pdpa_consent') || 'null'); } catch (e) { return null; }
