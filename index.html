@@ -3956,8 +3956,7 @@ function renderInvoiceDaily(orders, dateRangeLabel) {
   });
 
   document.getElementById('invoiceOutput').innerHTML = renderInvoiceWrapper(`
-    <h3 style="margin:0;font-size:18px;color:#0a1530">สรุปรายการอาหารครัวผู้ใหญ่ปอง (รายวัน)</h3>
-    <div style="font-size:13px;color:#5c6982;margin-top:4px">${dateRangeLabel}</div>
+    <div style="font-size:12px;color:#5c6982;margin-top:6px;font-weight:600">ช่วงวันที่: ${dateRangeLabel}</div>
   `, `
     <table style="width:100%;border-collapse:collapse;font-size:13px">
       <thead>
@@ -4012,8 +4011,7 @@ function renderInvoiceWeekly(orders, dateRangeLabel) {
   });
 
   document.getElementById('invoiceOutput').innerHTML = renderInvoiceWrapper(`
-    <h3 style="margin:0;font-size:18px;color:#0a1530">สรุปรายการอาหารครัวผู้ใหญ่ปอง (รายสัปดาห์)</h3>
-    <div style="font-size:13px;color:#5c6982;margin-top:4px">${dateRangeLabel}</div>
+    <div style="font-size:12px;color:#5c6982;margin-top:6px;font-weight:600">ช่วงวันที่: ${dateRangeLabel}</div>
   `, `
     <table style="width:100%;border-collapse:collapse;font-size:13px">
       <thead>
@@ -4036,33 +4034,58 @@ function renderInvoiceWeekly(orders, dateRangeLabel) {
   `, () => exportInvoiceWeeklyCSV(byDay));
 }
 
+// Sequential invoice number per day: YYYYMMDD001, 002, 003...
+function getNextInvoiceNumber() {
+  const today = new Date();
+  const dateStr = today.getFullYear() +
+    String(today.getMonth() + 1).padStart(2, '0') +
+    String(today.getDate()).padStart(2, '0');
+  const key = `invoiceCounter_${dateStr}`;
+  const next = parseInt(localStorage.getItem(key) || '0') + 1;
+  localStorage.setItem(key, String(next));
+  return dateStr + String(next).padStart(3, '0');
+}
+
 function renderInvoiceWrapper(headerHTML, tableHTML, csvFn) {
-  // Stash the csv function on window so the inline button can call it
   window._currentInvoiceExport = csvFn;
   const logoSrc = (window.SHOP_INFO && window.SHOP_INFO.logo) || 'logo.jpg';
-  const phone = (window.SHOP_INFO && window.SHOP_INFO.phone) || '061-962-3696';
+  const phone = '061-962-3696';
+  const address = '46 หมู่ 5 ต.หนองนกไข่ อ.กระทุ่มแบน จ.สมุทรสาคร 74110';
+  const invoiceNo = getNextInvoiceNumber();
   return `
-    <div id="invoicePrintable" style="background:#fff;border:1.5px solid #1652F0;border-radius:10px;padding:20px;margin-top:8px">
-      <!-- Letterhead with logo -->
-      <div style="display:flex;align-items:center;gap:14px;border-bottom:2px solid #1652F0;padding-bottom:12px;margin-bottom:14px">
-        <img src="${logoSrc}" alt="logo" style="width:64px;height:64px;border-radius:10px;object-fit:cover;flex-shrink:0">
-        <div style="flex:1;text-align:center">
-          ${headerHTML}
-          <div style="font-size:11px;color:#9ca3af;margin-top:4px">📞 ${phone}</div>
+    <div id="invoicePrintable" style="background:#fff;border:1.5px solid #1652F0;border-radius:10px;padding:20px;margin-top:8px;font-family:'Sarabun','Tahoma',sans-serif;color:#0a1530">
+      <!-- "บิลเงินสด" header -->
+      <div style="text-align:center;font-size:15px;font-weight:800;letter-spacing:.05em;color:#1652F0;margin-bottom:8px">บิลเงินสด</div>
+
+      <!-- Letterhead: logo + shop block -->
+      <div style="display:flex;align-items:flex-start;gap:14px;border-bottom:2px solid #1652F0;padding-bottom:10px;margin-bottom:12px">
+        <img src="${logoSrc}" alt="logo" style="width:64px;height:64px;border-radius:8px;object-fit:cover;flex-shrink:0">
+        <div style="flex:1;text-align:center;line-height:1.4">
+          <div style="font-size:18px;font-weight:900;color:#0a1530">ครัวผู้ใหญ่ปอง</div>
+          <div style="font-size:11px;color:#374151;margin-top:2px">${address}</div>
+          <div style="font-size:11px;color:#374151;margin-top:1px">โทร ${phone}</div>
         </div>
         <div style="width:64px;flex-shrink:0"></div>
       </div>
-      ${tableHTML}
-      <div style="margin-top:30px;display:flex;justify-content:space-between;font-size:13px;color:#5c6982">
+
+      <!-- Invoice meta: number + date -->
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:#374151;margin-bottom:4px;font-weight:600">
+        <div>เลขที่บิล: <b style="color:#1652F0">${invoiceNo}</b></div>
         <div>วันที่ออกบิล: ${formatThaiDate(new Date())}</div>
+      </div>
+      <div style="margin-bottom:10px">${headerHTML}</div>
+
+      ${tableHTML}
+
+      <div style="margin-top:30px;display:flex;justify-content:flex-end;font-size:13px;color:#5c6982">
         <div style="text-align:right">
-          <div style="margin-bottom:4px">ผู้รับบิล............................................</div>
-          <div style="font-size:11px;color:#9ca3af">(ลายเซ็นรับเอกสาร)</div>
+          <div style="margin-bottom:4px">ผู้รับเงิน............................................</div>
+          <div style="font-size:11px;color:#9ca3af">(ลายเซ็นรับเงิน)</div>
         </div>
       </div>
     </div>
     <div style="display:flex;gap:8px;margin-top:10px">
-      <button class="btn-secondary" onclick="printInvoice()" style="flex:1;padding:12px">🖨️ พิมพ์</button>
+      <button class="btn-secondary" onclick="printInvoice()" style="flex:1;padding:12px">🖨️ พิมพ์ A5</button>
       <button class="btn-secondary" onclick="window._currentInvoiceExport && window._currentInvoiceExport()" style="flex:1;padding:12px">📊 Export CSV</button>
     </div>
   `;
@@ -4111,14 +4134,30 @@ function formatThaiDate(d) {
 function printInvoice() {
   const printable = document.getElementById('invoicePrintable');
   if (!printable) return;
-  const w = window.open('', '_blank', 'width=800,height=900');
+  const w = window.open('', '_blank', 'width=600,height=900');
   w.document.write(`
     <!DOCTYPE html>
-    <html><head><meta charset="UTF-8"><title>ใบวางบิล ครัวผู้ใหญ่ปอง</title>
+    <html><head><meta charset="UTF-8"><title>บิลเงินสด ครัวผู้ใหญ่ปอง</title>
     <style>
-      body { font-family: 'Sarabun', 'Tahoma', sans-serif; padding: 20px; color: #0a1530; }
+      body { font-family: 'Sarabun', 'Tahoma', sans-serif; padding: 0; margin: 0; color: #0a1530; }
       table { width: 100%; border-collapse: collapse; }
-      @media print { @page { margin: 12mm; } }
+      img { max-width: 100%; }
+      /* A5 paper: 148 × 210 mm portrait */
+      @page { size: A5 portrait; margin: 8mm; }
+      @media print {
+        body { padding: 0; }
+        #invoicePrintable {
+          border: none !important;
+          padding: 0 !important;
+          margin: 0 !important;
+          box-shadow: none !important;
+        }
+      }
+      #invoicePrintable {
+        max-width: 132mm; /* A5 width minus margins */
+        margin: 0 auto;
+        padding: 8mm;
+      }
     </style>
     </head><body>${printable.outerHTML}</body></html>
   `);
