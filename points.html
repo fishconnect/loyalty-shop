@@ -300,8 +300,27 @@ function renderCustomer(customer, allOrders) {
 
   document.getElementById('main').innerHTML = `
     <div class="hero-card">
-      <div class="greeting">${greeting} 👋</div>
-      <div class="name">${customer.name}</div>
+      <!-- Profile row: avatar + greeting/name + edit button -->
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;position:relative">
+        <div id="profilePhotoWrap" style="position:relative;flex-shrink:0">
+          ${customer.photo
+            ? `<img src="${customer.photo}" style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:2.5px solid rgba(255,255,255,.95);box-shadow:0 3px 10px rgba(0,0,0,.2)">`
+            : `<div style="width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.18);color:#fff;display:grid;place-items:center;font-size:28px;font-weight:900;border:2.5px solid rgba(255,255,255,.95);backdrop-filter:blur(4px)">${(customer.name || '?').slice(0, 1)}</div>`}
+          <button onclick="document.getElementById('profilePhotoInput').click()" aria-label="เปลี่ยนรูป" style="position:absolute;bottom:-2px;right:-2px;background:#fff;color:#1652F0;border:2px solid #1652F0;width:24px;height:24px;border-radius:50%;font-size:11px;cursor:pointer;display:grid;place-items:center;font-family:inherit">📷</button>
+          <input type="file" id="profilePhotoInput" accept="image/jpeg,image/png,image/webp" style="display:none" onchange="onProfilePhotoSelected(event)">
+        </div>
+        <div style="flex:1;min-width:0">
+          <div class="greeting">${greeting} 👋</div>
+          <div style="font-size:20px;font-weight:800;line-height:1.2">${customer.name}</div>
+          <div style="font-size:11px;opacity:.85;margin-top:3px">📱 ${customer.phone || phone}${customer.birth_day && customer.birth_month ? ` · 🎂 ${customer.birth_day}/${customer.birth_month}` : ''}</div>
+        </div>
+        <button onclick="openEditProfileModal()" aria-label="แก้ไข" style="background:rgba(255,255,255,.2);border:1.5px solid rgba(255,255,255,.35);color:#fff;width:38px;height:38px;border-radius:50%;font-size:15px;cursor:pointer;font-family:inherit;backdrop-filter:blur(4px);flex-shrink:0">✏️</button>
+      </div>
+      ${(!customer.birth_day || !customer.birth_month) ? `
+        <button onclick="openEditProfileModal()" style="display:block;width:100%;background:rgba(255,255,255,.18);border:1.5px dashed rgba(255,255,255,.55);color:#fff;border-radius:10px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:14px;backdrop-filter:blur(4px);position:relative">
+          🎂 + เพิ่มวันเกิดของคุณ — รับ +5 แต้มทุกปีในวันเกิด
+        </button>
+      ` : ''}
       <div class="points-row">
         <span class="num">${points}</span>
         <span class="of">แต้ม</span>
@@ -309,6 +328,7 @@ function renderCustomer(customer, allOrders) {
       <div class="lbl">รางวัลถัดไป: ${nextGoal} แต้ม</div>
       <div class="progress"><div class="progress-bar" style="width:${pct}%"></div></div>
       <div class="next">${nextLabel}</div>
+      <div id="profileSaveStatus" style="font-size:11px;font-weight:700;margin-top:8px;min-height:14px;text-align:center;color:#fff;position:relative"></div>
     </div>
 
     ${rewardBanner}
@@ -391,59 +411,7 @@ function renderCustomer(customer, allOrders) {
       `;
     })()}
 
-    <div class="card">
-      <h3>📦 ประวัติการสั่งซื้อ <span style="font-size:11px;color:#6b7280;font-weight:600">(แตะเพื่อสั่งซ้ำ)</span></h3>
-      ${myOrders.length === 0 ? '<div class="empty">ยังไม่มีออเดอร์</div>' :
-        myOrders.map(o => {
-          const isDone = ['delivered','done'].includes(o.status);
-          const isCancelled = o.status === 'cancelled';
-          const isActive = !isDone && !isCancelled;
-          const statusInfo = isCancelled ? { color: '#dc2626', icon: '❌', label: 'ยกเลิก' }
-                           : isDone      ? { color: '#16a34a', icon: '✅', label: 'ส่งสำเร็จ' }
-                           : o.status === 'pending'    ? { color: '#f59e0b', icon: '⏳', label: 'รอยืนยัน' }
-                           : o.status === 'confirmed'  ? { color: '#1652F0', icon: '📋', label: 'ยืนยันแล้ว' }
-                           : o.status === 'cooking'    ? { color: '#f97316', icon: '👨‍🍳', label: 'กำลังทำ' }
-                           : o.status === 'ready'      ? { color: '#16a34a', icon: '📦', label: 'พร้อมส่ง' }
-                           : o.status === 'delivering' ? { color: '#06b6d4', icon: '🚚', label: 'กำลังจัดส่ง' }
-                           : { color: '#6b7280', icon: '•', label: o.status };
-          // Calculate points for completed orders
-          const ptsEarned = isDone ? Math.floor((o.original_total || o.total) / 50) : 0;
-          return `
-            <div class="order-row" onclick="openReorderModal('${o.id}')" style="cursor:pointer;transition:background .15s" onmouseenter="this.style.background='#f7f8fb'" onmouseleave="this.style.background=''">
-              <div class="left">
-                <div class="name">${o.items.map(i => `${i.qty}× ${i.mainName || i.name}`).join(', ').slice(0, 70)}</div>
-                <div class="meta">
-                  ${fmtTime(o.date)} ·
-                  <span style="background:${statusInfo.color};color:#fff;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700">${statusInfo.icon} ${statusInfo.label}</span>
-                  ${ptsEarned > 0 ? ` · <span style="color:#1652F0;font-weight:700">+${ptsEarned} แต้ม</span>` : ''}
-                  ${(o.redemptions && o.redemptions.length) ? ` · <span style="color:#dc2626;font-weight:700">🎁 ใช้ ${o.redemptions.reduce((s,r)=>s+r.points_used,0)} แต้ม</span>` : ''}
-                </div>
-              </div>
-              <div class="price">฿${o.total} <span style="font-size:14px;color:#1652F0;margin-left:4px">›</span></div>
-            </div>
-          `;
-        }).join('')
-      }
-    </div>
-
-    <div class="card" style="margin-top:14px">
-      <h3>📋 โปรไฟล์ของฉัน</h3>
-      <div style="display:flex;align-items:center;gap:14px;margin-top:10px">
-        <div id="profilePhotoWrap" style="position:relative;flex-shrink:0">
-          ${customer.photo
-            ? `<img src="${customer.photo}" style="width:84px;height:84px;border-radius:50%;object-fit:cover;border:3px solid #1652F0;box-shadow:0 3px 10px rgba(22,82,240,.2)">`
-            : `<div style="width:84px;height:84px;border-radius:50%;background:linear-gradient(135deg,#c5d3ff,#1652F0);color:#fff;display:grid;place-items:center;font-size:38px;font-weight:900;border:3px solid #fff;box-shadow:0 3px 10px rgba(22,82,240,.2)">${(customer.name || '?').slice(0, 1)}</div>`}
-          <button onclick="document.getElementById('profilePhotoInput').click()" aria-label="เปลี่ยนรูป" style="position:absolute;bottom:-2px;right:-2px;background:#1652F0;color:#fff;border:2px solid #fff;width:28px;height:28px;border-radius:50%;font-size:13px;cursor:pointer;display:grid;place-items:center;font-family:inherit">📷</button>
-          <input type="file" id="profilePhotoInput" accept="image/jpeg,image/png,image/webp" style="display:none" onchange="onProfilePhotoSelected(event)">
-        </div>
-        <div style="flex:1;min-width:0">
-          <div style="font-weight:800;color:#0a1530;font-size:15px">${customer.name}</div>
-          <div style="font-size:12px;color:#5c6982;margin-top:2px">📱 ${customer.phone || phone}</div>
-          <div style="font-size:12px;color:#5c6982;margin-top:2px">${customer.birth_day && customer.birth_month ? `🎂 ${customer.birth_day}/${customer.birth_month}` : '🎂 ยังไม่ได้ใส่วันเกิด'}</div>
-        </div>
-      </div>
-      <div id="profileSaveStatus" style="font-size:12px;color:#16a34a;font-weight:700;margin-top:8px;min-height:14px;text-align:center"></div>
-    </div>
+<!-- (Profile photo + name + edit moved into the blue hero-card at the top) -->
 
     <div class="card" style="margin-top:14px">
       <h3>📍 ที่อยู่จัดส่งของฉัน <span style="font-size:11px;color:#6b7280;font-weight:600">(บันทึกได้หลายที่)</span></h3>
@@ -468,6 +436,40 @@ function renderCustomer(customer, allOrders) {
       <button onclick="openAddAddressModal()" style="width:100%;margin-top:10px;padding:11px;background:#fff;color:#16a34a;border:1.5px dashed #16a34a;border-radius:10px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit">
         ➕ เพิ่มที่อยู่ใหม่
       </button>
+    </div>
+
+    <!-- 📦 ประวัติการสั่งซื้อ — ย้ายมาท้าย ตามที่ผู้ใช้ขอ -->
+    <div class="card" style="margin-top:14px">
+      <h3>📦 ประวัติการสั่งซื้อ <span style="font-size:11px;color:#6b7280;font-weight:600">(แตะเพื่อสั่งซ้ำ)</span></h3>
+      ${myOrders.length === 0 ? '<div class="empty">ยังไม่มีออเดอร์</div>' :
+        myOrders.map(o => {
+          const isDone = ['delivered','done'].includes(o.status);
+          const isCancelled = o.status === 'cancelled';
+          const statusInfo = isCancelled ? { color: '#dc2626', icon: '❌', label: 'ยกเลิก' }
+                           : isDone      ? { color: '#16a34a', icon: '✅', label: 'ส่งสำเร็จ' }
+                           : o.status === 'pending'    ? { color: '#f59e0b', icon: '⏳', label: 'รอยืนยัน' }
+                           : o.status === 'confirmed'  ? { color: '#1652F0', icon: '📋', label: 'ยืนยันแล้ว' }
+                           : o.status === 'cooking'    ? { color: '#f97316', icon: '👨‍🍳', label: 'กำลังทำ' }
+                           : o.status === 'ready'      ? { color: '#16a34a', icon: '📦', label: 'พร้อมส่ง' }
+                           : o.status === 'delivering' ? { color: '#06b6d4', icon: '🚚', label: 'กำลังจัดส่ง' }
+                           : { color: '#6b7280', icon: '•', label: o.status };
+          const ptsEarned = isDone ? Math.floor((o.original_total || o.total) / 50) : 0;
+          return `
+            <div class="order-row" onclick="openReorderModal('${o.id}')" style="cursor:pointer;transition:background .15s" onmouseenter="this.style.background='#f7f8fb'" onmouseleave="this.style.background=''">
+              <div class="left">
+                <div class="name">${o.items.map(i => `${i.qty}× ${i.mainName || i.name}`).join(', ').slice(0, 70)}</div>
+                <div class="meta">
+                  ${fmtTime(o.date)} ·
+                  <span style="background:${statusInfo.color};color:#fff;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700">${statusInfo.icon} ${statusInfo.label}</span>
+                  ${ptsEarned > 0 ? ` · <span style="color:#1652F0;font-weight:700">+${ptsEarned} แต้ม</span>` : ''}
+                  ${(o.redemptions && o.redemptions.length) ? ` · <span style="color:#dc2626;font-weight:700">🎁 ใช้ ${o.redemptions.reduce((s,r)=>s+r.points_used,0)} แต้ม</span>` : ''}
+                </div>
+              </div>
+              <div class="price">฿${o.total} <span style="font-size:14px;color:#1652F0;margin-left:4px">›</span></div>
+            </div>
+          `;
+        }).join('')
+      }
     </div>
 
     <div class="actions">
@@ -663,6 +665,98 @@ async function deleteAddress(id) {
   if (window.cloud?.saveCustomer) await window.cloud.saveCustomer(cust);
   renderCustomer(cust, window._allOrders || []);
 }
+// ✏️ Edit profile modal — name + birthday (phone is read-only)
+function openEditProfileModal() {
+  const db = loadDB();
+  const cust = db.customers[phone];
+  if (!cust) return;
+  let modal = document.getElementById('editProfileModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'editProfileModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px)';
+    modal.onclick = (e) => { if (e.target === modal) closeEditProfileModal(); };
+    document.body.appendChild(modal);
+  }
+  const months = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+  let dayOpts = '<option value="">— วัน —</option>';
+  for (let d = 1; d <= 31; d++) dayOpts += `<option value="${d}" ${cust.birth_day == d ? 'selected' : ''}>${d}</option>`;
+  let monthOpts = '<option value="">— เดือน —</option>';
+  months.forEach((n, i) => { monthOpts += `<option value="${i + 1}" ${cust.birth_month == i + 1 ? 'selected' : ''}>${n}</option>`; });
+  modal.innerHTML = `
+    <div style="background:#fff;width:100%;max-width:520px;border-radius:24px 24px 0 0;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;font-family:inherit;animation:slideUp .25s ease">
+      <style>@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}</style>
+      <div style="padding:16px 20px;background:linear-gradient(135deg,#1652F0,#0738C9);color:#fff;display:flex;justify-content:space-between;align-items:center">
+        <div style="font-weight:900;font-size:17px">✏️ แก้ไขโปรไฟล์</div>
+        <button onclick="closeEditProfileModal()" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:34px;height:34px;border-radius:50%;font-size:18px;cursor:pointer">×</button>
+      </div>
+      <div style="padding:20px;overflow-y:auto;flex:1">
+        <div style="margin-bottom:14px">
+          <label style="font-weight:700;color:#0a1530;font-size:13px;display:block;margin-bottom:5px">👤 ชื่อ-นามสกุล <span style="color:#dc2626">*</span></label>
+          <input type="text" id="editName" value="${(cust.name || '').replace(/"/g, '&quot;')}" placeholder="เช่น สมชาย ใจดี" style="width:100%;padding:12px 14px;border:1.5px solid #d1ddff;border-radius:10px;font-size:15px;font-family:inherit">
+        </div>
+        <div style="margin-bottom:14px">
+          <label style="font-weight:700;color:#0a1530;font-size:13px;display:block;margin-bottom:5px">📱 เบอร์โทร</label>
+          <input type="text" value="${cust.phone || phone}" readonly style="width:100%;padding:12px 14px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:15px;font-family:inherit;background:#f7f8fb;color:#6b7280">
+          <div style="font-size:11px;color:#9ca3af;margin-top:4px">เบอร์โทรเปลี่ยนไม่ได้ — ติดต่อทางร้านถ้าต้องการเปลี่ยน</div>
+        </div>
+        <div style="margin-bottom:14px">
+          <label style="font-weight:700;color:#0a1530;font-size:13px;display:block;margin-bottom:5px">🎂 วันเกิด <span style="color:#9ca3af;font-weight:500">(ใส่แล้วรับ +5 แต้มทุกปีในวันเกิด)</span></label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <select id="editBirthDay" style="padding:12px;border:1.5px solid #d1ddff;border-radius:10px;font-size:14px;font-family:inherit;background:#fff">${dayOpts}</select>
+            <select id="editBirthMonth" style="padding:12px;border:1.5px solid #d1ddff;border-radius:10px;font-size:14px;font-family:inherit;background:#fff">${monthOpts}</select>
+          </div>
+        </div>
+        <div id="editProfileStatus" style="font-size:13px;font-weight:700;text-align:center;margin-top:8px;min-height:18px"></div>
+      </div>
+      <div style="padding:14px 20px;border-top:1px solid #e5e7eb;background:#f7f8fb">
+        <button onclick="saveEditProfile()" style="display:block;width:100%;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;padding:13px;border:none;border-radius:12px;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit">💾 บันทึก</button>
+        <button onclick="closeEditProfileModal()" style="display:block;width:100%;margin-top:6px;padding:9px;background:transparent;color:#6b7280;border:none;font-size:13px;cursor:pointer;font-family:inherit">ยกเลิก</button>
+      </div>
+    </div>
+  `;
+  modal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+function closeEditProfileModal() {
+  const m = document.getElementById('editProfileModal');
+  if (m) m.style.display = 'none';
+  document.body.style.overflow = '';
+}
+async function saveEditProfile() {
+  const name = (document.getElementById('editName').value || '').trim();
+  const bd = parseInt(document.getElementById('editBirthDay').value) || null;
+  const bm = parseInt(document.getElementById('editBirthMonth').value) || null;
+  const status = document.getElementById('editProfileStatus');
+  if (!name) { status.style.color = '#dc2626'; status.textContent = '⚠️ กรุณากรอกชื่อ'; return; }
+  status.style.color = '#1652F0'; status.textContent = '⏳ กำลังบันทึก...';
+  const db = loadDB();
+  const cust = db.customers[phone];
+  if (!cust) return;
+  cust.name = name;
+  if (bd && bm) {
+    cust.birth_day = bd;
+    cust.birth_month = bm;
+    cust.birth_locked = true;
+  } else {
+    delete cust.birth_day;
+    delete cust.birth_month;
+    delete cust.birth_locked;
+  }
+  saveDB(db);
+  localStorage.setItem('lastCustomerName', name);
+  try {
+    if (window.cloud?.saveCustomer) await window.cloud.saveCustomer(cust);
+  } catch (e) { console.warn('cloud sync fail', e); }
+  status.style.color = '#16a34a'; status.textContent = '✅ บันทึกแล้ว';
+  setTimeout(() => {
+    closeEditProfileModal();
+    renderCustomer(cust, window._allOrders || []);
+  }, 600);
+}
+window.openEditProfileModal = openEditProfileModal;
+window.closeEditProfileModal = closeEditProfileModal;
+window.saveEditProfile = saveEditProfile;
 window.onProfilePhotoSelected = onProfilePhotoSelected;
 window.openAddAddressModal = openAddAddressModal;
 window.closeAddAddressModal = closeAddAddressModal;
