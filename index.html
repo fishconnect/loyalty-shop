@@ -543,12 +543,29 @@
 
   <!-- Date range filter -->
   <div class="card" style="padding:12px;margin-bottom:12px">
-    <div style="display:flex;gap:6px;flex-wrap:wrap">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
       <button class="exp-range-btn active" data-range="today" onclick="setExpenseRange('today')">วันนี้</button>
+      <button class="exp-range-btn" data-range="yesterday" onclick="setExpenseRange('yesterday')">เมื่อวาน</button>
       <button class="exp-range-btn" data-range="7d" onclick="setExpenseRange('7d')">7 วัน</button>
       <button class="exp-range-btn" data-range="30d" onclick="setExpenseRange('30d')">30 วัน</button>
       <button class="exp-range-btn" data-range="month" onclick="setExpenseRange('month')">เดือนนี้</button>
       <button class="exp-range-btn" data-range="all" onclick="setExpenseRange('all')">ทั้งหมด</button>
+      <button class="exp-range-btn" data-range="custom" onclick="toggleExpenseCustomRange()">📅 เลือกเอง</button>
+    </div>
+    <!-- Custom date range picker -->
+    <div id="expCustomRangeBox" style="display:none;background:#fef2f2;padding:10px;border-radius:10px;border:1.5px solid #fecaca">
+      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end">
+        <div>
+          <label style="font-size:12px;font-weight:600;margin-bottom:4px">📅 จากวันที่</label>
+          <input type="date" id="expCustomFrom" style="width:100%">
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;margin-bottom:4px">📅 ถึงวันที่</label>
+          <input type="date" id="expCustomTo" style="width:100%">
+        </div>
+        <button class="btn-primary" onclick="applyExpenseCustomRange()" style="padding:10px 16px;background:linear-gradient(135deg,#dc2626,#991b1b);white-space:nowrap">🔄 ดูผล</button>
+      </div>
+      <div id="expCustomStatus" style="font-size:11px;color:#5c6982;margin-top:6px"></div>
     </div>
   </div>
 
@@ -5793,17 +5810,64 @@ document.getElementById('modal').addEventListener('click', e => {
 let expenses = JSON.parse(localStorage.getItem('expenses') || '[]');
 let expenseRange = 'today';
 let editingExpenseId = null;
+let expenseCustomRange = { from: null, to: null };
 
 function setExpenseRange(r) {
   expenseRange = r;
   document.querySelectorAll('.exp-range-btn').forEach(b => b.classList.toggle('active', b.dataset.range === r));
+  // Hide custom-range box unless explicitly toggled open
+  if (r !== 'custom') {
+    const box = document.getElementById('expCustomRangeBox');
+    if (box) box.style.display = 'none';
+  }
   renderExpensesPage();
+}
+
+function toggleExpenseCustomRange() {
+  const box = document.getElementById('expCustomRangeBox');
+  const showing = box.style.display !== 'none';
+  if (showing) {
+    box.style.display = 'none';
+    return;
+  }
+  box.style.display = 'block';
+  // Pre-fill with last 7 days as default
+  const today = new Date();
+  const fmt = _localDateKey;
+  const fromEl = document.getElementById('expCustomFrom');
+  const toEl = document.getElementById('expCustomTo');
+  if (!fromEl.value) {
+    const s = new Date(today); s.setDate(s.getDate() - 6);
+    fromEl.value = fmt(s);
+  }
+  if (!toEl.value) toEl.value = fmt(today);
+  document.querySelectorAll('.exp-range-btn').forEach(b => b.classList.toggle('active', b.dataset.range === 'custom'));
+}
+
+function applyExpenseCustomRange() {
+  const fromStr = document.getElementById('expCustomFrom').value;
+  const toStr = document.getElementById('expCustomTo').value;
+  if (!fromStr || !toStr) return toast('⚠️ เลือกทั้ง 2 วันที่');
+  const from = new Date(fromStr); from.setHours(0,0,0,0);
+  const to = new Date(toStr); to.setHours(23,59,59,999);
+  if (from > to) return toast('⚠️ วันที่เริ่มต้องอยู่ก่อนวันที่จบ');
+  expenseCustomRange.from = from;
+  expenseCustomRange.to = to;
+  const dayDiff = _daysBetweenInclusive(from, to);
+  document.getElementById('expCustomStatus').innerHTML =
+    `✅ <b>${formatThaiDate(from)} ถึง ${formatThaiDate(to)}</b> (${dayDiff} วัน)`;
+  setExpenseRange('custom');
 }
 
 function expenseRangeBounds(r) {
   const now = new Date();
   const today = new Date(now); today.setHours(0,0,0,0);
   if (r === 'today') return { start: today, end: now, label: 'วันนี้' };
+  if (r === 'yesterday') {
+    const s = new Date(today); s.setDate(s.getDate() - 1);
+    const e = new Date(today); e.setMilliseconds(-1);
+    return { start: s, end: e, label: 'เมื่อวาน · ' + formatThaiDate(s) };
+  }
   if (r === '7d') {
     const s = new Date(today); s.setDate(s.getDate() - 6);
     return { start: s, end: now, label: '7 วันล่าสุด' };
@@ -5815,6 +5879,14 @@ function expenseRangeBounds(r) {
   if (r === 'month') {
     const s = new Date(today.getFullYear(), today.getMonth(), 1);
     return { start: s, end: now, label: today.toLocaleDateString('th-TH', {month:'long',year:'numeric'}) };
+  }
+  if (r === 'custom' && expenseCustomRange.from && expenseCustomRange.to) {
+    const dayDiff = _daysBetweenInclusive(expenseCustomRange.from, expenseCustomRange.to);
+    const sameDay = expenseCustomRange.from.toDateString() === expenseCustomRange.to.toDateString();
+    const label = sameDay
+      ? formatThaiDate(expenseCustomRange.from)
+      : `${formatThaiDate(expenseCustomRange.from)} - ${formatThaiDate(expenseCustomRange.to)} (${dayDiff} วัน)`;
+    return { start: expenseCustomRange.from, end: expenseCustomRange.to, label };
   }
   return { start: new Date(0), end: now, label: 'ทั้งหมด' };
 }
