@@ -2184,15 +2184,29 @@ async function submitOrder() {
     updateCartBar();
     toast(`✓ ส่งครัวแล้ว! ${customer.name} · ฿${total}${signupBonusGiven?' · 🎁 +5 แต้มสมัครใหม่!':''}${birthdayBonusGiven?' · 🎂 สุขสันต์วันเกิด +5 แต้ม!':''}${referrerCustomer?' · 🤝 +5 แต้มจากการแนะนำ!':''}`);
   } else {
-    // Customer-side: clearly tell them the click went through, then redirect.
-    if (submitText) submitText.textContent = '✅ ท่านได้กดสั่งอาหารแล้ว';
-    if (submitBtn) {
-      submitBtn.style.background = 'linear-gradient(135deg,#16a34a,#15803d)';
-      submitBtn.style.cursor = 'default';
-    }
+    // Customer-side: clear cart UI immediately, show fullscreen confirmation
+    // overlay, then redirect to status page so customer never sees the
+    // half-cleared menu underneath.
+    closeCart();
+    renderMenu();
+    updateCartBar();
+
+    // Fullscreen success overlay (z-index above everything)
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:linear-gradient(135deg,#16a34a,#15803d);z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;text-align:center;padding:30px;animation:fadeIn .25s ease';
+    overlay.innerHTML = `
+      <style>@keyframes fadeIn{from{opacity:0}to{opacity:1}}@keyframes popCheck{0%{transform:scale(0)}60%{transform:scale(1.2)}100%{transform:scale(1)}}</style>
+      <div style="font-size:96px;animation:popCheck .5s ease-out">✅</div>
+      <div style="font-size:28px;font-weight:900;margin-top:14px">ท่านได้กดสั่งอาหารแล้ว</div>
+      <div style="font-size:15px;opacity:.9;margin-top:8px">ครัวได้รับ Order #${orderId.slice(-6)} แล้ว</div>
+      <div style="font-size:14px;opacity:.85;margin-top:14px">${customer.name} · ฿${total}</div>
+      <div style="font-size:12px;opacity:.7;margin-top:24px">⏳ กำลังพาคุณไปหน้าสถานะ...</div>
+    `;
+    document.body.appendChild(overlay);
+
     setTimeout(() => {
       window.location.href = `status.html?order=${orderId}&phone=${phone || customerId}`;
-    }, 1200);
+    }, 1500);
   }
 }
 
