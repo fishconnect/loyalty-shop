@@ -848,7 +848,13 @@ async function downloadMyData() {
 }
 
 // 🗑️ PDPA Right to Erasure — soft-delete request
+//   1. Mark customer as deletion_requested in Firestore (so admin sees it
+//      in the PDPA panel under "🗑️ คำขอลบบัญชีค้างอยู่")
+//   2. Open user's email client with a pre-filled message to admin@fishconnect.co
+//      so the team gets a real email — they can reply to the customer directly
 async function requestDeleteAccount() {
+  const db = loadDB();
+  const cust = db.customers[phone];
   const reason = prompt('🗑️ ขอลบบัญชี\n\nเหตุผล (ไม่บังคับ — ช่วยให้เราปรับปรุง):', '');
   if (reason === null) return;  // user cancelled
   if (!confirm('⚠️ ยืนยันการขอลบบัญชี?\n\n• ทีมงานจะดำเนินการภายใน 7 วัน\n• ข้อมูลออเดอร์เก่าจะถูก redact\n• แต้มสะสมจะถูกล้าง\n• คุณยังสั่งอาหารใหม่ได้ แต่จะถือเป็นบัญชีใหม่\n\nกด OK เพื่อยืนยัน')) return;
@@ -856,10 +862,69 @@ async function requestDeleteAccount() {
     if (window.cloud?.requestAccountDeletion) {
       await window.cloud.requestAccountDeletion(phone, reason || '');
     }
-    alert('✅ ส่งคำขอลบบัญชีแล้ว\n\nทีมงานจะติดต่อกลับและดำเนินการภายใน 7 วัน\nหากต้องการยกเลิกคำขอ ติดต่อ 061-962-3696');
   } catch (e) {
-    alert('⚠️ ส่งคำขอไม่สำเร็จ — โทร 061-962-3696 เพื่อแจ้งโดยตรง');
+    alert('⚠️ บันทึกคำขอใน Cloud ไม่สำเร็จ — แต่จะส่งอีเมลแจ้งทีมงานต่อให้');
   }
+  // Build mailto: link with pre-filled details
+  const subject = `[PDPA] คำขอลบบัญชี - ${phone}`;
+  const lines = [
+    'เรียน ทีมงาน Fish Connect / ครัวผู้ใหญ่ปอง',
+    '',
+    'ตามสิทธิเจ้าของข้อมูลส่วนบุคคล (Right to Erasure) ตาม พ.ร.บ. PDPA พ.ศ. 2562',
+    'ดิฉัน/ผม ขอใช้สิทธิให้ลบบัญชีและข้อมูลส่วนบุคคลของฉันออกจากระบบ',
+    '',
+    '═══ ข้อมูลคำขอ ═══',
+    `📱 เบอร์โทร     : ${phone}`,
+    `👤 ชื่อในระบบ   : ${cust?.name || '(ไม่ระบุ)'}`,
+    `🎂 วันเกิด      : ${cust?.birth_day && cust?.birth_month ? `${cust.birth_day}/${cust.birth_month}` : '(ไม่ระบุ)'}`,
+    `⭐ แต้มคงเหลือ  : ${cust?.points || 0}`,
+    `📅 วันที่สมัคร  : ${cust?.joined ? new Date(cust.joined).toLocaleDateString('th-TH') : '(ไม่ทราบ)'}`,
+    `🕒 วันที่ขอลบ   : ${new Date().toLocaleString('th-TH')}`,
+    '',
+    `📝 เหตุผล: ${reason || '(ไม่ระบุ)'}`,
+    '',
+    '═══ การดำเนินการที่ขอให้ทำ ═══',
+    '1. ลบ/redact ข้อมูลส่วนบุคคล (ชื่อ · เบอร์ · ที่อยู่ · รูป · วันเกิด)',
+    '2. ล้างแต้มสะสมและประวัติการแลก',
+    '3. เก็บประวัติออเดอร์ในรูปแบบ anonymized เพื่อการบัญชี (5 ปีตามกฎหมาย)',
+    '4. ตอบกลับยืนยันเมื่อดำเนินการเสร็จสิ้น',
+    '',
+    'ขอบคุณค่ะ/ครับ',
+  ];
+  const body = lines.join('\n');
+  const mailto = `mailto:admin@fishconnect.co?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
+  // Show modal explaining what's about to happen, then open mail client
+  showDeletionConfirmModal(mailto);
+}
+
+function showDeletionConfirmModal(mailto) {
+  let m = document.getElementById('deletionConfirmModal');
+  if (!m) {
+    m = document.createElement('div');
+    m.id = 'deletionConfirmModal';
+    m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px)';
+    m.onclick = (e) => { if (e.target === m) m.remove(); };
+    document.body.appendChild(m);
+  }
+  m.innerHTML = `
+    <div style="background:#fff;width:100%;max-width:440px;border-radius:20px;padding:24px;font-family:inherit;box-shadow:0 20px 60px rgba(0,0,0,.4)">
+      <div style="text-align:center;font-size:48px;margin-bottom:8px">📧</div>
+      <h2 style="font-size:18px;font-weight:900;color:#0a1530;text-align:center;margin-bottom:14px">ส่งอีเมลคำขอลบบัญชี</h2>
+      <div style="background:#dcfce7;border:1.5px solid #16a34a;color:#166534;padding:12px;border-radius:10px;margin-bottom:12px;font-size:13px;line-height:1.6">
+        ✅ บันทึกคำขอใน Cloud แล้ว<br>
+        📧 ขั้นตอนถัดไป: ส่งอีเมลถึงทีมงาน<br>
+        <b>admin@fishconnect.co</b>
+      </div>
+      <div style="background:#fef3c7;border:1.5px solid #f59e0b;color:#78350f;padding:12px;border-radius:10px;margin-bottom:14px;font-size:12.5px;line-height:1.6">
+        💡 กดปุ่มด้านล่าง → แอพอีเมลจะเปิดขึ้นพร้อมข้อความที่เตรียมไว้แล้ว<br>
+        เพียงกด <b>"ส่ง"</b> ในแอพอีเมลของท่าน
+      </div>
+      <a href="${mailto}" onclick="document.getElementById('deletionConfirmModal').remove();setTimeout(()=>alert('✅ ขอบคุณสำหรับคำขอ\\n\\nทีมงานจะติดต่อกลับและดำเนินการภายใน 7 วัน\\nหากต้องการยกเลิกคำขอ ติดต่อ 061-962-3696'),300)" style="display:block;text-align:center;background:linear-gradient(135deg,#dc2626,#991b1b);color:#fff;padding:14px;border-radius:12px;font-weight:800;font-size:14px;text-decoration:none;font-family:inherit;margin-bottom:8px">📧 เปิดแอพอีเมล + ส่งคำขอ</a>
+      <button onclick="document.getElementById('deletionConfirmModal').remove()" style="display:block;width:100%;padding:11px;background:#f7f8fb;color:#6b7280;border:1.5px solid #e5e7eb;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">ยกเลิก</button>
+      <div style="font-size:11px;color:#9ca3af;text-align:center;margin-top:10px">หากแอพอีเมลไม่เปิด — โทรแจ้งที่ <a href="tel:0619623696" style="color:#1652F0;font-weight:700">061-962-3696</a></div>
+    </div>
+  `;
 }
 
 window.downloadMyData = downloadMyData;
