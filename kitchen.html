@@ -1730,8 +1730,8 @@ async function renderReceiptCanvas(order) {
   ctx.textRendering = 'geometricPrecision';
 
   const includeQR = localStorage.getItem('btPrintQR') !== '0';
-  const QR_MENU_SIZE = 104;     // menu QR — top of receipt
-  const QR_PAYMENT_SIZE = 320;  // payment QR — large enough to fill most of 80mm width (576px)
+  const QR_MENU_SIZE = 88;      // menu QR — top of receipt (was 104, save ~2mm)
+  const QR_PAYMENT_SIZE = 240;  // payment QR — still scannable (was 320, save ~10mm)
 
   let y = 14;
   const FONT = '"Sarabun", "Tahoma", "Noto Sans Thai", sans-serif';
@@ -1854,13 +1854,12 @@ async function renderReceiptCanvas(order) {
 }
 
 // 🏷️ Render a single mini-sticker (one per dish unit) for BT printer.
-// Goal: kitchen sticks 1 sticker on each food box — no more handwriting.
-// Layout: large customer name → giant item name → options → spice → big NOTE box.
+// COMPACT layout — target ~50mm per sticker (was ~100mm).
 async function renderStickerCanvas(order, item, unitIdx, totalUnits, globalIdx, globalTotal) {
   const W = 576;
   const canvas = document.createElement('canvas');
   canvas.width = W;
-  canvas.height = 1200; // generous, will be trimmed
+  canvas.height = 800;
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, W, canvas.height);
@@ -1869,131 +1868,125 @@ async function renderStickerCanvas(order, item, unitIdx, totalUnits, globalIdx, 
   ctx.imageSmoothingQuality = 'high';
   ctx.textRendering = 'geometricPrecision';
 
-  let y = 14;
+  let y = 8;
   const FONT = '"Sarabun", "Tahoma", "Noto Sans Thai", sans-serif';
   const setFont = (size, bold = false) => { ctx.font = `${bold ? 'bold ' : ''}${size}px ${FONT}`; };
   const center = (text, size, bold = false) => {
     setFont(size, bold);
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
     ctx.fillText(text, W / 2, y);
-    y += size + 4;
+    y += size + 2;
   };
   const left = (text, size, bold = false) => {
     setFont(size, bold);
     ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-    ctx.fillText(text, 16, y);
-    y += size + 3;
+    ctx.fillText(text, 14, y);
+    y += size + 1;
   };
-  const divider = () => { y += 4; ctx.fillRect(14, y, W - 28, 2); y += 7; };
-  const blackBox = (text, size) => {
-    setFont(size, true);
-    const padding = 14;
-    const h = size + padding * 2;
-    ctx.fillStyle = '#000';
-    ctx.fillRect(8, y, W - 16, h);
-    ctx.fillStyle = '#fff';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(text, W / 2, y + h / 2);
-    ctx.fillStyle = '#000';
-    y += h + 6;
-  };
+  const divider = () => { y += 2; ctx.fillRect(14, y, W - 28, 2); y += 4; };
 
-  // Header — order ID + position in order
-  setFont(22, true);
+  // Header line — order ID · customer · position (single compact row)
+  setFont(20, true);
   ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-  ctx.fillText(`#${order.id.slice(-6)}`, 16, y);
+  ctx.fillText(`#${order.id.slice(-6)} · ${order.customer_name || 'ลูกค้า'}`, 14, y);
   ctx.textAlign = 'right';
-  ctx.fillText(`${globalIdx}/${globalTotal}`, W - 16, y);
-  y += 28;
-  divider();
+  ctx.fillText(`${globalIdx}/${globalTotal}`, W - 14, y);
+  y += 26;
 
-  // Customer name — BIG so kitchen knows whose food it is
-  center(order.customer_name || 'ลูกค้า', 40, true);
-  if (order.customer_phone) {
-    setFont(20, true);
-    ctx.fillStyle = '#000';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    ctx.fillText(maskPhone(order.customer_phone), W / 2, y);
-    y += 26;
-  }
-  // Order type
+  // Type indicator — 1 line, small
   if (order.order_type === 'delivery') {
-    blackBox('🚚 DELIVERY', 22);
-  } else {
-    setFont(18, true);
-    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    ctx.fillText('🏪 รับที่ร้าน', W / 2, y);
-    y += 24;
+    setFont(16, true);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText('🚚 DELIVERY' + (order.customer_phone ? ' · ' + maskPhone(order.customer_phone) : ''), 14, y);
+    y += 20;
+  } else if (order.customer_phone) {
+    setFont(16, true);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText('🏪 ' + maskPhone(order.customer_phone), 14, y);
+    y += 20;
   }
   divider();
 
-  // Item name — HUGE, this is what kitchen reads at a glance
+  // Item name — large but not giant
   const mainNm = item.mainName || item.name;
-  // Wrap if name is long
-  setFont(46, true);
-  const maxLineWidth = W - 30;
-  const words = String(mainNm).split('');  // Thai has no spaces — char-by-char wrap
+  setFont(36, true);
+  const maxLineWidth = W - 28;
+  const chars = String(mainNm).split('');
   let line = '';
   const lines = [];
-  for (const ch of words) {
+  for (const ch of chars) {
     const test = line + ch;
     if (ctx.measureText(test).width > maxLineWidth && line) {
       lines.push(line); line = ch;
     } else { line = test; }
   }
   if (line) lines.push(line);
-  for (const ln of lines) center(ln, 46, true);
+  for (const ln of lines) center(ln, 36, true);
 
-  // Quantity badge if more than 1 of this item
+  // Quantity badge if more than 1 of this item — inline small
   if (totalUnits > 1) {
-    setFont(22, true);
+    setFont(16, true);
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
     ctx.fillText(`(ชิ้นที่ ${unitIdx} จาก ${totalUnits})`, W / 2, y);
+    y += 20;
+  }
+
+  // Options — pack everything into compact lines, group basic vs premium
+  if (item.options && item.options.length) {
+    y += 2;
+    const spicy = item.options.filter(o => (o.choice || '').includes('เผ็ด'));
+    const free = item.options.filter(o => !(o.choice || '').includes('เผ็ด') && (o.price || 0) === 0);
+    const premium = item.options.filter(o => (o.price || 0) > 0);
+
+    // 🌶️ Spice level — its own line so cook can't miss it
+    if (spicy.length) {
+      setFont(22, true);
+      ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      ctx.fillText('🌶️ ' + spicy.map(o => o.choice).join(', '), 14, y);
+      y += 26;
+    }
+    // Basic ingredients — comma-separated, one line if fits
+    if (free.length) {
+      const txt = '• ' + free.map(o => o.choice).join(', ');
+      // Wrap if too wide
+      setFont(20, true);
+      const w = ctx.measureText(txt).width;
+      if (w <= maxLineWidth) {
+        ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+        ctx.fillText(txt, 14, y);
+        y += 24;
+      } else {
+        free.forEach(o => left('• ' + o.choice, 20, true));
+      }
+    }
+    // Premium add-ons — show with price
+    premium.forEach(o => {
+      left(`+ ${o.choice} (+${o.price}฿)`, 20, true);
+    });
+  }
+
+  // Note — single line with prefix marker (no inverted box)
+  if (item.note) {
+    y += 2;
+    setFont(22, true);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    // Bold the note with a left border accent
+    ctx.fillRect(8, y, 4, 26);
+    ctx.fillText('📝 ' + item.note, 18, y);
     y += 28;
   }
 
-  y += 6;
-  // Options — clear separation: spice, basic, premium, eggs, extras
-  if (item.options && item.options.length) {
-    for (const o of item.options) {
-      const isSpicy = (o.choice || '').includes('เผ็ด');
-      const isPremium = (o.price || 0) > 0;
-      let prefix = '• ';
-      let priceTag = '';
-      if (isPremium) { prefix = '+ '; priceTag = ` (+${o.price}฿)`; }
-      const label = prefix + o.choice + priceTag;
-      if (isSpicy) {
-        // Spice level — distinct row to grab cook's attention
-        setFont(28, true);
-        ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-        ctx.fillText('🌶️  ' + o.choice, 16, y);
-        y += 32;
-      } else {
-        left(label, 26, true);
-      }
-    }
-  }
-
-  // Note — VERY prominent (inverted black box)
-  if (item.note) {
-    y += 4;
-    blackBox('📝 ' + item.note, 28);
-  }
-
-  // Free indicator
+  // Free indicator — small line
   const freeQty = item.freeQty || 0;
   if (freeQty > 0 && unitIdx <= freeQty) {
-    blackBox('🎁 รายการนี้ฟรี (จากแต้ม)', 22);
+    setFont(18, true);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.fillText('🎁 ฟรีจากแต้ม', W / 2, y);
+    y += 22;
   }
 
-  divider();
-  // Footer: time
-  setFont(18);
-  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-  ctx.fillText(fmtReceiptDate(order.date), W / 2, y);
-  y += 22;
-
-  // Trim canvas to actual content height
+  y += 4;
+  // Trim
   const final = document.createElement('canvas');
   final.width = W;
   final.height = y;
@@ -2025,7 +2018,7 @@ async function buildStickerESCPOS(order, item, unitIdx, totalUnits, globalIdx, g
     for (let i = start; i < end; i++) out.push(raster[i]);
     row += rowsThis;
   }
-  out.push(0x0A, 0x0A, 0x0A, 0x0A);  // feed for cut alignment
+  out.push(0x0A);                     // 1 feed for cut clearance (was 4 = wasted 9mm)
   out.push(0x1D, 0x56, 0x00);         // GS V 0 — full cut
   return new Uint8Array(out);
 }
@@ -2077,7 +2070,7 @@ async function buildBitmapESCPOS(order) {
   }
 
   // Feed paper to align with cutter, then auto-cut
-  out.push(0x0A, 0x0A, 0x0A, 0x0A);
+  out.push(0x0A);                  // 1 feed line — minimum for cutter clearance (was 4 = wasted 9mm/cut)
   // GS V 1 — partial cut (stays attached at center)
   // GS V 0 — full cut (fully separates)
   // Many compact thermal printers (Xprinter N160II) only have GS V m
