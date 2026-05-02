@@ -724,11 +724,18 @@
     <!-- 📄 ใบวางบิล (Invoice generator) -->
     <div class="card" style="border:2px solid #1652F0;background:linear-gradient(135deg,#fff,#ebf0ff)">
       <h2>📄 ออกใบวางบิล (Invoice)</h2>
-      <div style="font-size:12px;color:#5c6982;margin-bottom:10px;line-height:1.6">
-        เลือกช่วงวันที่ → ระบบสรุป order โรงงานแยก 4 หมวด:<br>
-        🍱 <b>มื้อกลางวัน</b> (8:00-15:00 · ราคา 50฿) · 🥤 <b>เครื่องดื่ม</b> (ทุกเวลา) ·
-        🌙 <b>มื้อโอที</b> (15:00+) · 🍚 <b>ข้าวพี่อาท</b> (ราคา 60฿)
+
+      <!-- Mode toggle -->
+      <label style="font-size:13px;font-weight:600;margin-bottom:6px">เลือกรูปแบบใบวางบิล</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px">
+        <button id="invModeDaily" class="btn-secondary" onclick="setInvoiceMode('daily')" style="padding:12px;background:linear-gradient(135deg,#1652F0,#0738C9);color:#fff;border:none;font-weight:800">📋 รายวัน (แยก 4 หมวด)</button>
+        <button id="invModeWeekly" class="btn-secondary" onclick="setInvoiceMode('weekly')" style="padding:12px;background:#fff;color:#5c6982;border:1.5px solid #e2e7ef;font-weight:700">📅 รายสัปดาห์ (รวมต่อวัน)</button>
       </div>
+
+      <div id="invModeHint" style="font-size:12px;color:#5c6982;background:#fef3c7;padding:8px 10px;border-radius:8px;margin-bottom:10px;line-height:1.5">
+        🍱 <b>มื้อกลางวัน</b> 8:00-15:00 (50฿) · 🥤 <b>เครื่องดื่ม</b> · 🌙 <b>มื้อโอที</b> 15:00+ · 🍚 <b>ข้าวพี่อาท</b> (60฿)
+      </div>
+
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
         <div>
           <label style="font-size:13px;font-weight:600;margin-bottom:4px">📅 วันที่เริ่ม</label>
@@ -3795,12 +3802,43 @@ const INVOICE_CATEGORIES = [
       !isDrink && orderHour >= 8 && orderHour < 24 && Number(item.price) === 60 },
 ];
 
+// 🥤 Drink detection — strict whitelist from MENU (no regex false-positives like
+// "ผัดน้ำมันหอย" / "ผัดน้ำพริกเผา" matching just because they contain "น้ำ").
+let _drinkIdCache = null;
 function _isDrinkItem(item) {
   if (!item) return false;
   const id = String(item.id || '');
-  if (id.startsWith('dr-')) return true;                 // built-in drink IDs
-  const name = String(item.mainName || item.name || '');
-  return /น้ำ|โค๊ก|โค้ก|ชา|กาแฟ|นม|โซดา|แฟนต้า|สไปร์|ลิ้นจี่|สัปปะรด|โกโก้|ฟรุ๊ต/.test(name);
+  // Built-in drink IDs always start with 'dr-'
+  if (id.startsWith('dr-')) return true;
+  // Build cache from MENU once — items in any category whose name includes "เครื่องดื่ม"
+  if (!_drinkIdCache) {
+    _drinkIdCache = new Set();
+    (window.MENU || []).forEach(cat => {
+      if (cat.cat && cat.cat.includes('เครื่องดื่ม')) {
+        (cat.items || []).forEach(it => _drinkIdCache.add(it.id));
+      }
+    });
+  }
+  return _drinkIdCache.has(id);
+}
+
+let invoiceMode = 'daily';  // 'daily' (4 categories per day) or 'weekly' (1 row per day)
+function setInvoiceMode(mode) {
+  invoiceMode = mode;
+  const daily = document.getElementById('invModeDaily');
+  const weekly = document.getElementById('invModeWeekly');
+  const hint = document.getElementById('invModeHint');
+  if (mode === 'daily') {
+    daily.style.cssText = 'padding:12px;background:linear-gradient(135deg,#1652F0,#0738C9);color:#fff;border:none;font-weight:800';
+    weekly.style.cssText = 'padding:12px;background:#fff;color:#5c6982;border:1.5px solid #e2e7ef;font-weight:700';
+    hint.innerHTML = '🍱 <b>มื้อกลางวัน</b> 8:00-15:00 (50฿) · 🥤 <b>เครื่องดื่ม</b> · 🌙 <b>มื้อโอที</b> 15:00+ · 🍚 <b>ข้าวพี่อาท</b> (60฿)';
+  } else {
+    weekly.style.cssText = 'padding:12px;background:linear-gradient(135deg,#1652F0,#0738C9);color:#fff;border:none;font-weight:800';
+    daily.style.cssText = 'padding:12px;background:#fff;color:#5c6982;border:1.5px solid #e2e7ef;font-weight:700';
+    hint.innerHTML = '📅 <b>รายสัปดาห์</b> — สรุปยอดรวมของทุก order ในแต่ละวัน (ไม่แยกหมวด)';
+  }
+  // Auto re-generate if invoice already shown
+  if (document.getElementById('invoicePrintable')) generateInvoice();
 }
 
 function setInvoiceRange(range) {
@@ -3832,12 +3870,10 @@ function generateInvoice() {
   const to = new Date(toStr); to.setHours(23,59,59,999);
   if (from > to) return toast('⚠️ วันที่เริ่มต้องอยู่ก่อนวันที่จบ', true);
 
-  // Pull all factory orders that completed within the range
   const factOrders = [
     ...(db.pendingOrders || []).filter(o => isFactoryOrder(o) && ['done','delivered'].includes(o.status)),
     ...(db.orders || []).filter(o => isFactoryOrder(o))
   ];
-  // Dedup by id
   const seen = new Set();
   const orders = factOrders.filter(o => {
     if (!o.id || seen.has(o.id)) return false;
@@ -3846,8 +3882,27 @@ function generateInvoice() {
     return d >= from && d <= to;
   });
 
-  // Bucket per (date, category)
-  // grouping[date][catKey] = { count, total, items: [...] }
+  if (!orders.length) {
+    document.getElementById('invoiceOutput').innerHTML = `
+      <div style="background:#fef3c7;color:#92400e;padding:14px;border-radius:10px;text-align:center">
+        ⚠️ ไม่มีข้อมูลออเดอร์โรงงานในช่วง ${formatThaiDate(from)} - ${formatThaiDate(to)}
+      </div>`;
+    return;
+  }
+
+  const dateRangeLabel = fromStr === toStr
+    ? formatThaiDate(from)
+    : `${formatThaiDate(from)} ถึง ${formatThaiDate(to)}`;
+
+  if (invoiceMode === 'daily') {
+    renderInvoiceDaily(orders, dateRangeLabel);
+  } else {
+    renderInvoiceWeekly(orders, dateRangeLabel);
+  }
+}
+
+// 📋 Format 1: รายวัน — แยก 4 หมวด ต่อวัน
+function renderInvoiceDaily(orders, dateRangeLabel) {
   const grouping = {};
   orders.forEach(o => {
     const orderDate = new Date(o.completed_at || o.date);
@@ -3857,29 +3912,20 @@ function generateInvoice() {
     (o.items || []).forEach(item => {
       const isDrink = _isDrinkItem(item);
       const cat = INVOICE_CATEGORIES.find(c => c.test(orderHour, item, isDrink));
-      if (!cat) return;
+      if (!cat) {
+        console.warn('[invoice] uncategorized item:', item, 'orderHour:', orderHour, 'isDrink:', isDrink);
+        return;
+      }
       const key = cat.key;
-      if (!grouping[dateKey][key]) grouping[dateKey][key] = { count: 0, total: 0, items: [] };
+      if (!grouping[dateKey][key]) grouping[dateKey][key] = { count: 0, total: 0 };
       const qty = item.qty || 1;
-      const lineTotal = (item.price || 0) * qty;
       grouping[dateKey][key].count += qty;
-      grouping[dateKey][key].total += lineTotal;
-      grouping[dateKey][key].items.push({ name: item.mainName || item.name, qty, price: item.price, total: lineTotal });
+      grouping[dateKey][key].total += (item.price || 0) * qty;
     });
   });
 
-  // Build rows for the report
   const dateKeys = Object.keys(grouping).sort();
-  if (!dateKeys.length) {
-    document.getElementById('invoiceOutput').innerHTML = `
-      <div style="background:#fef3c7;color:#92400e;padding:14px;border-radius:10px;text-align:center">
-        ⚠️ ไม่มีข้อมูลออเดอร์โรงงานในช่วง ${formatThaiDate(from)} - ${formatThaiDate(to)}
-      </div>`;
-    return;
-  }
-
-  let grandCount = 0, grandTotal = 0;
-  let bodyRows = '';
+  let grandCount = 0, grandTotal = 0, bodyRows = '';
   dateKeys.forEach(dateKey => {
     const dateLabel = formatThaiDate(new Date(dateKey));
     let dayCount = 0, dayTotal = 0;
@@ -3909,35 +3955,95 @@ function generateInvoice() {
     }
   });
 
-  const dateRangeLabel = fromStr === toStr
-    ? formatThaiDate(from)
-    : `${formatThaiDate(from)} ถึง ${formatThaiDate(to)}`;
+  document.getElementById('invoiceOutput').innerHTML = renderInvoiceWrapper(`
+    <h3 style="margin:0;font-size:18px;color:#0a1530">สรุปรายการอาหารครัวผู้ใหญ่ปอง (รายวัน)</h3>
+    <div style="font-size:13px;color:#5c6982;margin-top:4px">${dateRangeLabel}</div>
+  `, `
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead>
+        <tr style="background:linear-gradient(135deg,#1652F0,#0738C9);color:#fff">
+          <th style="padding:10px 8px;border:1px solid #1652F0;text-align:left;font-size:12.5px">วันที่</th>
+          <th style="padding:10px 8px;border:1px solid #1652F0;text-align:left;font-size:12.5px">รายการ</th>
+          <th style="padding:10px 8px;border:1px solid #1652F0;text-align:left;font-size:12.5px">ช่วงเวลาสั่ง</th>
+          <th style="padding:10px 8px;border:1px solid #1652F0;text-align:right;font-size:12.5px">จำนวนกล่อง</th>
+          <th style="padding:10px 8px;border:1px solid #1652F0;text-align:right;font-size:12.5px">ราคา</th>
+        </tr>
+      </thead>
+      <tbody>${bodyRows}</tbody>
+      <tfoot>
+        <tr style="background:#0a1530;color:#fff">
+          <td colspan="3" style="padding:12px 8px;border:1px solid #0a1530;text-align:right;font-weight:800;font-size:14px">รวมทั้งสิ้น</td>
+          <td style="padding:12px 8px;border:1px solid #0a1530;text-align:right;font-weight:900;font-size:14px">${grandCount}</td>
+          <td style="padding:12px 8px;border:1px solid #0a1530;text-align:right;font-weight:900;font-size:16px">${fmtBaht(grandTotal)}</td>
+        </tr>
+      </tfoot>
+    </table>
+  `, () => exportInvoiceDailyCSV(grouping));
+}
 
-  document.getElementById('invoiceOutput').innerHTML = `
+// 📅 Format 2: รายสัปดาห์ — รวมทุก order ต่อวัน 1 row
+function renderInvoiceWeekly(orders, dateRangeLabel) {
+  const byDay = {};
+  orders.forEach(o => {
+    const orderDate = new Date(o.completed_at || o.date);
+    const dateKey = orderDate.toISOString().slice(0, 10);
+    if (!byDay[dateKey]) byDay[dateKey] = { count: 0, total: 0, orders: 0 };
+    byDay[dateKey].orders += 1;
+    (o.items || []).forEach(item => {
+      const qty = item.qty || 1;
+      byDay[dateKey].count += qty;
+      byDay[dateKey].total += (item.price || 0) * qty;
+    });
+  });
+
+  const dateKeys = Object.keys(byDay).sort();
+  let grandCount = 0, grandTotal = 0, grandOrders = 0, bodyRows = '';
+  dateKeys.forEach(dateKey => {
+    const d = byDay[dateKey];
+    grandCount += d.count;
+    grandTotal += d.total;
+    grandOrders += d.orders;
+    bodyRows += `
+      <tr>
+        <td style="padding:10px 8px;border:1px solid #d1d5db;font-size:13px;white-space:nowrap">${formatThaiDate(new Date(dateKey))}</td>
+        <td style="padding:10px 8px;border:1px solid #d1d5db;font-size:13px">รายการ order ทุก Order ในวันนี้ <span style="color:#9ca3af;font-size:11px">(${d.orders} ออเดอร์)</span></td>
+        <td style="padding:10px 8px;border:1px solid #d1d5db;text-align:right;font-weight:700">${d.count}</td>
+        <td style="padding:10px 8px;border:1px solid #d1d5db;text-align:right;font-weight:700;color:#1652F0">${fmtBaht(d.total)}</td>
+      </tr>`;
+  });
+
+  document.getElementById('invoiceOutput').innerHTML = renderInvoiceWrapper(`
+    <h3 style="margin:0;font-size:18px;color:#0a1530">สรุปรายการอาหารครัวผู้ใหญ่ปอง (รายสัปดาห์)</h3>
+    <div style="font-size:13px;color:#5c6982;margin-top:4px">${dateRangeLabel}</div>
+  `, `
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead>
+        <tr style="background:linear-gradient(135deg,#1652F0,#0738C9);color:#fff">
+          <th style="padding:10px 8px;border:1px solid #1652F0;text-align:left;font-size:13px">วันที่</th>
+          <th style="padding:10px 8px;border:1px solid #1652F0;text-align:left;font-size:13px">รายการ</th>
+          <th style="padding:10px 8px;border:1px solid #1652F0;text-align:right;font-size:13px">จำนวนกล่อง</th>
+          <th style="padding:10px 8px;border:1px solid #1652F0;text-align:right;font-size:13px">ราคา</th>
+        </tr>
+      </thead>
+      <tbody>${bodyRows}</tbody>
+      <tfoot>
+        <tr style="background:#0a1530;color:#fff">
+          <td colspan="2" style="padding:12px 8px;border:1px solid #0a1530;text-align:right;font-weight:800;font-size:14px">รวมทั้งสิ้น (${grandOrders} ออเดอร์)</td>
+          <td style="padding:12px 8px;border:1px solid #0a1530;text-align:right;font-weight:900;font-size:14px">${grandCount}</td>
+          <td style="padding:12px 8px;border:1px solid #0a1530;text-align:right;font-weight:900;font-size:16px">${fmtBaht(grandTotal)}</td>
+        </tr>
+      </tfoot>
+    </table>
+  `, () => exportInvoiceWeeklyCSV(byDay));
+}
+
+function renderInvoiceWrapper(headerHTML, tableHTML, csvFn) {
+  // Stash the csv function on window so the inline button can call it
+  window._currentInvoiceExport = csvFn;
+  return `
     <div id="invoicePrintable" style="background:#fff;border:1.5px solid #1652F0;border-radius:10px;padding:16px;margin-top:8px">
-      <div style="text-align:center;margin-bottom:14px">
-        <h3 style="margin:0;font-size:18px;color:#0a1530">ใบวางบิลค่าอาหารครัวผู้ใหญ่ปอง</h3>
-        <div style="font-size:13px;color:#5c6982;margin-top:4px">${dateRangeLabel}</div>
-      </div>
-      <table style="width:100%;border-collapse:collapse;font-size:13px">
-        <thead>
-          <tr style="background:linear-gradient(135deg,#1652F0,#0738C9);color:#fff">
-            <th style="padding:10px 8px;border:1px solid #1652F0;text-align:left;font-size:12.5px">วันที่</th>
-            <th style="padding:10px 8px;border:1px solid #1652F0;text-align:left;font-size:12.5px">รายการ</th>
-            <th style="padding:10px 8px;border:1px solid #1652F0;text-align:left;font-size:12.5px">ช่วงเวลาสั่ง</th>
-            <th style="padding:10px 8px;border:1px solid #1652F0;text-align:right;font-size:12.5px">จำนวนกล่อง</th>
-            <th style="padding:10px 8px;border:1px solid #1652F0;text-align:right;font-size:12.5px">ราคา</th>
-          </tr>
-        </thead>
-        <tbody>${bodyRows}</tbody>
-        <tfoot>
-          <tr style="background:#0a1530;color:#fff">
-            <td colspan="3" style="padding:12px 8px;border:1px solid #0a1530;text-align:right;font-weight:800;font-size:14px">รวมทั้งสิ้น</td>
-            <td style="padding:12px 8px;border:1px solid #0a1530;text-align:right;font-weight:900;font-size:14px">${grandCount}</td>
-            <td style="padding:12px 8px;border:1px solid #0a1530;text-align:right;font-weight:900;font-size:16px">${fmtBaht(grandTotal)}</td>
-          </tr>
-        </tfoot>
-      </table>
+      <div style="text-align:center;margin-bottom:14px">${headerHTML}</div>
+      ${tableHTML}
       <div style="margin-top:30px;display:flex;justify-content:space-between;font-size:13px;color:#5c6982">
         <div>วันที่ออกบิล: ${formatThaiDate(new Date())}</div>
         <div style="text-align:right">
@@ -3948,9 +4054,44 @@ function generateInvoice() {
     </div>
     <div style="display:flex;gap:8px;margin-top:10px">
       <button class="btn-secondary" onclick="printInvoice()" style="flex:1;padding:12px">🖨️ พิมพ์</button>
-      <button class="btn-secondary" onclick="exportInvoiceCSV(${JSON.stringify(grouping).replace(/"/g, '&quot;')})" style="flex:1;padding:12px">📊 Export CSV</button>
+      <button class="btn-secondary" onclick="window._currentInvoiceExport && window._currentInvoiceExport()" style="flex:1;padding:12px">📊 Export CSV</button>
     </div>
   `;
+}
+
+function exportInvoiceDailyCSV(grouping) {
+  const lines = ['วันที่,รายการ,ช่วงเวลาสั่ง,จำนวนกล่อง,ราคา'];
+  Object.keys(grouping).sort().forEach(dateKey => {
+    INVOICE_CATEGORIES.forEach(cat => {
+      const data = grouping[dateKey][cat.key];
+      if (!data) return;
+      const dateLabel = formatThaiDate(new Date(dateKey));
+      lines.push(`"${dateLabel}","${cat.emoji} ${cat.name}","${cat.timeRange}",${data.count},${data.total}`);
+    });
+  });
+  _downloadCSV(lines, 'invoice-daily');
+}
+
+function exportInvoiceWeeklyCSV(byDay) {
+  const lines = ['วันที่,รายการ,จำนวนกล่อง,ราคา'];
+  Object.keys(byDay).sort().forEach(dateKey => {
+    const d = byDay[dateKey];
+    const dateLabel = formatThaiDate(new Date(dateKey));
+    lines.push(`"${dateLabel}","รายการ order ทุก Order ในวันนี้ (${d.orders} ออเดอร์)",${d.count},${d.total}`);
+  });
+  _downloadCSV(lines, 'invoice-weekly');
+}
+
+function _downloadCSV(lines, prefix) {
+  const csv = '﻿' + lines.join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${prefix}-${document.getElementById('invoiceFrom').value}-${document.getElementById('invoiceTo').value}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  toast('✅ Export CSV แล้ว');
 }
 
 function formatThaiDate(d) {
@@ -3974,28 +4115,6 @@ function printInvoice() {
   `);
   w.document.close();
   setTimeout(() => { w.focus(); w.print(); }, 300);
-}
-
-function exportInvoiceCSV(grouping) {
-  // Header
-  const lines = ['วันที่,รายการ,ช่วงเวลาสั่ง,จำนวนกล่อง,ราคา'];
-  Object.keys(grouping).sort().forEach(dateKey => {
-    INVOICE_CATEGORIES.forEach(cat => {
-      const data = grouping[dateKey][cat.key];
-      if (!data) return;
-      const dateLabel = formatThaiDate(new Date(dateKey));
-      lines.push(`"${dateLabel}","${cat.emoji} ${cat.name}","${cat.timeRange}",${data.count},${data.total}`);
-    });
-  });
-  const csv = '﻿' + lines.join('\n'); // BOM for Excel Thai support
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `invoice-${document.getElementById('invoiceFrom').value}-${document.getElementById('invoiceTo').value}.csv`;
-  document.body.appendChild(a); a.click(); a.remove();
-  URL.revokeObjectURL(url);
-  toast('✅ Export CSV แล้ว');
 }
 
 // SVG line chart for revenue trend
