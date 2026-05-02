@@ -1088,7 +1088,7 @@ function findItem(id) {
 // 🔄 MENU_IMG_VERSION — bump on every commit that changes assets/menu/*.jpg
 // so browsers re-fetch instead of using their 10-min cached copy. Without
 // this, replacing a photo wouldn't appear to the customer for up to 10 min.
-const MENU_IMG_VERSION = '20260503-2';
+const MENU_IMG_VERSION = '20260503-3';
 function imgSrc(it) {
   if (it.image) return it.image;            // base64 doesn't need versioning
   return `assets/menu/${it.id}.jpg?v=${MENU_IMG_VERSION}`;
