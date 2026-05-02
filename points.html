@@ -1098,9 +1098,9 @@ function openReorderModal(orderId) {
         ${order.redemptions?.length ? `<div style="font-size:12px;color:#dc2626;font-weight:700;margin-top:4px">🎁 ใช้แต้ม ${order.redemptions.reduce((s,r)=>s+r.points_used,0)} แต้ม</div>` : ''}
       </div>
       <div style="padding:14px 20px;border-top:1px solid #e5e7eb;background:#f7f8fb">
-        <a href="menu.html?phone=${encodeURIComponent(phone)}&reorder=${encodeURIComponent(order.id)}" style="display:block;text-align:center;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;padding:14px;border-radius:12px;font-weight:800;font-size:15px;text-decoration:none;font-family:inherit">
+        <button onclick="reorderAndGo('${order.id}')" style="display:block;width:100%;text-align:center;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;padding:14px;border-radius:12px;font-weight:800;font-size:15px;border:none;cursor:pointer;font-family:inherit">
           🛒 สั่งซ้ำ + แก้ไขในตะกร้า
-        </a>
+        </button>
         <button onclick="closeReorderModal()" style="display:block;width:100%;margin-top:8px;padding:10px;background:transparent;color:#6b7280;border:none;font-size:14px;cursor:pointer;font-family:inherit">ปิด</button>
       </div>
     </div>
@@ -1113,6 +1113,24 @@ function closeReorderModal() {
   if (m) m.style.display = 'none';
   document.body.style.overflow = '';
 }
+// 🚀 Reorder hand-off — instead of letting menu.html re-fetch the order
+// from cloud (which can race or fail in slow in-app browsers), we save
+// the FULL order JSON to sessionStorage RIGHT HERE where it's guaranteed
+// available, then navigate. menu.html reads it directly — zero waiting.
+function reorderAndGo(orderId) {
+  const orders = window._allOrders || (loadDB().pendingOrders || []);
+  const order = orders.find(o => o.id === orderId);
+  if (!order) return alert('ไม่พบออเดอร์นี้ — โทร 061-962-3696');
+  try {
+    sessionStorage.setItem('pendingReorder', JSON.stringify({
+      order,
+      handedOffAt: Date.now(),
+    }));
+  } catch (e) { console.warn('sessionStorage save failed', e); }
+  // Navigate — menu.html init reads sessionStorage and rebuilds the cart
+  location.href = `menu.html?phone=${encodeURIComponent(phone)}&reorder=${encodeURIComponent(orderId)}`;
+}
+window.reorderAndGo = reorderAndGo;
 window.openReorderModal = openReorderModal;
 window.closeReorderModal = closeReorderModal;
 

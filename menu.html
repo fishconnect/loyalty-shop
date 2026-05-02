@@ -3174,15 +3174,27 @@ function reorderFromOrder(orderId) {
   renderCartLines();
   updateCartBar();
 
-  // Auto-open cart so customer sees what was added + can edit.
-  // After opening, hydrate the delivery fields (they only exist in the cart
-  // modal DOM, so we must do this after openCart paints them).
-  const openIt = () => {
-    if (typeof openCart === 'function') openCart();
-    document.getElementById('modalCart')?.classList.add('show');
-    if (typeof setOrderType === 'function') setOrderType(orderType);
-    // applyOrderType is called immediately (skips delivery warning) so chips update
-    if (typeof applyOrderType === 'function') applyOrderType(orderType);
+  // 🔧 BULLETPROOF cart open — call openCart() AND directly force display
+  // styles, AND elevate z-index above any other modal/banner. We also log
+  // each step so the console makes the failure (if any) visible.
+  const forceOpenCart = () => {
+    const m = document.getElementById('modalCart');
+    if (!m) { console.error('[reorder] #modalCart not in DOM!'); return; }
+    try { if (typeof openCart === 'function') openCart(); } catch (e) { console.error('[reorder] openCart threw', e); }
+    // Belt: explicit class + style (defeats CSS specificity / z-index issues)
+    m.classList.add('show');
+    m.style.display = 'flex';
+    m.style.zIndex = '500';     // above shopClosedOverlay (99998 was removed) + pdpaBanner (200)
+    // Hide PDPA banner if it's covering the cart
+    const pdpa = document.getElementById('pdpaBanner');
+    if (pdpa && pdpa.style.display !== 'none') pdpa.style.display = 'none';
+    // Update delivery / pickup chip visuals
+    if (typeof setOrderType === 'function') {
+      try { setOrderType(orderType); } catch (e) {}
+    }
+    if (typeof applyOrderType === 'function') {
+      try { applyOrderType(orderType); } catch (e) {}
+    }
     // Fill delivery address textarea if applicable
     if (orderType === 'delivery' && order.delivery_address) {
       const ta = document.getElementById('deliveryAddress');
@@ -3192,10 +3204,12 @@ function reorderFromOrder(orderId) {
         status.innerHTML = `✅ ใช้ตำแหน่งจากออเดอร์เดิม · <a href="https://maps.google.com/?q=${order.delivery_location.lat},${order.delivery_location.lng}" target="_blank" style="color:#1652F0;text-decoration:underline">ดูบน Google Maps</a>`;
       }
     }
+    console.log('[reorder] cart opened · items:', cart.length);
   };
-  openIt();
-  setTimeout(openIt, 250);     // second pass after page settles
-  setTimeout(openIt, 600);     // third pass for slow in-app browsers
+  forceOpenCart();
+  setTimeout(forceOpenCart, 200);
+  setTimeout(forceOpenCart, 600);
+  setTimeout(forceOpenCart, 1200);     // catch slowest in-app browsers
 
   const parts = [`✓ พร้อมสั่งแล้ว — ${added} รายการ`];
   if (order.order_type === 'delivery' && order.delivery_address) parts.push('🚚 ที่อยู่จัดส่งเดิม');
@@ -3212,14 +3226,31 @@ window.reorderLastOrder = reorderLastOrder;
 // Stub — old reorder card removed; this prevents broken callers
 function renderReorderCard() { /* no-op */ }
 
-// 🔗 Handle ?reorder=<orderId> URL param — comes from a "สั่งซ้ำ" tap in
-// points.html or status.html. Walks 3 sources (cloud → pendingOrders →
-// orders[]) and retries for up to 15 seconds because the cloud snapshot
-// might not have arrived when the page first loads.
+// 🔗 Handle ?reorder=<orderId> URL param. Three lookup paths in priority:
+//   1. sessionStorage 'pendingReorder' — handed off from points.html /
+//      status.html with the FULL order JSON (no waiting). This is the
+//      reliable path that always works because the source page already
+//      had the order data when the user clicked.
+//   2. cloudOrders snapshot (eventual)
+//   3. local pendingOrders / orders[]
 function handleReorderUrlParam() {
   const orderId = new URLSearchParams(location.search).get('reorder');
   if (!orderId) return;
-  // Show immediate feedback so the user knows something is happening
+
+  // Path 1: sessionStorage hand-off — fastest, most reliable
+  try {
+    const handoff = JSON.parse(sessionStorage.getItem('pendingReorder') || 'null');
+    if (handoff?.order?.id === orderId) {
+      // Inject into cloudOrders so reorderFromOrder finds it
+      window.cloudOrders = window.cloudOrders || [];
+      if (!window.cloudOrders.some(o => o.id === orderId)) {
+        window.cloudOrders.push(handoff.order);
+      }
+      sessionStorage.removeItem('pendingReorder');   // one-shot
+      console.log('[reorder] using sessionStorage handoff');
+    }
+  } catch (e) { console.warn('reorder handoff parse failed', e); }
+
   toast('🔄 กำลังโหลดออเดอร์เก่า...');
 
   let succeeded = false;
@@ -3235,30 +3266,22 @@ function handleReorderUrlParam() {
     return false;
   };
 
-  // 1. Try right now (local DB might already have it)
+  // Try immediately (works if sessionStorage hand-off succeeded OR local DB has it)
   if (tryNow()) return;
 
-  // 2. Force a cloud subscription if not already set up — initReturningCustomer
-  //    skips this if there's no lastPhone, so guarantee we listen here.
+  // Fall back: force cloud subscription + polling for up to 15s
   whenCloudReady(() => {
     if (!window.cloud?.onOrders) return;
-    window.cloud.onOrders(orders => {
-      window.cloudOrders = orders;
-      tryNow();
-    });
-    // Also try once after cloud-ready in case the order is in /orders/<id> directly
+    window.cloud.onOrders(orders => { window.cloudOrders = orders; tryNow(); });
     if (window.cloud.onOrder) {
       window.cloud.onOrder(orderId, order => {
         if (succeeded || !order) return;
-        // Inject into cloudOrders so reorderFromOrder sees it
         window.cloudOrders = window.cloudOrders || [];
         if (!window.cloudOrders.some(o => o.id === orderId)) window.cloudOrders.push(order);
         tryNow();
       });
     }
   });
-
-  // 3. Polling fallback — retry every 500ms for 15s in case cloud takes time
   let tries = 0;
   const iv = setInterval(() => {
     tries++;
