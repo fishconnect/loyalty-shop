@@ -732,6 +732,10 @@ function openEditProfileModal() {
   for (let d = 1; d <= 31; d++) dayOpts += `<option value="${d}" ${cust.birth_day == d ? 'selected' : ''}>${d}</option>`;
   let monthOpts = '<option value="">— เดือน —</option>';
   months.forEach((n, i) => { monthOpts += `<option value="${i + 1}" ${cust.birth_month == i + 1 ? 'selected' : ''}>${n}</option>`; });
+  // 🔒 Birthday is locked once set — admin must email to change (anti-fraud:
+  // birthday rewards = +5 per year, so we don't want users picking a new
+  // date every month)
+  const bdayLocked = !!(cust.birth_locked && cust.birth_day && cust.birth_month);
   modal.innerHTML = `
     <div style="background:#fff;width:100%;max-width:520px;border-radius:24px 24px 0 0;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;font-family:inherit;animation:slideUp .25s ease">
       <style>@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}</style>
@@ -745,16 +749,33 @@ function openEditProfileModal() {
           <input type="text" id="editName" value="${(cust.name || '').replace(/"/g, '&quot;')}" placeholder="เช่น สมชาย ใจดี" style="width:100%;padding:12px 14px;border:1.5px solid #d1ddff;border-radius:10px;font-size:15px;font-family:inherit">
         </div>
         <div style="margin-bottom:14px">
-          <label style="font-weight:700;color:#0a1530;font-size:13px;display:block;margin-bottom:5px">📱 เบอร์โทร</label>
+          <label style="font-weight:700;color:#0a1530;font-size:13px;display:block;margin-bottom:5px">📱 เบอร์โทร <span style="background:#fee2e2;color:#dc2626;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:800;margin-left:4px">🔒 LOCKED</span></label>
           <input type="text" value="${cust.phone || phone}" readonly style="width:100%;padding:12px 14px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:15px;font-family:inherit;background:#f7f8fb;color:#6b7280">
-          <div style="font-size:11px;color:#9ca3af;margin-top:4px">เบอร์โทรเปลี่ยนไม่ได้ — ติดต่อทางร้านถ้าต้องการเปลี่ยน</div>
+          <div style="background:#fef3c7;border:1px solid #f59e0b;padding:8px 10px;border-radius:8px;margin-top:6px;font-size:11.5px;color:#78350f;line-height:1.5">
+            🔒 เบอร์โทรเป็นรหัสประจำตัวของบัญชี · เปลี่ยนเองไม่ได้<br>
+            ต้องการเปลี่ยน → ส่งอีเมล <a href="mailto:admin@fishconnect.co?subject=ขอเปลี่ยนเบอร์โทร&body=ชื่อ:%20${encodeURIComponent(cust.name || '')}%0Aเบอร์เดิม:%20${encodeURIComponent(cust.phone || phone)}%0Aเบอร์ใหม่:%20" style="color:#92400e;font-weight:800;text-decoration:underline">admin@fishconnect.co</a>
+            (ทีมงานจะย้ายแต้ม + ประวัติให้)
+          </div>
         </div>
         <div style="margin-bottom:14px">
-          <label style="font-weight:700;color:#0a1530;font-size:13px;display:block;margin-bottom:5px">🎂 วันเกิด <span style="color:#9ca3af;font-weight:500">(ใส่แล้วรับ +5 แต้มทุกปีในวันเกิด)</span></label>
+          <label style="font-weight:700;color:#0a1530;font-size:13px;display:block;margin-bottom:5px">
+            🎂 วันเกิด
+            ${bdayLocked
+              ? '<span style="background:#fee2e2;color:#dc2626;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:800;margin-left:4px">🔒 LOCKED</span>'
+              : '<span style="color:#9ca3af;font-weight:500;font-size:11px">(กรอกได้ครั้งเดียว · รับ +5 แต้มทุกปีในวันเกิด)</span>'}
+          </label>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-            <select id="editBirthDay" style="padding:12px;border:1.5px solid #d1ddff;border-radius:10px;font-size:14px;font-family:inherit;background:#fff">${dayOpts}</select>
-            <select id="editBirthMonth" style="padding:12px;border:1.5px solid #d1ddff;border-radius:10px;font-size:14px;font-family:inherit;background:#fff">${monthOpts}</select>
+            <select id="editBirthDay" ${bdayLocked ? 'disabled' : ''} style="padding:12px;border:1.5px solid ${bdayLocked?'#e5e7eb':'#d1ddff'};border-radius:10px;font-size:14px;font-family:inherit;background:${bdayLocked?'#f7f8fb':'#fff'};color:${bdayLocked?'#6b7280':'#0a1530'}">${dayOpts}</select>
+            <select id="editBirthMonth" ${bdayLocked ? 'disabled' : ''} style="padding:12px;border:1.5px solid ${bdayLocked?'#e5e7eb':'#d1ddff'};border-radius:10px;font-size:14px;font-family:inherit;background:${bdayLocked?'#f7f8fb':'#fff'};color:${bdayLocked?'#6b7280':'#0a1530'}">${monthOpts}</select>
           </div>
+          ${bdayLocked
+            ? `<div style="background:#fef3c7;border:1px solid #f59e0b;padding:8px 10px;border-radius:8px;margin-top:6px;font-size:11.5px;color:#78350f;line-height:1.5">
+                🔒 วันเกิดได้ถูกบันทึกแล้ว · กรุณากรอกตามความเป็นจริง · ไม่สามารถแก้ไขเองได้<br>
+                ผิดพลาด? → ส่งอีเมล <a href="mailto:admin@fishconnect.co?subject=ขอแก้วันเกิด&body=ชื่อ:%20${encodeURIComponent(cust.name || '')}%0Aเบอร์:%20${encodeURIComponent(cust.phone || phone)}%0Aวันเกิดเดิม:%20${cust.birth_day || ''}/${cust.birth_month || ''}%0Aวันเกิดใหม่:%20" style="color:#92400e;font-weight:800;text-decoration:underline">admin@fishconnect.co</a>
+              </div>`
+            : `<div style="background:#dcfce7;border:1px solid #16a34a;padding:8px 10px;border-radius:8px;margin-top:6px;font-size:11.5px;color:#166534;line-height:1.5">
+                💡 <b>กรอกได้ครั้งเดียว</b> · เพื่อป้องกันการรับสิทธิ์วันเกิดซ้ำๆ — กรุณาตรวจสอบให้ถูกต้องก่อนกดบันทึก
+              </div>`}
         </div>
         <div id="editProfileStatus" style="font-size:13px;font-weight:700;text-align:center;margin-top:8px;min-height:18px"></div>
       </div>
@@ -783,14 +804,14 @@ async function saveEditProfile() {
   const cust = db.customers[phone];
   if (!cust) return;
   cust.name = name;
-  if (bd && bm) {
+  // 🔒 Birthday is write-once. If already locked, ignore any submitted bd/bm
+  // (the form is disabled, but defend against tampering anyway).
+  if (cust.birth_locked && cust.birth_day && cust.birth_month) {
+    // Locked — ignore any change attempt
+  } else if (bd && bm) {
     cust.birth_day = bd;
     cust.birth_month = bm;
-    cust.birth_locked = true;
-  } else {
-    delete cust.birth_day;
-    delete cust.birth_month;
-    delete cust.birth_locked;
+    cust.birth_locked = true;        // becomes locked from now on
   }
   saveDB(db);
   localStorage.setItem('lastCustomerName', name);

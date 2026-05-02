@@ -1779,7 +1779,16 @@ function openCustomize(itemId, cartId) {
   document.getElementById('btnAddText').textContent = cartId ? 'อัปเดต' : 'เพิ่มลงตะกร้า';
 
   updateCustTotal();
-  document.getElementById('modalCust').classList.add('show');
+  const custModal = document.getElementById('modalCust');
+  custModal.classList.add('show');
+  // 🔧 When opened from inside the cart (✏️ แก้), the customize modal is
+  // declared earlier in DOM than modalCart so it would render BEHIND the
+  // cart — invisible to the user. Bump z-index so it sits on top while open.
+  if (cartId) {
+    custModal.style.zIndex = '120';
+  } else {
+    custModal.style.zIndex = '';
+  }
 }
 
 function renderOptionGroups() {
@@ -1848,7 +1857,9 @@ function toggleOption(groupIdx, choice, isSingle, max) {
 }
 
 function closeCustomize() {
-  document.getElementById('modalCust').classList.remove('show');
+  const m = document.getElementById('modalCust');
+  m.classList.remove('show');
+  m.style.zIndex = '';     // reset the temporary lift used during cart-line edit
   editingCartId = null;
 }
 
@@ -3095,8 +3106,15 @@ function reorderFromOrder(orderId) {
   renderMenu();
   renderCartLines();
   updateCartBar();
-  // Auto-open cart so customer sees what was added + can edit
-  if (typeof openCart === 'function') openCart();
+  // Auto-open cart so customer sees what was added + can edit.
+  // Belt-and-suspenders: also force-add the .show class directly, in case
+  // openCart() was called too early and the modal element wasn't ready.
+  const openIt = () => {
+    if (typeof openCart === 'function') openCart();
+    document.getElementById('modalCart')?.classList.add('show');
+  };
+  openIt();
+  setTimeout(openIt, 250);     // second pass after page settles
   const note = missing ? ` (${missing} เมนูไม่มีในร้านแล้ว)` : '';
   toast(`✓ พร้อมสั่งแล้ว — ${added} รายการ · กด "เพิ่มเมนูอื่น" เพื่อสั่งเพิ่ม${note}`);
   return true;
@@ -3109,27 +3127,61 @@ window.reorderLastOrder = reorderLastOrder;
 // Stub — old reorder card removed; this prevents broken callers
 function renderReorderCard() { /* no-op */ }
 
-// 🔗 Handle ?reorder=<orderId> URL param — usually comes from a "สั่งซ้ำ" tap
-// in points.html or status.html. Wait briefly for cloud orders to load so
-// we can find non-local orders too.
+// 🔗 Handle ?reorder=<orderId> URL param — comes from a "สั่งซ้ำ" tap in
+// points.html or status.html. Walks 3 sources (cloud → pendingOrders →
+// orders[]) and retries for up to 15 seconds because the cloud snapshot
+// might not have arrived when the page first loads.
 function handleReorderUrlParam() {
   const orderId = new URLSearchParams(location.search).get('reorder');
   if (!orderId) return;
-  // Try immediately (might already have local copy)
-  if (reorderFromOrder(orderId)) {
-    // Clean up the URL so a refresh doesn't re-add items
-    history.replaceState({}, '', location.pathname + location.search.replace(/[?&]reorder=[^&]+/, '').replace(/^&/, '?'));
-    return;
-  }
-  // Wait for cloud snapshot, retry up to 6 seconds
+  // Show immediate feedback so the user knows something is happening
+  toast('🔄 กำลังโหลดออเดอร์เก่า...');
+
+  let succeeded = false;
+  const tryNow = () => {
+    if (succeeded) return true;
+    if (reorderFromOrder(orderId)) {
+      succeeded = true;
+      // Strip the ?reorder=... so refresh doesn't re-add
+      const cleaned = location.search.replace(/[?&]reorder=[^&]+/, '').replace(/^&/, '?');
+      history.replaceState({}, '', location.pathname + cleaned);
+      return true;
+    }
+    return false;
+  };
+
+  // 1. Try right now (local DB might already have it)
+  if (tryNow()) return;
+
+  // 2. Force a cloud subscription if not already set up — initReturningCustomer
+  //    skips this if there's no lastPhone, so guarantee we listen here.
+  whenCloudReady(() => {
+    if (!window.cloud?.onOrders) return;
+    window.cloud.onOrders(orders => {
+      window.cloudOrders = orders;
+      tryNow();
+    });
+    // Also try once after cloud-ready in case the order is in /orders/<id> directly
+    if (window.cloud.onOrder) {
+      window.cloud.onOrder(orderId, order => {
+        if (succeeded || !order) return;
+        // Inject into cloudOrders so reorderFromOrder sees it
+        window.cloudOrders = window.cloudOrders || [];
+        if (!window.cloudOrders.some(o => o.id === orderId)) window.cloudOrders.push(order);
+        tryNow();
+      });
+    }
+  });
+
+  // 3. Polling fallback — retry every 500ms for 15s in case cloud takes time
   let tries = 0;
   const iv = setInterval(() => {
     tries++;
-    if (Array.isArray(window.cloudOrders) && reorderFromOrder(orderId)) {
+    if (succeeded) { clearInterval(iv); return; }
+    if (tryNow()) { clearInterval(iv); return; }
+    if (tries > 30) {
       clearInterval(iv);
-      history.replaceState({}, '', location.pathname + location.search.replace(/[?&]reorder=[^&]+/, '').replace(/^&/, '?'));
-    } else if (tries > 12) {
-      clearInterval(iv);
+      toast('⚠️ ไม่พบออเดอร์เดิม — โทร 061-962-3696 หรือเลือกเมนูใหม่', true);
     }
   }, 500);
 }
