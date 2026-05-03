@@ -60,6 +60,43 @@ window.cloud = {
       return s.exists() ? s.data() : null;
     } catch (e) { console.warn('[cloud] getCustomer', e); return null; }
   },
+  // 🔧 Manual points override — admin types in the exact value to fix data drift
+  // that recompute can't fix (e.g. orders missing customer_phone, pre-system orders).
+  // Logs to consent_logs for the audit trail.
+  async setCustomerPointsManual(id, points, lifetime, reason) {
+    if (!id) return false;
+    try {
+      const updates = {};
+      if (typeof points === 'number' && !Number.isNaN(points)) updates.points = Math.max(0, Math.floor(points));
+      if (typeof lifetime === 'number' && !Number.isNaN(lifetime)) updates.lifetime_points = Math.max(0, Math.floor(lifetime));
+      if (!Object.keys(updates).length) return false;
+      updates.points_manual_set_at = new Date().toISOString();
+      updates.points_manual_set_reason = String(reason || '').slice(0, 500);
+      await updateDoc(doc(fdb, 'customers', String(id)), updates);
+      await this.saveConsentLog?.({
+        type: 'admin_manual_points_set',
+        customer_id: String(id),
+        customer_phone: String(id),
+        version: '1.1',
+        accepted: true,
+        details: { points: updates.points, lifetime_points: updates.lifetime_points, reason: updates.points_manual_set_reason },
+      });
+      return true;
+    } catch (e) { console.warn('[cloud] setCustomerPointsManual', e); return false; }
+  },
+  // Fetch all orders that belong to a phone — for diagnostic display
+  async getOrdersForCustomer(phoneOrId) {
+    try {
+      const snap = await getDocs(collection(fdb, 'orders'));
+      const out = [];
+      const target = String(phoneOrId);
+      snap.forEach(d => {
+        const o = d.data();
+        if (o.customer_id === target || o.customer_phone === target) out.push(o);
+      });
+      return out;
+    } catch (e) { console.warn('[cloud] getOrdersForCustomer', e); return []; }
+  },
   async deleteCustomer(id) {
     try { await deleteDoc(doc(fdb, 'customers', String(id))); }
     catch (e) { console.warn('[cloud] deleteCustomer', e); }

@@ -1040,6 +1040,7 @@
       Data Processor: <b>Fish Connect Company Limited</b> · 📧 admin@fishconnect.co
     </div>
     <button class="btn-primary" onclick="showTrustCodeUnlock()" style="width:100%;margin-top:10px;background:linear-gradient(135deg,#16a34a,#15803d);font-size:15px;padding:14px">🆔 ปลดล็อกลูกค้าด้วยโค้ด (เร็ว · 20 วิ) ⭐</button>
+    <button class="btn-primary" onclick="showCustomerInspector()" style="width:100%;margin-top:6px;background:linear-gradient(135deg,#7c3aed,#5b21b6)">🔍 ดูข้อมูลลูกค้า + กู้แต้ม (Manual)</button>
     <button class="btn-primary" onclick="showConsentLogs()" style="width:100%;margin-top:6px">📜 ดู Consent Logs (บันทึกการยินยอม)</button>
     <button class="btn-primary" onclick="showCleanupTool()" style="width:100%;margin-top:6px;background:linear-gradient(135deg,#0d9488,#0f766e)">🧹 PDPA Cleanup · Anonymize ลูกค้าหายนาน</button>
     <button class="btn-primary" onclick="showDeletionRequests()" style="width:100%;margin-top:6px;background:linear-gradient(135deg,#dc2626,#991b1b)">🗑️ คำขอลบบัญชีค้างอยู่</button>
@@ -1386,10 +1387,10 @@
 <!-- Print receipt area (hidden until print) -->
 <div id="printArea"></div>
 
-<script type="module" src="firebase.js?v=20260503e"></script>
-<script src="offline-banner.js?v=20260503e"></script>
-<script src="menu-data.js?v=20260503e"></script>
-<script src="notifier.js?v=20260503e"></script>
+<script type="module" src="firebase.js?v=20260503f"></script>
+<script src="offline-banner.js?v=20260503f"></script>
+<script src="menu-data.js?v=20260503f"></script>
+<script src="notifier.js?v=20260503f"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 
@@ -2147,6 +2148,153 @@ window.showTrustCodeUnlock = showTrustCodeUnlock;
 window.submitTrustCodeUnlock = submitTrustCodeUnlock;
 window.refreshTcuPending = refreshTcuPending;
 window.tcuSelectPending = tcuSelectPending;
+
+// 🔍 Customer Inspector — read straight from Firestore (not local cache) and
+//    show points / lifetime / signup_bonus / linked_devices / order count.
+//    Includes manual override + recompute shortcuts.
+function showCustomerInspector() {
+  const out = document.getElementById('pdpaPanelOutput');
+  out.innerHTML = `
+    <div style="background:#f5f3ff;border:2px solid #7c3aed;color:#3c1361;padding:16px;border-radius:14px">
+      <div style="font-weight:900;font-size:15px;margin-bottom:6px">🔍 ดูข้อมูลลูกค้า + กู้แต้ม</div>
+      <div style="font-size:12px;color:#5b21b6;margin-bottom:12px;line-height:1.5">
+        ใช้เมื่อ "🔄 คำนวณแต้มใหม่" ไม่ได้ผล — เครื่องมือนี้อ่านตรงจาก Firestore (ไม่ใช่ local cache) และให้คุณตั้งแต้มมือเอง
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
+        <input type="tel" id="ciPhone" placeholder="📱 เบอร์ลูกค้า (เช่น 0815495552)" inputmode="numeric" maxlength="10" style="flex:1;padding:13px;border:2px solid #7c3aed;border-radius:10px;font-size:16px;font-family:inherit;letter-spacing:1px">
+        <button onclick="loadCustomerInspector()" style="padding:13px 18px;background:#7c3aed;color:#fff;border:none;border-radius:10px;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit">🔍 ดู</button>
+      </div>
+      <div id="ciOutput" style="margin-top:10px"></div>
+    </div>
+  `;
+  setTimeout(() => document.getElementById('ciPhone')?.focus(), 100);
+}
+
+async function loadCustomerInspector() {
+  const phone = (document.getElementById('ciPhone').value || '').replace(/\D/g, '');
+  const out = document.getElementById('ciOutput');
+  if (phone.length < 9) { out.innerHTML = '<div style="color:#dc2626;font-size:12px">⚠️ กรอกเบอร์ให้ครบ</div>'; return; }
+  out.innerHTML = '<div style="font-size:12px;color:#5c6982;text-align:center;padding:8px">⏳ กำลังดึงข้อมูลจาก Firestore...</div>';
+
+  // Wait for cloud
+  let waited = 0;
+  while (!window.cloud?.getCustomer && waited < 5000) {
+    await new Promise(r => setTimeout(r, 200)); waited += 200;
+  }
+  if (!window.cloud?.getCustomer) { out.innerHTML = '<div style="color:#dc2626">⚠️ Cloud not ready — รีเฟรชหน้า</div>'; return; }
+
+  try {
+    const [cust, orders] = await Promise.all([
+      window.cloud.getCustomer(phone),
+      window.cloud.getOrdersForCustomer ? window.cloud.getOrdersForCustomer(phone) : Promise.resolve([]),
+    ]);
+
+    if (!cust) {
+      out.innerHTML = `<div style="background:#fef2f2;border:1.5px solid #dc2626;color:#991b1b;padding:12px;border-radius:10px;font-size:13px">
+        ❌ ไม่พบลูกค้าเบอร์ <b>${phone}</b> ใน Firestore<br>
+        <span style="font-size:11px">ลูกค้าอาจไม่เคยสมัคร หรือ doc ID เป็นรูปแบบอื่น</span>
+      </div>`;
+      return;
+    }
+
+    const doneOrders = orders.filter(o => ['done','delivered'].includes(o.status));
+    let earned = 0, used = 0;
+    doneOrders.forEach(o => {
+      const base = o.original_total || o.total || 0;
+      earned += Math.floor(base / 50);
+      (o.redemptions || []).forEach(r => { used += (r.points_used || 0); });
+    });
+    const signup = cust.signup_bonus_received ? 5 : 0;
+    const correctLifetime = signup + earned;
+    const correctPoints = Math.max(0, correctLifetime - used);
+    const ptsDrift = (cust.points || 0) - correctPoints;
+    const lifeDrift = (cust.lifetime_points || 0) - correctLifetime;
+
+    out.innerHTML = `
+      <div style="background:#fff;border:1.5px solid #7c3aed;border-radius:12px;padding:14px">
+        <div style="font-weight:900;font-size:15px;color:#0a1530;margin-bottom:8px">👤 ${cust.name || '(ไม่มีชื่อ)'} · 📱 ${cust.phone || phone}</div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+          <div style="background:#f5f3ff;padding:10px;border-radius:8px">
+            <div style="font-size:11px;color:#6b7280">⭐ คะแนนคงเหลือ</div>
+            <div style="font-size:22px;font-weight:900;color:#1652F0">${cust.points ?? 0}</div>
+            ${ptsDrift !== 0 ? `<div style="font-size:10px;color:#dc2626">⚠️ ควรเป็น ${correctPoints} (Δ ${ptsDrift > 0 ? '+' : ''}${ptsDrift})</div>` : '<div style="font-size:10px;color:#16a34a">✓ ตรงกับสูตร</div>'}
+          </div>
+          <div style="background:#f5f3ff;padding:10px;border-radius:8px">
+            <div style="font-size:11px;color:#6b7280">🏆 Lifetime</div>
+            <div style="font-size:22px;font-weight:900;color:#1652F0">${cust.lifetime_points ?? 0}</div>
+            ${lifeDrift !== 0 ? `<div style="font-size:10px;color:#dc2626">⚠️ ควรเป็น ${correctLifetime} (Δ ${lifeDrift > 0 ? '+' : ''}${lifeDrift})</div>` : '<div style="font-size:10px;color:#16a34a">✓ ตรงกับสูตร</div>'}
+          </div>
+        </div>
+
+        <div style="font-size:12px;line-height:1.7;color:#3c1361;background:#faf5ff;padding:10px;border-radius:8px;margin-bottom:10px">
+          <div>📊 <b>วิเคราะห์จาก Firestore:</b></div>
+          <div>• Orders ทั้งหมด: <b>${orders.length}</b> · เสร็จแล้ว: <b>${doneOrders.length}</b></div>
+          <div>• แต้มที่ได้จากออเดอร์ (สูตร: total/50): <b>${earned}</b></div>
+          <div>• แต้มที่ใช้แลกของรางวัล: <b>${used}</b></div>
+          <div>• Signup bonus: <b>${signup}</b></div>
+          <div>• Linked devices: <b>${(cust.linked_devices || []).length}</b> เครื่อง</div>
+          <div>• สมัครเมื่อ: <b>${cust.joined ? new Date(cust.joined).toLocaleString('th-TH') : '?'}</b></div>
+          ${cust.points_manual_set_at ? `<div style="color:#dc2626;margin-top:4px">⚠️ เคยตั้งแต้ม manual: ${new Date(cust.points_manual_set_at).toLocaleString('th-TH')} · เหตุผล: ${cust.points_manual_set_reason || '-'}</div>` : ''}
+        </div>
+
+        <!-- 🔄 Quick recompute -->
+        <button onclick="ciApplyRecompute('${cust.id || phone}', ${correctPoints}, ${correctLifetime})"
+          style="width:100%;padding:12px;background:linear-gradient(135deg,#06b6d4,#0891b2);color:#fff;border:none;border-radius:10px;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit;margin-bottom:6px">
+          🔄 ตั้งให้ตรงสูตร: ${correctPoints} / ${correctLifetime} (จากออเดอร์จริง)
+        </button>
+
+        <!-- ✏️ Manual override -->
+        <div style="margin-top:10px;border-top:1.5px dashed #c4b5fd;padding-top:10px">
+          <div style="font-weight:800;font-size:13px;color:#3c1361;margin-bottom:6px">✏️ ตั้งแต้มมือเอง (กรณีสูตรไม่ตรง):</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+            <input type="number" id="ciSetPts" min="0" placeholder="คะแนนคงเหลือ" value="${cust.points ?? 0}" style="padding:11px;border:1.5px solid #7c3aed;border-radius:8px;font-size:14px;font-family:inherit">
+            <input type="number" id="ciSetLife" min="0" placeholder="Lifetime" value="${cust.lifetime_points ?? 0}" style="padding:11px;border:1.5px solid #7c3aed;border-radius:8px;font-size:14px;font-family:inherit">
+          </div>
+          <input type="text" id="ciReason" placeholder="📝 เหตุผล (audit log)" style="width:100%;padding:11px;border:1.5px solid #7c3aed;border-radius:8px;font-size:13px;font-family:inherit;margin-bottom:6px">
+          <button onclick="ciApplyManual('${cust.id || phone}')" style="width:100%;padding:12px;background:linear-gradient(135deg,#7c3aed,#5b21b6);color:#fff;border:none;border-radius:10px;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit">
+            ✏️ บันทึกค่ามือเอง
+          </button>
+        </div>
+
+        <div id="ciStatus" style="margin-top:8px;font-size:13px;font-weight:700;text-align:center;min-height:18px"></div>
+      </div>
+    `;
+  } catch (e) {
+    out.innerHTML = `<div style="color:#dc2626;font-size:12px">⚠️ ${e.message}</div>`;
+  }
+}
+
+async function ciApplyRecompute(id, points, lifetime) {
+  const status = document.getElementById('ciStatus');
+  if (!confirm(`ตั้งแต้มเป็น ${points} (lifetime ${lifetime}) ตามสูตรจากออเดอร์ใน Firestore?`)) return;
+  status.style.color = '#1652F0'; status.textContent = '⏳ กำลังบันทึก...';
+  const ok = await window.cloud.setCustomerPointsManual(id, points, lifetime, 'recompute_from_firestore');
+  if (ok) { status.style.color = '#16a34a'; status.innerHTML = '✅ บันทึกแล้ว — รีโหลดดูข้อมูลใหม่...'; setTimeout(() => loadCustomerInspector(), 1000); }
+  else { status.style.color = '#dc2626'; status.textContent = '⚠️ บันทึกไม่สำเร็จ'; }
+}
+
+async function ciApplyManual(id) {
+  const status = document.getElementById('ciStatus');
+  const points = parseInt(document.getElementById('ciSetPts').value);
+  const lifetime = parseInt(document.getElementById('ciSetLife').value);
+  const reason = (document.getElementById('ciReason').value || '').trim();
+  if (Number.isNaN(points) || Number.isNaN(lifetime)) { status.style.color = '#dc2626'; status.textContent = '⚠️ กรอกตัวเลขให้ครบ'; return; }
+  if (!reason) { status.style.color = '#dc2626'; status.textContent = '⚠️ กรอกเหตุผล (เก็บ audit log)'; return; }
+  if (lifetime < points) {
+    if (!confirm('Lifetime น้อยกว่าคะแนนคงเหลือ — ผิดปกติ ต้องการบันทึกต่อ?')) return;
+  }
+  if (!confirm(`ตั้งแต้มลูกค้า ${id}:\n\n• คงเหลือ: ${points}\n• Lifetime: ${lifetime}\n• เหตุผล: ${reason}\n\nกด OK เพื่อบันทึก`)) return;
+  status.style.color = '#1652F0'; status.textContent = '⏳ กำลังบันทึก...';
+  const ok = await window.cloud.setCustomerPointsManual(id, points, lifetime, reason);
+  if (ok) { status.style.color = '#16a34a'; status.innerHTML = '✅ บันทึกแล้ว · log อยู่ใน consent_logs'; setTimeout(() => loadCustomerInspector(), 1200); }
+  else { status.style.color = '#dc2626'; status.textContent = '⚠️ บันทึกไม่สำเร็จ'; }
+}
+
+window.showCustomerInspector = showCustomerInspector;
+window.loadCustomerInspector = loadCustomerInspector;
+window.ciApplyRecompute = ciApplyRecompute;
+window.ciApplyManual = ciApplyManual;
 window.showCleanupTool = showCleanupTool;
 window.anonymizeOne = anonymizeOne;
 window.anonymizeAllInactive = anonymizeAllInactive;
