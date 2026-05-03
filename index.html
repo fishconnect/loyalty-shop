@@ -1038,7 +1038,6 @@
     </div>
     <button class="btn-primary" onclick="showTrustCodeUnlock()" style="width:100%;margin-top:10px;background:linear-gradient(135deg,#16a34a,#15803d);font-size:15px;padding:14px">🆔 ปลดล็อกลูกค้าด้วยโค้ด (เร็ว · 20 วิ) ⭐</button>
     <button class="btn-primary" onclick="showConsentLogs()" style="width:100%;margin-top:6px">📜 ดู Consent Logs (บันทึกการยินยอม)</button>
-    <button class="btn-primary" onclick="showRecoveryTool()" style="width:100%;margin-top:6px;background:linear-gradient(135deg,#f59e0b,#d97706)">🔓 Recovery Tool · ลูกค้าลืมวันเกิด/เปลี่ยนเครื่อง</button>
     <button class="btn-primary" onclick="showCleanupTool()" style="width:100%;margin-top:6px;background:linear-gradient(135deg,#0d9488,#0f766e)">🧹 PDPA Cleanup · Anonymize ลูกค้าหายนาน</button>
     <button class="btn-primary" onclick="showDeletionRequests()" style="width:100%;margin-top:6px;background:linear-gradient(135deg,#dc2626,#991b1b)">🗑️ คำขอลบบัญชีค้างอยู่</button>
     <button class="btn-primary" onclick="showRopaTemplate()" style="width:100%;margin-top:6px;background:linear-gradient(135deg,#6b7280,#374151)">📋 RoPA · บันทึกกิจกรรมประมวลผล</button>
@@ -1384,10 +1383,10 @@
 <!-- Print receipt area (hidden until print) -->
 <div id="printArea"></div>
 
-<script type="module" src="firebase.js?v=20260503a"></script>
-<script src="offline-banner.js?v=20260503a"></script>
-<script src="menu-data.js?v=20260503a"></script>
-<script src="notifier.js?v=20260503a"></script>
+<script type="module" src="firebase.js?v=20260503b"></script>
+<script src="offline-banner.js?v=20260503b"></script>
+<script src="menu-data.js?v=20260503b"></script>
+<script src="notifier.js?v=20260503b"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 
@@ -1904,7 +1903,27 @@ async function submitTrustCodeUnlock() {
   const status = document.getElementById('tcuStatus');
   if (phone.length < 9) { status.style.color = '#dc2626'; status.textContent = '⚠️ กรอกเบอร์ให้ครบ'; return; }
   if (code.length !== 4) { status.style.color = '#dc2626'; status.textContent = '⚠️ โค้ดต้องเป็น 4 ตัว'; return; }
-  if (!window.cloud?.trustDeviceByCode) { status.style.color = '#dc2626'; status.textContent = '⚠️ Cloud not ready'; return; }
+
+  // 🕓 Wait for firebase.js (ES module) to finish loading — up to 5s.
+  // Modules load async, especially on iOS Safari, so window.cloud.trustDeviceByCode
+  // may not be attached yet when the user clicks.
+  status.style.color = '#1652F0'; status.textContent = '⏳ กำลังเชื่อม cloud...';
+  let waited = 0;
+  while (!window.cloud?.trustDeviceByCode && waited < 5000) {
+    await new Promise(r => setTimeout(r, 200));
+    waited += 200;
+  }
+  if (!window.cloud?.trustDeviceByCode) {
+    status.style.color = '#dc2626';
+    if (!window.cloud) {
+      status.innerHTML = '⚠️ Cloud ยังไม่พร้อม — กรุณารีเฟรชหน้านี้แล้วลองใหม่';
+    } else {
+      // Cloud loaded but missing this function = old cached firebase.js
+      status.innerHTML = '⚠️ <b>Browser cache เก่า</b><br>ปิดแท็บนี้ → เปิดใหม่ในแท็บเปล่า → ลองใหม่<br><small>(หรือ Settings → Safari → ล้างประวัติและข้อมูล)</small>';
+    }
+    return;
+  }
+
   status.style.color = '#1652F0'; status.textContent = '⏳ กำลังตรวจสอบโค้ด...';
   try {
     const r = await window.cloud.trustDeviceByCode(phone, code);
