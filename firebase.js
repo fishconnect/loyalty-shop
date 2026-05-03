@@ -84,6 +84,18 @@ window.cloud = {
       return true;
     } catch (e) { console.warn('[cloud] setCustomerPointsManual', e); return false; }
   },
+  // 📜 Fetch ALL orders fresh from Firestore — used by at-risk scanner so
+  //    its drift report doesn't depend on whether the snapshot listener has
+  //    populated db.pendingOrders yet on this admin device.
+  async getAllOrders() {
+    try {
+      const snap = await getDocs(collection(fdb, 'orders'));
+      const out = [];
+      snap.forEach(d => out.push(d.data()));
+      return out;
+    } catch (e) { console.warn('[cloud] getAllOrders', e); return []; }
+  },
+
   // Fetch all orders that belong to a phone — for diagnostic display
   async getOrdersForCustomer(phoneOrId) {
     try {

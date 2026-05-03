@@ -1192,9 +1192,9 @@
 
 <div class="toast" id="toast"></div>
 
-<script type="module" src="firebase.js?v=20260503h"></script>
-<script src="offline-banner.js?v=20260503h"></script>
-<script src="menu-data.js?v=20260503h"></script>
+<script type="module" src="firebase.js?v=20260503i"></script>
+<script src="offline-banner.js?v=20260503i"></script>
+<script src="menu-data.js?v=20260503i"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 const STORAGE_KEY = 'loyaltyShopV2';
@@ -1421,7 +1421,11 @@ function isShopOpenNow() {
   const minute = now.getHours() * 60 + now.getMinutes();
   const open  = SHOP_HOURS.openH  * 60 + SHOP_HOURS.openM;
   const close = SHOP_HOURS.closeH * 60 + SHOP_HOURS.closeM;
-  return minute >= open && minute <= close;
+  // 🩹 Support hours that wrap past midnight (e.g. 18:00 → 02:00). If close
+  //    time is BEFORE open (in same-day minutes), interpret close as next-day.
+  //    Open if currently in [open..1440) OR [0..close).
+  if (close < open) return minute >= open || minute < close;
+  return minute >= open && minute < close;
 }
 
 // Render hero info chips (open/closed · delivery time · points-rate)
@@ -1587,7 +1591,7 @@ function renderInfoBanner() {
   }
   const trusted = cust && (window.isDeviceTrusted ? window.isDeviceTrusted(cust) : false);
   if (cust && trusted) {
-    left.innerHTML = `⭐ <b>${cust.name}</b> · ${cust.points || 0} แต้มสะสม`;
+    left.innerHTML = `⭐ <b>${escapeHtml(cust.name)}</b> · ${cust.points || 0} แต้มสะสม`;
     right.textContent = '🎁 ดูแต้ม + ประวัติ ›';
   } else if (cust && !trusted) {
     // Account exists but device isn't trusted — show generic prompt, NOT the
@@ -2797,7 +2801,7 @@ function checkCustomer() {
     }
     if (c.referral_code) extras += ` · 🤝 รหัสคุณ: <b>${c.referral_code}</b>`;
     if (trusted) {
-      found.innerHTML = `<div class="customer-found ok">✅ ลูกค้าเดิม: <b>${c.name}</b> · 🌟 ${pts} แต้ม${extras}</div>`;
+      found.innerHTML = `<div class="customer-found ok">✅ ลูกค้าเดิม: <b>${escapeHtml(c.name)}</b> · 🌟 ${pts} แต้ม${extras}</div>`;
     } else {
       // 🔒 Device not trusted — DO NOT reveal name / points / birthday.
       // The visitor (which might be a stranger with a shared link) only sees
@@ -3037,6 +3041,32 @@ async function submitOrder() {
   const name = document.getElementById('custFullName').value.trim();
   if (!cart.length) return toast('⚠️ ตะกร้าว่าง', true);
 
+  // 🩹 Re-validate every cart line against the LIVE menu before submit.
+  //    Items can be marked unavailable while the cart is open (admin toggles
+  //    "หมด" remotely). Submitting an unavailable item leaves the kitchen
+  //    with an order they can't fulfil and a customer who gets disappointed.
+  const _liveMenu = (typeof effectiveMenu !== 'undefined') ? effectiveMenu
+                  : (typeof window.applyMenuConfig === 'function' ? window.applyMenuConfig(menuConfig) : MENU);
+  const _findLive = (id) => {
+    for (const c of (_liveMenu || [])) {
+      const it = (c.items || []).find(i => i.id === id);
+      if (it) return it;
+    }
+    return null;
+  };
+  const _unavailable = [];
+  for (const line of cart) {
+    if (line.isCustom) continue; // custom factory items aren't gated
+    const live = _findLive(line.mainId);
+    if (!live || live.available === false) {
+      _unavailable.push(line.mainName || (live && live.name) || line.mainId);
+    }
+  }
+  if (_unavailable.length) {
+    toast('⚠️ เมนูบางรายการหมดแล้ว: ' + _unavailable.join(', ') + ' — กรุณาเอาออกก่อนสั่ง', true);
+    return;
+  }
+
   // 🔴 Shop closed?  Block ASAP orders, but ALLOW pre-orders (sched=later
   // with a valid scheduled time — buildSchedSlots only offers slots inside
   // shop hours so the scheduled time is guaranteed valid). Walk-in / phone /
@@ -3238,8 +3268,16 @@ async function submitOrder() {
   let effectiveScheduledAt = null;
   if (scheduleMode === 'later') {
     if (!scheduledAt) { toast('⚠️ กรุณาเลือกเวลาที่ต้องการ หรือเลือก "เอาเลย"', true); return; }
+    const schedMs = new Date(scheduledAt).getTime();
+    // 🩹 Hard-block past times. Stale tab / direct URL injection / system-clock
+    //    skew could otherwise let a past time slip through (the dropdown only
+    //    offers future slots, but submitOrder is the last line of defense).
+    if (Number.isNaN(schedMs) || schedMs <= Date.now()) {
+      toast('⚠️ เวลาที่เลือกผ่านไปแล้ว — กรุณาเลือกเวลาในอนาคต', true);
+      return;
+    }
     const minMs = Date.now() + 60 * 60 * 1000;
-    if (new Date(scheduledAt).getTime() < minMs) {
+    if (schedMs < minMs) {
       // Less than 1hr → degrade to ASAP per spec
       toast('⏰ เวลาน้อยกว่า 1 ชม. — ระบบจะส่งเป็นออเดอร์ปกติ (ตามคิว)');
     } else {
@@ -3310,7 +3348,9 @@ async function submitOrder() {
     }
   }
 
-  const orderId = 'PO' + Date.now();
+  // 🩹 Less predictable + collision-resistant: timestamp + 4-char random.
+  //    Pure Date.now() collides on rapid double-tap and is easy to enumerate.
+  const orderId = 'PO' + Date.now() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
   const orderRecord = {
     id: orderId,
     date: new Date().toISOString(),
@@ -3367,6 +3407,26 @@ async function submitOrder() {
   // never lost even if cloud sync fails. The 4-second cloud await is now
   // best-effort: if it succeeds, remove from outbox; if it fails, the
   // outbox stays and 'online' event listener retries (see flushOutbox below).
+  //
+  // 🩹 Tag the customer/referrer payloads with the bonus delta this order
+  //   added (signup + birthday + referral − redemption). The outbox replay
+  //   uses these as ATOMIC INCREMENTS instead of overwriting the whole
+  //   customer doc, so a stale snapshot never clobbers points the kitchen
+  //   has since added.
+  const _ptsUsedTotal = (redemptions || []).reduce((s, r) => s + (r.points_used || 0), 0);
+  const _bonusPts = (signupBonusGiven ? LOYALTY.SIGNUP_BONUS : 0)
+                  + (birthdayBonusGiven ? LOYALTY.SIGNUP_BONUS : 0)
+                  + (referrerCustomer ? LOYALTY.SIGNUP_BONUS : 0)  // referred-as-new bonus on this customer
+                  - _ptsUsedTotal;
+  const _bonusLife = (signupBonusGiven ? LOYALTY.SIGNUP_BONUS : 0)
+                  + (birthdayBonusGiven ? LOYALTY.SIGNUP_BONUS : 0)
+                  + (referrerCustomer ? LOYALTY.SIGNUP_BONUS : 0);
+  customer._bonusDelta_points = _bonusPts;
+  customer._bonusDelta_lifetime = _bonusLife;
+  if (referrerCustomer) {
+    referrerCustomer._bonusDelta_points = LOYALTY.SIGNUP_BONUS;
+    referrerCustomer._bonusDelta_lifetime = LOYALTY.SIGNUP_BONUS;
+  }
   pushOrderToOutbox({ order: orderObj, customer, referrer: referrerCustomer });
   let cloudOk = false;
   await new Promise(resolve => {
@@ -3429,7 +3489,7 @@ async function submitOrder() {
       <style>@keyframes fadeIn{from{opacity:0}to{opacity:1}}@keyframes popCheck{0%{transform:scale(0)}60%{transform:scale(1.2)}100%{transform:scale(1)}}</style>
       <div style="font-size:72px;animation:popCheck .5s ease-out">✅</div>
       <div style="font-size:24px;font-weight:900;margin-top:10px">ท่านได้กดสั่งอาหารแล้ว</div>
-      <div style="font-size:14px;opacity:.9;margin-top:6px">Order #${orderId.slice(-6)} · ${customer.name}</div>
+      <div style="font-size:14px;opacity:.9;margin-top:6px">Order #${orderId.slice(-6)} · ${escapeHtml(customer.name)}</div>
       <div style="background:rgba(255,255,255,.18);border:1.5px solid rgba(255,255,255,.35);backdrop-filter:blur(6px);border-radius:14px;padding:14px 18px;margin-top:16px;max-width:320px;width:100%">
         <div style="font-size:11px;opacity:.85;margin-bottom:4px">ยอดที่ต้องชำระ</div>
         <div style="font-size:32px;font-weight:900">฿${finalTotal}</div>
@@ -3514,7 +3574,7 @@ function renderUserWidget(customer, pendingOrder, recentDoneOrder) {
     w.innerHTML = `
       <div class="avatar">${initial}</div>
       <div class="info">
-        <div class="name">สวัสดี ${customer.name} 👋</div>
+        <div class="name">สวัสดี ${escapeHtml(customer.name)} 👋</div>
         <div class="meta">🌟 ${pts} แต้ม${rewardPill}</div>
       </div>
       <a class="action" href="points.html?phone=${phoneVal}" style="background:#1652F0">⭐ แต้ม + ประวัติ</a>
@@ -3947,8 +4007,40 @@ async function flushOutbox() {
   console.log('[outbox] retrying', list.length, 'pending order(s)');
   for (const payload of [...list]) {
     try {
-      if (payload.customer) await window.cloud.saveCustomer(payload.customer);
-      if (payload.referrer) await window.cloud.saveCustomer(payload.referrer);
+      // 🩹 CRITICAL: never call saveCustomer({merge:true}) here. The customer
+      //   snapshot in the outbox is from when submitOrder ran. Between then
+      //   and now the kitchen may have completed orders and incremented
+      //   points; replaying saveCustomer would CLOBBER those increments back
+      //   to the older snapshot and lose points (same family of bug as 62ebe60).
+      //
+      //   Customers are auto-created by the order-completion flow if missing.
+      //   For points-bearing fields, use atomic increments:
+      if (payload.customer && payload.customer.id && window.cloud.incrementCustomerPoints) {
+        const c = payload.customer;
+        // Only increment by the bonuses that submitOrder added on top of the
+        // already-saved customer (signup, birthday, referral). Pure order
+        // points are added later by the kitchen flow, NOT here.
+        const bonusDelta = (c._bonusDelta_points || 0);
+        const bonusLifetime = (c._bonusDelta_lifetime || 0);
+        if (bonusDelta || bonusLifetime) {
+          try {
+            await window.cloud.incrementCustomerPoints(c.id, bonusDelta, bonusLifetime, {
+              ...(c.signup_bonus_received ? { signup_bonus_received: true } : {}),
+              ...(c.last_birthday_bonus_year ? { last_birthday_bonus_year: c.last_birthday_bonus_year } : {}),
+            });
+          } catch (e) { console.warn('[outbox] bonus increment failed', e); }
+        }
+      }
+      // Referrer: same treatment — only increment the bonus we owe them.
+      if (payload.referrer && payload.referrer.id && window.cloud.incrementCustomerPoints) {
+        const r = payload.referrer;
+        const refDelta = (r._bonusDelta_points || 0);
+        const refLife = (r._bonusDelta_lifetime || 0);
+        if (refDelta || refLife) {
+          try { await window.cloud.incrementCustomerPoints(r.id, refDelta, refLife); }
+          catch (e) { console.warn('[outbox] referrer increment failed', e); }
+        }
+      }
       await window.cloud.saveOrder(payload.order);
       removeOrderFromOutbox(payload.order.id);
       console.log('[outbox] flushed', payload.order.id);

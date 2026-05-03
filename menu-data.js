@@ -29,6 +29,20 @@ window.getDeviceId = function() {
   return id;
 };
 
+// 🛡️ XSS-safe HTML escape for any user-supplied string (customer name, note,
+//    address, etc.) that we interpolate into innerHTML. JS template literals
+//    don't escape — without this, a customer named '<img onerror=alert(1)>'
+//    fires script in admin's view of the customer.
+window.escapeHtml = function(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+};
+
 // 🔒 Check if this device is trusted by the given customer.
 // First device that signed up is auto-trusted. Other devices need
 // to verify (birthday or admin contact) → then get added to linked_devices.

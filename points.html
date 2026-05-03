@@ -195,9 +195,9 @@
 
 <main id="main"></main>
 
-<script type="module" src="firebase.js?v=20260503h"></script>
-<script src="offline-banner.js?v=20260503h"></script>
-<script src="menu-data.js?v=20260503h"></script>
+<script type="module" src="firebase.js?v=20260503i"></script>
+<script src="offline-banner.js?v=20260503i"></script>
+<script src="menu-data.js?v=20260503i"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 const STORAGE_KEY = 'loyaltyShopV2';
@@ -352,7 +352,7 @@ function renderCustomer(customer, allOrders) {
         </div>
         <div style="flex:1;min-width:0">
           <div class="greeting">${greeting} 👋</div>
-          <div style="font-size:20px;font-weight:800;line-height:1.2">${customer.name}</div>
+          <div style="font-size:20px;font-weight:800;line-height:1.2">${escapeHtml(customer.name)}</div>
           <div style="font-size:11px;opacity:.85;margin-top:3px">📱 ${customer.phone || phone}${customer.birth_day && customer.birth_month ? ` · 🎂 ${customer.birth_day}/${customer.birth_month}` : ''}</div>
         </div>
         <button onclick="openEditProfileModal()" aria-label="แก้ไข" style="background:rgba(255,255,255,.2);border:1.5px solid rgba(255,255,255,.35);color:#fff;width:38px;height:38px;border-radius:50%;font-size:15px;cursor:pointer;font-family:inherit;backdrop-filter:blur(4px);flex-shrink:0">✏️</button>
