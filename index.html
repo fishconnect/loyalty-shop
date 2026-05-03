@@ -1146,7 +1146,9 @@
             <option value="255">255 — Thai (alt)</option>
           </select>
           <button onclick="bluetoothPrintThaiTest()" style="width:100%;margin-top:6px;padding:8px;background:#fff;color:#1652F0;border:1.5px solid #1652F0;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer">🇹🇭 ทดสอบพิมพ์ภาษาไทย (ลอง 5 รหัส)</button>
-          <div class="hint" style="font-size:11px;margin-top:4px">ใช้เมื่อ printer มี font ไทย — ถ้า bitmap mode ภาษาไทยออกแล้ว ไม่ต้องตั้ง</div>
+          <div class="hint" style="font-size:11px;margin-top:4px;color:#dc2626">⚠️ <b>"5 รหัส" ใช้ text mode</b> — ถ้า printer ไม่มี Thai font จะออกเป็นภาษาจีน · ใช้ปุ่มข้างล่างแทน ⬇️</div>
+          <button onclick="bluetoothPrintBitmapTest()" style="width:100%;margin-top:8px;padding:10px;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border:none;border-radius:6px;font-weight:800;font-size:13px;cursor:pointer">🖼️ ทดสอบพิมพ์ Bitmap (ภาษาไทยสวยที่สุด ⭐)</button>
+          <div class="hint" style="font-size:11px;margin-top:4px;color:#16a34a">✅ <b>Bitmap mode = render ไทยเป็นรูป</b> — ใช้ได้ทุก printer · ไม่ต้องมี Thai font ใน printer</div>
         </div>
       </details>
 
@@ -6080,6 +6082,40 @@ function bluetoothPrintThaiTest() {
   }
   alert('⚠️ กรุณาเข้า tab ครัว ก่อน (เพื่อโหลด BT printer module)');
 }
+
+// 🖼️ Test bitmap print — uses canvas to render Thai text as IMAGE then sends
+// raster commands. Works on ANY printer (no Thai font needed). This is what
+// the actual order print uses too.
+async function bluetoothPrintBitmapTest() {
+  // Delegate to the kitchen iframe's existing print pipeline with a synthetic order
+  const frames = document.querySelectorAll('iframe');
+  for (const f of frames) {
+    try {
+      const cw = f.contentWindow;
+      if (cw && typeof cw.bluetoothPrint === 'function' && cw.btPrinter?.chr) {
+        // Force bitmap mode for this test
+        cw.localStorage.setItem('btPrintMode', 'bitmap');
+        const fakeOrder = {
+          id: 'TEST-' + Date.now(),
+          date: new Date().toISOString(),
+          customer_name: 'ทดสอบพิมพ์ภาษาไทย',
+          customer_phone: '0812345678',
+          items: [
+            { name: 'ข้าวผัดกระเพรา (ไก่ + ไข่ดาว)', mainName: 'ข้าวผัดกระเพรา', qty: 1, price: 50, options: [{group:'เนื้อ',choice:'ไก่',price:0},{group:'เพิ่ม',choice:'ไข่ดาว',price:5}], note: '' },
+            { name: 'ผัดฉ่าราดข้าว (รวมมิตร · เผ็ดมาก)', mainName: 'ผัดฉ่าราดข้าว', qty: 2, price: 60, options: [{group:'เนื้อ',choice:'รวมมิตร',price:10},{group:'ความเผ็ด',choice:'เผ็ดมาก',price:0}], note: 'ไม่ใส่ผงชูรส' },
+          ],
+          total: 170, order_type: 'pickup', source: 'walk-in', status: 'pending'
+        };
+        const res = await cw.bluetoothPrint(fakeOrder, cw.btPrinter);
+        if (res?.error) alert('⚠️ พิมพ์ไม่สำเร็จ: ' + res.error);
+        else toast('✅ ส่งคำสั่งพิมพ์ Bitmap แล้ว — ดูที่ printer ครับ');
+        return;
+      }
+    } catch (e) { console.warn('iframe BT test failed', e); }
+  }
+  alert('⚠️ ขั้นตอน:\n\n1. เข้า tab "👨‍🍳 ครัว"\n2. กด "🔵 เชื่อม Bluetooth Printer"\n3. กลับมาที่ tab ⚙️ Settings\n4. กดปุ่มนี้อีกครั้ง');
+}
+window.bluetoothPrintBitmapTest = bluetoothPrintBitmapTest;
 
 // Build ESC/POS for BT test print
 async function sendBTTestPrint(order) {
