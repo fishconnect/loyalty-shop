@@ -1204,12 +1204,24 @@ window.isFactoryMode = isFactoryMode;
 // Cart line: { cartId, mainId, qty, options: { [groupIdx]: [choiceName, ...] }, note }
 // Custom item line: { cartId, isCustom: true, customName, customPrice, qty, note }
 const _CART_KEY = isFactoryMode ? 'cartFactory' : 'cartV2';
-let cart = JSON.parse(sessionStorage.getItem(_CART_KEY) || '[]');
+// 🛒 Cart now lives in localStorage (was sessionStorage) so closing the tab
+// or the browser doesn't lose what the customer was building. We still read
+// from sessionStorage as a fallback for in-flight migrations.
+let cart = (() => {
+  try {
+    const ls = localStorage.getItem(_CART_KEY);
+    if (ls) return JSON.parse(ls);
+    const ss = sessionStorage.getItem(_CART_KEY);
+    if (ss) return JSON.parse(ss);
+  } catch (e) {}
+  return [];
+})();
 
 // Migrate / clear old cart format (had addOnIds)
 if (cart.length && cart[0].addOnIds !== undefined) {
   cart = [];
   sessionStorage.removeItem(_CART_KEY);
+  localStorage.removeItem(_CART_KEY);
 }
 
 // Effective menu (factory uses FACTORY_MENU + factoryConfig, regular uses MENU + menuConfig)
@@ -2052,7 +2064,11 @@ function removeFromCart() {
   toast('🗑️ ลบแล้ว', true);
 }
 
-function saveCart() { sessionStorage.setItem(_CART_KEY, JSON.stringify(cart)); }
+function saveCart() {
+  // Write to localStorage (persistent) AND sessionStorage (legacy compat)
+  try { localStorage.setItem(_CART_KEY, JSON.stringify(cart)); } catch (e) {}
+  try { sessionStorage.setItem(_CART_KEY, JSON.stringify(cart)); } catch (e) {}
+}
 
 function getCartTotal() {
   let total = 0, count = 0;
@@ -2639,13 +2655,37 @@ function verifyDeviceWithBirthday(customer, onSuccess, onCancel) {
 
   if (hasBirthday) {
     const submitBtn = modal.querySelector('#vfSubmit');
-    let attempts = 0;
+    // 🔒 Persist attempts across modal close — prevents bypassing lockout by
+    // simply closing & reopening. Keyed by phone so different accounts have
+    // independent counters; cleared after successful verify or 1 hour.
+    const lockKey = 'vfLock:' + customer.phone;
+    function readLock() {
+      try { const o = JSON.parse(localStorage.getItem(lockKey) || 'null');
+            if (!o || (Date.now() - o.t) > 60 * 60 * 1000) return { count: 0 };
+            return o; } catch (e) { return { count: 0 }; }
+    }
+    function writeLock(count) {
+      try { localStorage.setItem(lockKey, JSON.stringify({ count, t: Date.now() })); } catch (e) {}
+    }
+    function clearLock() { try { localStorage.removeItem(lockKey); } catch (e) {} }
+    // If already locked out from previous attempts, disable submit immediately
+    {
+      const cur = readLock();
+      if (cur.count >= 3) {
+        const status = modal.querySelector('#vfStatus');
+        if (status) { status.style.color = '#dc2626'; status.innerHTML = `❌ ลองครบ 3 ครั้งแล้ว · <a href="${mailto}" style="color:#1652F0;text-decoration:underline">ติดต่อ admin</a> · ลองใหม่ได้ใน 1 ชม.`; }
+        if (submitBtn) { submitBtn.disabled = true; submitBtn.style.opacity = '.5'; }
+      }
+    }
     submitBtn?.addEventListener('click', async () => {
       const d = parseInt(modal.querySelector('#vfDay').value);
       const m = parseInt(modal.querySelector('#vfMonth').value);
       const status = modal.querySelector('#vfStatus');
       if (!d || !m) { status.style.color = '#dc2626'; status.textContent = '⚠️ เลือกทั้งวันและเดือน'; return; }
+      const cur = readLock();
+      let attempts = cur.count;
       attempts++;
+      writeLock(attempts);
       if (d === customer.birth_day && m === customer.birth_month) {
         status.style.color = '#16a34a'; status.textContent = '✅ ยืนยันสำเร็จ — กำลังเปิดบัญชี...';
         // Link this device to the customer in cloud
@@ -2660,11 +2700,12 @@ function verifyDeviceWithBirthday(customer, onSuccess, onCancel) {
             saveDB(db);
           }
         } catch (e) { console.warn('linkDevice fail', e); }
+        clearLock();   // 🔓 success → clear the attempts counter
         setTimeout(() => close(true), 700);
       } else {
         status.style.color = '#dc2626';
         if (attempts >= 3) {
-          status.innerHTML = `❌ ไม่ตรง — ลองครบ 3 ครั้งแล้ว · <a href="${mailto}" style="color:#1652F0;text-decoration:underline">ติดต่อ admin</a>`;
+          status.innerHTML = `❌ ไม่ตรง — ลองครบ 3 ครั้งแล้ว · <a href="${mailto}" style="color:#1652F0;text-decoration:underline">ติดต่อ admin</a> · ลองใหม่ได้ใน 1 ชม.`;
           submitBtn.disabled = true; submitBtn.style.opacity = '.5';
         } else {
           status.textContent = `❌ ไม่ตรง — เหลืออีก ${3 - attempts} ครั้ง`;
@@ -3266,21 +3307,32 @@ async function submitOrder() {
   if (submitBtn) submitBtn.disabled = true;
   if (submitText) submitText.textContent = '⏳ กำลังส่งครัว...';
   toast('⏳ กำลังส่งครัว...');
+  // 📬 ORDER OUTBOX — write to a localStorage queue FIRST so the order is
+  // never lost even if cloud sync fails. The 4-second cloud await is now
+  // best-effort: if it succeeds, remove from outbox; if it fails, the
+  // outbox stays and 'online' event listener retries (see flushOutbox below).
+  pushOrderToOutbox({ order: orderObj, customer, referrer: referrerCustomer });
+  let cloudOk = false;
   await new Promise(resolve => {
     whenCloudReady(async () => {
       try {
         await window.cloud.saveCustomer(customer);
         if (referrerCustomer) await window.cloud.saveCustomer(referrerCustomer);
         await window.cloud.saveOrder(orderObj);
+        cloudOk = true;
       } catch (e) { console.warn('cloud sync failed', e); }
       resolve();
     });
     // Failsafe timeout — don't wait forever
     setTimeout(resolve, 4000);
   });
+  if (cloudOk) removeOrderFromOutbox(orderObj.id);
 
   cart = [];
-  sessionStorage.removeItem('cartV2');
+  // 🔧 Clear BOTH cart storages (fix factory cart not being cleared bug —
+  // _CART_KEY is 'cartFactory' in factory mode, not 'cartV2')
+  try { sessionStorage.removeItem(_CART_KEY); } catch (e) {}
+  try { localStorage.removeItem(_CART_KEY); } catch (e) {}
   resetCartRewards();
   // Reset delivery state for next order
   orderType = 'pickup';
@@ -3678,7 +3730,8 @@ openCart = function() {
 
 // ============ 🔒 PDPA consent banner ============
 // PDPA_VERSION — bump when policy changes; old consents become stale
-const PDPA_VERSION = '1.1';
+// PDPA_VERSION centralized in menu-data.js — fall back to '1.1' if not loaded
+const PDPA_VERSION = window.PDPA_POLICY_VERSION || '1.1';
 
 function getPdpaConsent() {
   try { return JSON.parse(localStorage.getItem('pdpa_consent') || 'null'); } catch (e) { return null; }
@@ -3811,6 +3864,43 @@ window.refreshPdpaUiGates = refreshPdpaUiGates;
 window.PDPA_VERSION = PDPA_VERSION;
 
 // (Offline banner moved to shared offline-banner.js — included via <script src>)
+
+// ============ 📬 Order outbox (resilience) ============
+// submitOrder enqueues each order into localStorage 'orderOutbox' BEFORE the
+// 4-second cloud-save attempt. On success → removed from outbox. On timeout/
+// failure/offline → stays in outbox and is retried whenever the browser
+// comes back online OR on next page load.
+const OUTBOX_KEY = 'orderOutbox';
+function getOutbox() {
+  try { return JSON.parse(localStorage.getItem(OUTBOX_KEY) || '[]'); } catch (e) { return []; }
+}
+function saveOutbox(arr) { try { localStorage.setItem(OUTBOX_KEY, JSON.stringify(arr)); } catch (e) {} }
+function pushOrderToOutbox(payload) {
+  const list = getOutbox();
+  const i = list.findIndex(p => p?.order?.id === payload.order.id);
+  if (i >= 0) list[i] = payload; else list.push(payload);
+  saveOutbox(list);
+}
+function removeOrderFromOutbox(orderId) {
+  saveOutbox(getOutbox().filter(p => p?.order?.id !== orderId));
+}
+async function flushOutbox() {
+  if (!navigator.onLine || !window.cloud?.ready) return;
+  const list = getOutbox();
+  if (!list.length) return;
+  console.log('[outbox] retrying', list.length, 'pending order(s)');
+  for (const payload of [...list]) {
+    try {
+      if (payload.customer) await window.cloud.saveCustomer(payload.customer);
+      if (payload.referrer) await window.cloud.saveCustomer(payload.referrer);
+      await window.cloud.saveOrder(payload.order);
+      removeOrderFromOutbox(payload.order.id);
+      console.log('[outbox] flushed', payload.order.id);
+    } catch (e) { console.warn('[outbox] flush failed', payload.order.id, e); }
+  }
+}
+window.addEventListener('online', () => setTimeout(flushOutbox, 1500));
+setTimeout(flushOutbox, 5000);
 
 // ============ Init ============
 renderMenu();

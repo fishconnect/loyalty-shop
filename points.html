@@ -1318,17 +1318,39 @@ async function maybeGrantBirthdayBonus(customer) {
   if ((now.getMonth() + 1) !== customer.birth_month) return;
   const year = now.getFullYear();
   if (customer.last_birthday_bonus_year === year) return;     // already given this year
+
+  // 🔒 Local idempotency guard — prevents two tabs on the same browser from
+  // BOTH thinking they need to grant the bonus while the cloud round-trip
+  // is in flight. Per (phone+year) lock keyed in localStorage.
+  const lockKey = 'bdayLock:' + phone + ':' + year;
+  if (localStorage.getItem(lockKey)) return;
+  localStorage.setItem(lockKey, '1');
+
   const BONUS = (window.LOYALTY?.SIGNUP_BONUS) || 5;
+  // 🔒 Use atomic Firestore increment so concurrent grants from different
+  // devices don't lose updates (saveCustomer was overwriting whole-doc).
+  try {
+    if (window.cloud?.incrementCustomerPoints) {
+      await window.cloud.incrementCustomerPoints(phone, BONUS, BONUS, {
+        last_birthday_bonus_year: year,
+      });
+    } else if (window.cloud?.saveCustomer) {
+      // Fallback for old cloud helper
+      customer.points = (customer.points || 0) + BONUS;
+      customer.lifetime_points = (customer.lifetime_points || 0) + BONUS;
+      customer.last_birthday_bonus_year = year;
+      await window.cloud.saveCustomer(customer);
+    }
+  } catch (e) { console.warn('birthday grant failed', e); localStorage.removeItem(lockKey); return; }
+
+  // Mirror locally
   customer.points = (customer.points || 0) + BONUS;
   customer.lifetime_points = (customer.lifetime_points || 0) + BONUS;
   customer.last_birthday_bonus_year = year;
-  // Persist locally + cloud
   const db = loadDB();
   db.customers[phone] = customer;
   saveDB(db);
-  try {
-    if (window.cloud?.saveCustomer) await window.cloud.saveCustomer(customer);
-  } catch (e) {}
+
   // Show a celebration toast
   setTimeout(() => {
     const t = document.createElement('div');
@@ -1370,7 +1392,7 @@ window.openReorderModal = openReorderModal;
 window.closeReorderModal = closeReorderModal;
 
 // 🔒 PDPA cookie banner — same logic as menu.html
-const PDPA_VERSION = '1.1';
+const PDPA_VERSION = window.PDPA_POLICY_VERSION || '1.1';
 function maybeShowPdpaBanner() {
   try {
     const c = JSON.parse(localStorage.getItem('pdpa_consent') || 'null');

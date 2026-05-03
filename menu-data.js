@@ -11,6 +11,11 @@ window.SHOP_INFO = {
   deliveryRadiusKm: 7, // hard limit — orders beyond this distance are blocked
 };
 
+// 🔒 PDPA policy version — bump when privacy.html / tos.html materially change.
+// Customer-facing pages (menu/points/status) all read this so we don't have to
+// edit 3 files every time. Cookie banner re-shows when version changes.
+window.PDPA_POLICY_VERSION = '1.1';
+
 // 🔒 Device ID — random per browser, stored in localStorage. Used to identify
 // "is this device trusted by this customer?" for PDPA-compliant access control.
 // Same device across visits → same ID. Cleared if user clears browser data.

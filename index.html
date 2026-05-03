@@ -1374,19 +1374,52 @@
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 
 // ========== Auth ==========
+// Stores SHA-256 hash of password (not plaintext). Falls back to plaintext
+// '1234' for legacy installs that haven't been migrated yet.
 let adminPassword = localStorage.getItem('admin_pwd') || '1234';
-function isLoggedIn() { return sessionStorage.getItem('admin_logged_in') === '1'; }
+const AUTH_TTL_MS = 7 * 24 * 60 * 60 * 1000;     // 7-day "remember me"
+
+async function _sha256(text) {
+  if (!crypto?.subtle) return text;     // very old browser: skip hash
+  const buf = new TextEncoder().encode(text);
+  const hash = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function isLoggedIn() {
+  // Check localStorage (survives tab close) first; fall back to sessionStorage
+  // for backward compat with older sessions.
+  try {
+    const tok = JSON.parse(localStorage.getItem('admin_session') || 'null');
+    if (tok && tok.exp > Date.now()) return true;
+  } catch (e) {}
+  return sessionStorage.getItem('admin_logged_in') === '1';
+}
 function showLogin() {
   document.getElementById('loginOverlay').style.display = 'flex';
   setTimeout(() => document.getElementById('loginPwd')?.focus(), 100);
 }
 function hideLogin() { document.getElementById('loginOverlay').style.display = 'none'; }
-function doLogin() {
+async function doLogin() {
   const pwd = document.getElementById('loginPwd').value;
-  if (pwd === adminPassword) {
-    sessionStorage.setItem('admin_logged_in', '1');
+  // adminPassword may be plaintext (legacy) or already a SHA-256 hash. Try
+  // both forms so we can transition without locking anyone out.
+  const inputHash = await _sha256(pwd);
+  const stored = adminPassword || '';
+  const ok = (pwd === stored)         // plaintext match (legacy)
+          || (inputHash === stored);  // hashed match (new)
+  if (ok) {
+    // 7-day session in localStorage so closing the tab/browser doesn't log out
+    localStorage.setItem('admin_session', JSON.stringify({ exp: Date.now() + AUTH_TTL_MS }));
+    sessionStorage.setItem('admin_logged_in', '1');     // also keep for backward compat
     document.getElementById('loginErr').style.display = 'none';
     hideLogin();
+    // Lazily upgrade the stored password to a hash if it was plaintext
+    if (pwd === stored && stored !== inputHash) {
+      adminPassword = inputHash;
+      localStorage.setItem('admin_pwd', inputHash);
+      try { if (window.cloud?.saveAdminPassword) await window.cloud.saveAdminPassword(inputHash); } catch (e) {}
+    }
   } else {
     document.getElementById('loginErr').style.display = 'block';
     document.getElementById('loginPwd').value = '';
@@ -1394,11 +1427,12 @@ function doLogin() {
 }
 function logout() {
   if (!confirm('ออกจากระบบ?')) return;
+  localStorage.removeItem('admin_session');
   sessionStorage.removeItem('admin_logged_in');
   location.reload();
 }
 if (!isLoggedIn()) showLogin();
-// Sync admin password from cloud
+// Sync admin password from cloud (treat as opaque blob — could be plain or hash)
 whenCloudReady(async () => {
   try {
     const cloudPwd = await window.cloud.getAdminPassword();
@@ -6422,14 +6456,16 @@ function deleteItemEditor() {
 // Legacy alias
 function addCustomItem() { openNewItemEditor(); }
 
-function changePassword() {
+async function changePassword() {
   const pwd = document.getElementById('adminPwdNew').value.trim();
   if (!pwd || pwd.length < 4) return toast('⚠️ รหัสต้องอย่างน้อย 4 ตัวอักษร');
-  adminPassword = pwd;
-  localStorage.setItem('admin_pwd', pwd);
-  if (window.cloud?.ready) window.cloud.saveAdminPassword(pwd).catch(()=>{});
+  // Hash with SHA-256 before storing — never persist plaintext password
+  const hash = await _sha256(pwd);
+  adminPassword = hash;
+  localStorage.setItem('admin_pwd', hash);
+  if (window.cloud?.ready) window.cloud.saveAdminPassword(hash).catch(()=>{});
   document.getElementById('adminPwdNew').value = '';
-  toast('✅ เปลี่ยนรหัสผ่านแล้ว');
+  toast('✅ เปลี่ยนรหัสผ่านแล้ว (เก็บเป็น SHA-256 hash)');
 }
 
 // Sync menu config from cloud — but PRESERVE local images

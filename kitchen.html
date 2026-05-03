@@ -623,12 +623,18 @@ function render() {
             <span style="color:#dc2626;font-weight:700;padding:14px;text-align:center;flex:1">❌ ยกเลิก${o.cancelled_at?` เมื่อ ${fmtTime(o.cancelled_at)}`:''}</span>
             <button onclick="printOrderReceipt('${o.id}')" style="background:#fef3c7;color:#92400e;border:1.5px solid #f59e0b;flex:0;max-width:60px" title="พิมพ์ใบเสร็จ">🖨️</button>
           </div>
-        ` : `
+        ` : (() => {
+          // ✅ Done state — show "↩ ย้อนกลับ" undo within 5 minutes of completion
+          // for staff who hit the wrong button. After 5 min the undo disappears.
+          const completedMs = o.completed_at ? new Date(o.completed_at).getTime() : 0;
+          const withinUndo = completedMs && (Date.now() - completedMs) < 5 * 60 * 1000;
+          return `
           <div class="order-actions">
             <span style="color:#16a34a;font-weight:700;padding:14px;text-align:center;flex:1">✅ เสร็จแล้ว${o.completed_at?` เมื่อ ${fmtTime(o.completed_at)}`:''}${o.payment_method ? ` · ${o.payment_method === 'cash' ? '💵 เงินสด' : '💳 เงินโอน'}` : ''}</span>
+            ${withinUndo ? `<button onclick="undoDelivered('${o.id}')" style="background:#fff;color:#dc2626;border:1.5px solid #dc2626;flex:0;max-width:130px;font-weight:800" title="กดผิด? ย้อนกลับ (ภายใน 5 นาที)">↩ ย้อนกลับ</button>` : ''}
             <button onclick="printOrderReceipt('${o.id}')" style="background:#fef3c7;color:#92400e;border:1.5px solid #f59e0b;flex:0;max-width:80px" title="พิมพ์ใบเสร็จ">🖨️ พิมพ์</button>
           </div>
-        `}
+        `;})()}
       </div>
     `;
   }).join('');
@@ -662,6 +668,64 @@ async function advanceStatus(orderId, nextStatus) {
 }
 
 async function markDone(orderId) { return advanceStatus(orderId, 'delivered'); }
+
+// ↩️ Undo "delivered" — for the case where staff hit the button by mistake.
+// Reverts status back to the prior state (delivering for delivery orders,
+// ready for pickup orders). Only available within 5 minutes of completion.
+async function undoDelivered(orderId) {
+  const db = loadDB();
+  const orderSrc = cloudOrders !== null ? cloudOrders : db.pendingOrders;
+  const order = orderSrc.find(o => o.id === orderId);
+  if (!order) return;
+  const completedMs = order.completed_at ? new Date(order.completed_at).getTime() : 0;
+  if (!completedMs || (Date.now() - completedMs) >= 5 * 60 * 1000) {
+    return alert('⏰ ผ่านมาเกิน 5 นาที — ย้อนกลับไม่ได้แล้ว · ติดต่อเจ้าของร้านเพื่อแก้ไขใน Firebase');
+  }
+  if (!confirm('↩ ย้อนกลับสถานะ "ส่งสำเร็จ"?\n\n• สถานะจะกลับไปเป็น "กำลังส่ง" / "พร้อมส่ง"\n• แต้มที่ลูกค้าได้รับจะถูกหักคืน\n• ลูกค้าจะเห็นการเปลี่ยนสถานะ real-time\n\nกด OK เพื่อย้อนกลับ')) return;
+  // Determine the prior status
+  const priorStatus = (order.order_type === 'delivery') ? 'delivering' : 'ready';
+  // Roll back any points that were credited on completion
+  if (order.customer_id && (order.points_earned || 0) > 0) {
+    try {
+      if (window.cloud?.incrementCustomerPoints) {
+        await window.cloud.incrementCustomerPoints(order.customer_id, -order.points_earned, -order.points_earned);
+      }
+      // Mirror locally
+      const cust = db.customers[order.customer_id];
+      if (cust) {
+        cust.points = Math.max(0, (cust.points || 0) - order.points_earned);
+        cust.lifetime_points = Math.max(0, (cust.lifetime_points || 0) - order.points_earned);
+        saveDB(db);
+      }
+    } catch (e) { console.warn('points rollback failed', e); }
+  }
+  // Update order status in cloud
+  try {
+    if (window.cloud?.updateOrder) {
+      await window.cloud.updateOrder(orderId, {
+        status: priorStatus,
+        completed_at: null,
+        payment_method: null,
+        reverted_at: new Date().toISOString(),
+        reverted_reason: 'admin_undo_within_5min',
+      });
+    }
+    // Mirror in local DB
+    const local = db.pendingOrders.find(o => o.id === orderId);
+    if (local) {
+      local.status = priorStatus;
+      delete local.completed_at;
+      delete local.payment_method;
+      local.reverted_at = new Date().toISOString();
+      saveDB(db);
+    }
+    toast(`↩ ย้อนกลับเป็น "${priorStatus}" แล้ว`);
+    if (typeof render === 'function') render();
+  } catch (e) {
+    alert('⚠️ ย้อนกลับไม่สำเร็จ — ลองใหม่หรือเช็ค Firebase Console');
+  }
+}
+window.undoDelivered = undoDelivered;
 
 // 💰 Payment-method picker — populated when kitchen taps "✓ จัดส่งสำเร็จ"
 let _payOrderId = null;
