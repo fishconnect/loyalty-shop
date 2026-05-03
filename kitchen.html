@@ -1883,14 +1883,16 @@ async function renderReceiptCanvas(order) {
     const rightStr = (free > 0 && paid === 0) ? 'FREE' : '฿' + lineTotal;
     const mainNm = it.mainName || it.name;
     row(it.qty + '× ' + mainNm, rightStr, 28, true);
+    // 🔧 Add-ons + notes use SAME font size as item name (was 22 → too small
+    // to read on thermal paper). Now at 28 with bold.
     if (it.options && it.options.length) {
       for (const o of it.options) {
         const prefix = o.price > 0 ? '   + ' : '   - ';
         const px = o.price > 0 ? ` (+${o.price})` : '';
-        leftLine(prefix + o.choice + px, 22, true);
+        leftLine(prefix + o.choice + px, 28, true);
       }
     }
-    if (it.note) leftLine('   note: ' + it.note, 22, true);
+    if (it.note) leftLine('   note: ' + it.note, 28, true);
   }
   divider();
 
