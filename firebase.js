@@ -358,6 +358,37 @@ window.cloud = {
     } catch (e) { console.warn('[cloud] requestDeviceTrust', e); return false; }
   },
 
+  // 👨‍💼 Admin-side: list all pending trust requests (< 30 min old) so admin
+  // can see who's currently at the verify gate without guessing codes. Auto-
+  // cleans stale entries (>30 min) in the background.
+  async listPendingTrustRequests() {
+    try {
+      const snap = await getDocs(collection(fdb, 'device_trust_requests'));
+      const now = Date.now();
+      const out = [];
+      for (const d of snap.docs) {
+        const data = d.data();
+        const t = data.requested_at ? new Date(data.requested_at).getTime() : 0;
+        const age = now - t;
+        if (age <= 30 * 60 * 1000) {
+          out.push({
+            phone: data.phone || '',
+            code: data.code || '',
+            name: data.name || '',
+            device_id: data.device_id || '',
+            ageSec: Math.max(0, Math.floor(age / 1000)),
+            id: d.id,
+          });
+        } else {
+          // Stale — best-effort cleanup, don't block listing
+          deleteDoc(doc(fdb, 'device_trust_requests', d.id)).catch(() => {});
+        }
+      }
+      out.sort((a, b) => a.ageSec - b.ageSec); // newest first
+      return out;
+    } catch (e) { console.warn('[cloud] listPendingTrustRequests', e); return []; }
+  },
+
   // 👨‍💼 Admin-side: look up the request by phone+code, link the device, delete request.
   // Returns { ok: true, deviceId, name } on success, { ok: false, error: '...' } on fail.
   async trustDeviceByCode(phone, code) {

@@ -1383,10 +1383,10 @@
 <!-- Print receipt area (hidden until print) -->
 <div id="printArea"></div>
 
-<script type="module" src="firebase.js?v=20260503b"></script>
-<script src="offline-banner.js?v=20260503b"></script>
-<script src="menu-data.js?v=20260503b"></script>
-<script src="notifier.js?v=20260503b"></script>
+<script type="module" src="firebase.js?v=20260503c"></script>
+<script src="offline-banner.js?v=20260503c"></script>
+<script src="menu-data.js?v=20260503c"></script>
+<script src="notifier.js?v=20260503c"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 
@@ -1880,9 +1880,10 @@ function showTrustCodeUnlock() {
     <div style="background:#ecfdf5;border:2px solid #16a34a;color:#064e3b;padding:16px;border-radius:14px">
       <div style="font-weight:900;font-size:15px;margin-bottom:6px">🆔 ปลดล็อกลูกค้าด้วยโค้ด</div>
       <div style="font-size:12px;color:#065f46;margin-bottom:14px;line-height:1.6">
-        💬 <b>วิธีใช้:</b> ให้ลูกค้าเปิดลิงก์แต้มในเครื่องของตัวเอง<br>
-        จะเห็นโค้ด 4 ตัวสีน้ำเงินบนจอ → ลูกค้าบอกโค้ดให้ร้าน → ร้านกรอกเบอร์ + โค้ดที่นี่ → ปลดล็อกอัตโนมัติ
+        💬 <b>วิธีใช้:</b> ลูกค้าเปิดลิงก์ในเครื่อง → จะมีโค้ด 4 ตัวขึ้นบนจอ + ปรากฏใน "คำขอที่ค้างอยู่" ด้านล่าง → กดเลือกลูกค้า → กดปลดล็อก
       </div>
+      <!-- 📋 Pending requests — admin sees pending customers without guessing codes -->
+      <div id="tcuPendingWrap" style="margin-bottom:12px"></div>
       <input type="tel" id="tcuPhone" placeholder="📱 เบอร์ลูกค้า (เช่น 0815495552)" inputmode="numeric" maxlength="10" style="width:100%;padding:14px;border:2px solid #16a34a;border-radius:10px;font-size:17px;font-family:inherit;margin-bottom:8px;letter-spacing:1px">
       <input type="text" id="tcuCode" placeholder="🔢 โค้ด 4 ตัว (เช่น K7P9)" maxlength="4" autocapitalize="characters" autocomplete="off" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z2-9]/g,'')" style="width:100%;padding:14px;border:2px solid #16a34a;border-radius:10px;font-size:22px;font-family:'SF Mono',Menlo,monospace;font-weight:900;letter-spacing:8px;text-align:center;margin-bottom:12px;text-transform:uppercase">
       <button onclick="submitTrustCodeUnlock()" style="width:100%;padding:16px;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border:none;border-radius:12px;font-weight:900;font-size:16px;cursor:pointer;font-family:inherit">✅ ปลดล็อก</button>
@@ -1895,6 +1896,59 @@ function showTrustCodeUnlock() {
   `;
   // Auto-focus phone field for quick keyboard entry
   setTimeout(() => document.getElementById('tcuPhone')?.focus(), 100);
+  // Load pending requests + auto-refresh every 5s
+  refreshTcuPending();
+  if (window._tcuRefreshTimer) clearInterval(window._tcuRefreshTimer);
+  window._tcuRefreshTimer = setInterval(refreshTcuPending, 5000);
+}
+
+async function refreshTcuPending() {
+  const wrap = document.getElementById('tcuPendingWrap');
+  if (!wrap) {
+    // Form was closed — stop the refresh timer
+    if (window._tcuRefreshTimer) { clearInterval(window._tcuRefreshTimer); window._tcuRefreshTimer = null; }
+    return;
+  }
+  if (!window.cloud?.listPendingTrustRequests) {
+    wrap.innerHTML = '<div style="font-size:11px;color:#6b7280;text-align:center;padding:8px">⏳ รอ cloud โหลด...</div>';
+    return;
+  }
+  try {
+    const list = await window.cloud.listPendingTrustRequests();
+    if (!list.length) {
+      wrap.innerHTML = `<div style="background:#fffbeb;border:1.5px dashed #f59e0b;color:#78350f;padding:12px;border-radius:10px;font-size:12px;text-align:center;line-height:1.5">
+        📭 <b>ยังไม่มีลูกค้ารอปลดล็อกอยู่</b><br>
+        <span style="font-size:11px">ให้ลูกค้าเปิดลิงก์แต้มในมือถือก่อน → โค้ดจะปรากฏที่นี่อัตโนมัติ</span>
+      </div>`;
+      return;
+    }
+    wrap.innerHTML = `
+      <div style="background:#fff;border:1.5px solid #16a34a;border-radius:10px;padding:8px;margin-bottom:4px">
+        <div style="font-size:11px;color:#065f46;font-weight:700;margin-bottom:6px">📋 คำขอที่ค้างอยู่ (${list.length}) — กดเลือก:</div>
+        ${list.map(p => {
+          const ageLabel = p.ageSec < 60 ? `${p.ageSec} วิ.` : `${Math.floor(p.ageSec/60)} นาที`;
+          return `<button onclick="tcuSelectPending('${p.phone}','${p.code}')" style="display:block;width:100%;padding:10px;margin-bottom:4px;background:#ecfdf5;border:1.5px solid #6ee7b7;border-radius:8px;text-align:left;cursor:pointer;font-family:inherit">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+              <div style="flex:1;min-width:0">
+                <div style="font-weight:800;color:#0a1530;font-size:13px">📱 ${p.phone}${p.name ? ' · ' + p.name : ''}</div>
+                <div style="font-size:10px;color:#6b7280;margin-top:1px">${ageLabel} ที่แล้ว</div>
+              </div>
+              <div style="font-family:'SF Mono',Menlo,monospace;font-size:18px;font-weight:900;letter-spacing:3px;color:#1652F0;background:#dbeafe;padding:6px 10px;border-radius:6px">${p.code}</div>
+            </div>
+          </button>`;
+        }).join('')}
+      </div>
+    `;
+  } catch (e) {
+    wrap.innerHTML = `<div style="font-size:11px;color:#dc2626;text-align:center;padding:6px">⚠️ ${e.message}</div>`;
+  }
+}
+
+function tcuSelectPending(phone, code) {
+  const p = document.getElementById('tcuPhone'); if (p) p.value = phone;
+  const c = document.getElementById('tcuCode'); if (c) c.value = code;
+  const status = document.getElementById('tcuStatus');
+  if (status) { status.style.color = '#1652F0'; status.textContent = '👆 เลือกแล้ว — กด "ปลดล็อก" เพื่อยืนยัน'; }
 }
 
 async function submitTrustCodeUnlock() {
@@ -2088,6 +2142,8 @@ window.showRecoveryTool = showRecoveryTool;
 window.recoveryAction = recoveryAction;
 window.showTrustCodeUnlock = showTrustCodeUnlock;
 window.submitTrustCodeUnlock = submitTrustCodeUnlock;
+window.refreshTcuPending = refreshTcuPending;
+window.tcuSelectPending = tcuSelectPending;
 window.showCleanupTool = showCleanupTool;
 window.anonymizeOne = anonymizeOne;
 window.anonymizeAllInactive = anonymizeAllInactive;

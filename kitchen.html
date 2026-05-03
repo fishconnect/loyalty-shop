@@ -313,10 +313,10 @@
   <source src="data:audio/wav;base64,UklGRkIBAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YR4BAAAAAACA/n/8f/p/+H/2f/N/8H/sf+h/5H/gf9p/1n/Rf8t/xX/Af7p/tH+vf6l/o3+ef5h/k3+Of4N/fn94f3J/bX9o/2N/Xn9Yf1N/Tn9Jf0R/QH86fzZ/Mn8tfyl/JX8gfxx/GH8VfxJ/Dn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8I" type="audio/wav">
 </audio>
 
-<script type="module" src="firebase.js?v=20260503b"></script>
-<script src="offline-banner.js?v=20260503b"></script>
-<script src="menu-data.js?v=20260503b"></script>
-<script src="notifier.js?v=20260503b"></script>
+<script type="module" src="firebase.js?v=20260503c"></script>
+<script src="offline-banner.js?v=20260503c"></script>
+<script src="menu-data.js?v=20260503c"></script>
+<script src="notifier.js?v=20260503c"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 const STORAGE_KEY = 'loyaltyShopV2';
@@ -2195,49 +2195,49 @@ async function renderStickerCanvas(order, item, unitIdx, totalUnits, globalIdx, 
     y += 20;
   }
 
-  // Options — pack everything into compact lines, group basic vs premium
+  // Options — same size as main item name (36px) so add-ons are equally legible.
+  // Each option wraps onto its own line if too wide for the sticker width.
   if (item.options && item.options.length) {
-    y += 2;
+    y += 4;
+    const OPT_SIZE = 36;
     const spicy = item.options.filter(o => (o.choice || '').includes('เผ็ด'));
     const free = item.options.filter(o => !(o.choice || '').includes('เผ็ด') && (o.price || 0) === 0);
     const premium = item.options.filter(o => (o.price || 0) > 0);
 
-    // 🌶️ Spice level — its own line so cook can't miss it
-    if (spicy.length) {
-      setFont(22, true);
-      ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-      ctx.fillText('🌶️ ' + spicy.map(o => o.choice).join(', '), 14, y);
-      y += 26;
-    }
-    // Basic ingredients — comma-separated, one line if fits
-    if (free.length) {
-      const txt = '• ' + free.map(o => o.choice).join(', ');
-      // Wrap if too wide
-      setFont(20, true);
-      const w = ctx.measureText(txt).width;
-      if (w <= maxLineWidth) {
-        ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-        ctx.fillText(txt, 14, y);
-        y += 24;
-      } else {
-        free.forEach(o => left('• ' + o.choice, 20, true));
+    // Helper: wrap a long line at maxLineWidth
+    const wrapAndWrite = (text, size, bold) => {
+      setFont(size, bold);
+      const max = maxLineWidth;
+      const chars = String(text).split('');
+      let line = '';
+      const out = [];
+      for (const ch of chars) {
+        const test = line + ch;
+        if (ctx.measureText(test).width > max && line) {
+          out.push(line); line = ch;
+        } else { line = test; }
       }
-    }
+      if (line) out.push(line);
+      for (const ln of out) left(ln, size, bold);
+    };
+
+    // 🌶️ Spice level — its own line so cook can't miss it
+    if (spicy.length) wrapAndWrite('🌶️ ' + spicy.map(o => o.choice).join(', '), OPT_SIZE, true);
+    // Basic ingredients — one per line for legibility at this size
+    free.forEach(o => wrapAndWrite('• ' + o.choice, OPT_SIZE, true));
     // Premium add-ons — show with price
-    premium.forEach(o => {
-      left(`+ ${o.choice} (+${o.price}฿)`, 20, true);
-    });
+    premium.forEach(o => wrapAndWrite(`+ ${o.choice} (+${o.price}฿)`, OPT_SIZE, true));
   }
 
-  // Note — single line with prefix marker (no inverted box)
+  // Note — same size as item name with left border accent
   if (item.note) {
-    y += 2;
-    setFont(22, true);
+    y += 4;
+    const NOTE_SIZE = 36;
+    setFont(NOTE_SIZE, true);
     ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-    // Bold the note with a left border accent
-    ctx.fillRect(8, y, 4, 26);
+    ctx.fillRect(8, y, 4, NOTE_SIZE + 4);
     ctx.fillText('📝 ' + item.note, 18, y);
-    y += 28;
+    y += NOTE_SIZE + 6;
   }
 
   // Free indicator — small line
