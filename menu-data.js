@@ -192,11 +192,44 @@ const OPT_EGG_ONLY = () => ([
   OPT_EXTRA_AND_KAB_30()
 ]);
 
+// 6+) เหมือน OPT_EGG_ONLY แต่มีระดับความเผ็ด — สำหรับเมนูพิเศษที่เป็นกระเพรา/คั่วพริกเกลือ
+const OPT_EGG_WITH_SPICE = () => ([
+  OPT_SPICE_LEVEL(),
+  { kind: 'addOn', label: 'เพิ่มไข่ (+5)', min: 0, max: 99, priceEach: 5, choices: [..._EGGS_5] },
+  OPT_EXTRA_AND_KAB_30()
+]);
+
 // 6b) ยำ ทั่วไป (มีแค่เพิ่มพิเศษ)
 const OPT_EXTRA_ONLY = () => ([ OPT_EXTRA() ]);
 
+// 6b+) ยำ + ระดับความเผ็ด
+const OPT_EXTRA_ONLY_WITH_SPICE = () => ([ OPT_SPICE_LEVEL(), OPT_EXTRA() ]);
+
 // 6c) ราดข้าว ยำไข่เจียว / ยำไข่ดาว (เพิ่มพิเศษ + กับข้าว ราคาถูกพิเศษ)
 const OPT_YAM_RICE = () => ([ OPT_EXTRA_AND_KAB_10() ]);
+
+// 6c+) ข้าวยำไข่ + ระดับความเผ็ด
+const OPT_YAM_RICE_WITH_SPICE = () => ([ OPT_SPICE_LEVEL(), OPT_EXTRA_AND_KAB_10() ]);
+
+// 1+) OPT_KAPRAO without spice — for items where spice doesn't apply (e.g. ผัดน้ำมันหอย)
+const OPT_KAPRAO_NO_SPICE = () => ([
+  { kind: 'addOn', label: '🥩 เนื้อพื้นฐาน (เลือก 1-3 · ไม่คิดเงินเพิ่ม)',
+    min: 0, max: 3, priceEach: 0, choices: [..._BASIC_KAPRAO] },
+  { kind: 'addOn', label: '🦐 เนื้อพรีเมี่ยม (+10 ต่อรายการ)',
+    min: 0, max: 99, priceEach: 10, choices: [..._PREMIUM_KAPRAO] },
+  { kind: 'addOn', label: 'เพิ่มไข่ (+5)', min: 0, max: 99, priceEach: 5, choices: [..._EGGS_5] },
+  OPT_EXTRA_AND_KAB_30()
+]);
+
+// 2c+) OPT_NOODLE_STIRFRY without spice — for ผัดมาม่า (no chili)
+const OPT_NOODLE_STIRFRY_NO_SPICE = () => ([
+  { kind: 'required', label: '🥩 เลือกเนื้อ (1 อย่าง · ไม่คิดเงินเพิ่ม)',
+    min: 1, max: 1, priceEach: 0, choices: ['หมูชิ้น', 'หมูสับ', 'ไก่'] },
+  { kind: 'addOn', label: '🦐 เนื้อพรีเมี่ยม (+10 ต่อรายการ)',
+    min: 0, max: 99, priceEach: 10, choices: ['รวมมิตร(หมู+หมึก+กุ้ง)', 'กุ้ง', 'ปลาหมึก', 'หมูกรอบ'] },
+  { kind: 'addOn', label: 'เพิ่มไข่ (+5)', min: 0, max: 99, priceEach: 5, choices: [..._EGGS_5] },
+  OPT_EXTRA()
+]);
 
 // 7) ก๋วยเตี๋ยว/เย็นตาโฟ ปกติ: เลือกเส้น 6 แบบ + เพิ่มพิเศษ
 const OPT_NOODLE_ONLY = () => ([
@@ -257,7 +290,7 @@ window.MENU = [
       { id: 'rd-005', name: 'ผัดฉ่าราดข้าว',                  price: 40, optionGroups: OPT_KAPRAO() },
       { id: 'rd-007', name: 'ผัดพริกสดราดข้าว',              price: 40, optionGroups: OPT_KAPRAO() },
       { id: 'rd-008', name: 'ผัดน้ำพริกเผาราดข้าว',          price: 40, optionGroups: OPT_KAPRAO() },
-      { id: 'rd-009', name: 'ผัดน้ำมันหอยราดข้าว',           price: 40, optionGroups: OPT_KAPRAO() },
+      { id: 'rd-009', name: 'ผัดน้ำมันหอยราดข้าว',           price: 40, optionGroups: OPT_KAPRAO_NO_SPICE() },
       // ผัดผัก ราดข้าว — แยกเป็น 3 เมนู (เลือกผักคนละชนิด)
       { id: 'rd-011', name: 'ผัดผักคะน้าราดข้าว',            price: 40, optionGroups: OPT_KAPRAO() },
       { id: 'rd-012', name: 'ผัดผักบุ้งราดข้าว',             price: 40, optionGroups: OPT_KAPRAO() },
@@ -272,7 +305,7 @@ window.MENU = [
       { id: 'sf-004', name: 'ข้าวไข่เจียว',     price: 40, optionGroups: OPT_KAOPAD_KAI() },
       { id: 'sf-002', name: 'ผัดซีอิ๊ว',         price: 40, optionGroups: OPT_PADSEEW() },
       { id: 'sf-005', name: 'มาม่าผัดขึ้เมา',    price: 40, optionGroups: OPT_NOODLE_STIRFRY() },
-      { id: 'sf-006', name: 'ผัดมาม่า',          price: 40, optionGroups: OPT_NOODLE_STIRFRY() },
+      { id: 'sf-006', name: 'ผัดมาม่า',          price: 40, optionGroups: OPT_NOODLE_STIRFRY_NO_SPICE() },
       { id: 'sf-003', name: 'ราดหน้า',           price: 40, optionGroups: OPT_RADNAA() },
     ]
   },
@@ -294,11 +327,11 @@ window.MENU = [
       { id: 'sp-004', name: 'ผัดพริกปลาดุกสดราดข้าว',           price: 50, optionGroups: OPT_EGG_ONLY() },
       { id: 'sp-005', name: 'ผัดพริกปลาดุกทอดราดข้าว',          price: 50, optionGroups: OPT_EGG_ONLY() },
       { id: 'sp-006', name: 'ข้าวสามชั้นทอดน้ำปลา',              price: 50, optionGroups: OPT_EGG_ONLY() },
-      { id: 'sp-007', name: 'ข้าวสามชั้นคั่วพริกเกลือ',          price: 50, optionGroups: OPT_EGG_ONLY() },
-      { id: 'sp-008', name: 'ข้าวหมูกรอบคั่วพริกเกลือ',          price: 50, optionGroups: OPT_EGG_ONLY() },
+      { id: 'sp-007', name: 'ข้าวสามชั้นคั่วพริกเกลือ',          price: 50, optionGroups: OPT_EGG_WITH_SPICE() },
+      { id: 'sp-008', name: 'ข้าวหมูกรอบคั่วพริกเกลือ',          price: 50, optionGroups: OPT_EGG_WITH_SPICE() },
       { id: 'sp-009', name: 'ข้าวห่อหมกทะเลไข่ข้น',              price: 50, optionGroups: OPT_EGG_ONLY() },
-      { id: 'sp-010', name: 'ข้าวผัดกระเพราหมูสับใส้กรอกแดงราดข้าว', price: 40, optionGroups: OPT_EGG_ONLY() },
-      { id: 'sp-011', name: 'ข้าวผัดกระเพราหมูสับ+หมูยอ ราดข้าว',    price: 40, optionGroups: OPT_EGG_ONLY() },
+      { id: 'sp-010', name: 'ข้าวผัดกระเพราหมูสับใส้กรอกแดงราดข้าว', price: 40, optionGroups: OPT_EGG_WITH_SPICE() },
+      { id: 'sp-011', name: 'ข้าวผัดกระเพราหมูสับ+หมูยอ ราดข้าว',    price: 40, optionGroups: OPT_EGG_WITH_SPICE() },
       { id: 'sp-012', name: 'ผัดเต้าหู้หมูสับราดข้าว',           price: 40, optionGroups: OPT_EGG_ONLY() },
     ]
   },
@@ -306,12 +339,12 @@ window.MENU = [
     cat: "ยำ",
     emoji: "🥗",
     items: [
-      { id: 'ym-001', name: 'ยำวุ้นเส้นรวมมิตร',     price: 50, optionGroups: OPT_EXTRA_ONLY() },
-      { id: 'ym-002', name: 'ยำมาม่ารวมมิตร',         price: 50, optionGroups: OPT_EXTRA_ONLY() },
-      { id: 'ym-003', name: 'ยำรวมมิตร (ไม่ใส่เส้น)', price: 50, optionGroups: OPT_EXTRA_ONLY() },
-      { id: 'ym-004', name: 'ยำไข่เยี่ยวม้า',         price: 50, optionGroups: OPT_EXTRA_ONLY() },
-      { id: 'ym-005', name: 'ข้าวยำไข่เจียว',         price: 40, optionGroups: OPT_YAM_RICE() },
-      { id: 'ym-006', name: 'ข้าวยำไข่ดาว',           price: 40, optionGroups: OPT_YAM_RICE() },
+      { id: 'ym-001', name: 'ยำวุ้นเส้นรวมมิตร',     price: 50, optionGroups: OPT_EXTRA_ONLY_WITH_SPICE() },
+      { id: 'ym-002', name: 'ยำมาม่ารวมมิตร',         price: 50, optionGroups: OPT_EXTRA_ONLY_WITH_SPICE() },
+      { id: 'ym-003', name: 'ยำรวมมิตร (ไม่ใส่เส้น)', price: 50, optionGroups: OPT_EXTRA_ONLY_WITH_SPICE() },
+      { id: 'ym-004', name: 'ยำไข่เยี่ยวม้า',         price: 50, optionGroups: OPT_EXTRA_ONLY_WITH_SPICE() },
+      { id: 'ym-005', name: 'ข้าวยำไข่เจียว',         price: 40, optionGroups: OPT_YAM_RICE_WITH_SPICE() },
+      { id: 'ym-006', name: 'ข้าวยำไข่ดาว',           price: 40, optionGroups: OPT_YAM_RICE_WITH_SPICE() },
     ]
   },
   {
