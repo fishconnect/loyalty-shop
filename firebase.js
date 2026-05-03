@@ -97,6 +97,7 @@ window.cloud = {
       return out;
     } catch (e) { console.warn('[cloud] getOrdersForCustomer', e); return []; }
   },
+
   async deleteCustomer(id) {
     try { await deleteDoc(doc(fdb, 'customers', String(id))); }
     catch (e) { console.warn('[cloud] deleteCustomer', e); }

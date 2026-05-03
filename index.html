@@ -1041,6 +1041,7 @@
     </div>
     <button class="btn-primary" onclick="showTrustCodeUnlock()" style="width:100%;margin-top:10px;background:linear-gradient(135deg,#16a34a,#15803d);font-size:15px;padding:14px">🆔 ปลดล็อกลูกค้าด้วยโค้ด (เร็ว · 20 วิ) ⭐</button>
     <button class="btn-primary" onclick="showCustomerInspector()" style="width:100%;margin-top:6px;background:linear-gradient(135deg,#7c3aed,#5b21b6)">🔍 ดูข้อมูลลูกค้า + กู้แต้ม (Manual)</button>
+    <button class="btn-primary" onclick="showAtRiskScan()" style="width:100%;margin-top:6px;background:linear-gradient(135deg,#dc2626,#991b1b)">🚨 สแกนลูกค้าเสี่ยงแต้มหาย (เหมือน 0815495552)</button>
     <button class="btn-primary" onclick="showConsentLogs()" style="width:100%;margin-top:6px">📜 ดู Consent Logs (บันทึกการยินยอม)</button>
     <button class="btn-primary" onclick="showCleanupTool()" style="width:100%;margin-top:6px;background:linear-gradient(135deg,#0d9488,#0f766e)">🧹 PDPA Cleanup · Anonymize ลูกค้าหายนาน</button>
     <button class="btn-primary" onclick="showDeletionRequests()" style="width:100%;margin-top:6px;background:linear-gradient(135deg,#dc2626,#991b1b)">🗑️ คำขอลบบัญชีค้างอยู่</button>
@@ -1387,10 +1388,10 @@
 <!-- Print receipt area (hidden until print) -->
 <div id="printArea"></div>
 
-<script type="module" src="firebase.js?v=20260503f"></script>
-<script src="offline-banner.js?v=20260503f"></script>
-<script src="menu-data.js?v=20260503f"></script>
-<script src="notifier.js?v=20260503f"></script>
+<script type="module" src="firebase.js?v=20260503g"></script>
+<script src="offline-banner.js?v=20260503g"></script>
+<script src="menu-data.js?v=20260503g"></script>
+<script src="notifier.js?v=20260503g"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 
@@ -2295,6 +2296,190 @@ window.showCustomerInspector = showCustomerInspector;
 window.loadCustomerInspector = loadCustomerInspector;
 window.ciApplyRecompute = ciApplyRecompute;
 window.ciApplyManual = ciApplyManual;
+
+// 🚨 SCAN AT-RISK CUSTOMERS — find customers whose lifetime_points are
+//    suspiciously low compared to what their order history says they earned.
+//    Pattern that flagged 0815495552:
+//      orders.points_earned (sum) > customer.lifetime_points
+//    The diff = how many points were lost when submitOrder bug overwrote
+//    cloud doc with the 5-point signup default. Reads ALL data fresh from
+//    Firestore (not local cache) so admins can trust the report.
+async function showAtRiskScan() {
+  const out = document.getElementById('pdpaPanelOutput');
+  out.innerHTML = `
+    <div style="background:#fef2f2;border:2px solid #dc2626;color:#7f1d1d;padding:16px;border-radius:14px">
+      <div style="font-weight:900;font-size:15px;margin-bottom:6px">🚨 สแกนลูกค้าเสี่ยงแต้มหาย</div>
+      <div style="font-size:12px;color:#991b1b;margin-bottom:10px;line-height:1.6">
+        เปรียบเทียบ <b>lifetime_points</b> ของแต่ละลูกค้ากับสูตร: <code>signup(5) + Σ(order.total/50)</code><br>
+        ใครที่ค่าจริง <b>น้อยกว่า</b> ค่าที่ควรจะเป็น = เสี่ยงโดน bug ที่ทำให้แต้มหาย (เหมือน 0815495552)
+      </div>
+      <button onclick="runAtRiskScan()" style="width:100%;padding:14px;background:linear-gradient(135deg,#dc2626,#991b1b);color:#fff;border:none;border-radius:10px;font-weight:900;font-size:14px;cursor:pointer;font-family:inherit">🔍 เริ่มสแกน (อ่านตรงจาก Firestore)</button>
+      <div id="arsStatus" style="margin-top:8px;font-size:12px;color:#7f1d1d;text-align:center;min-height:16px"></div>
+      <div id="arsResults" style="margin-top:10px"></div>
+    </div>
+  `;
+}
+
+async function runAtRiskScan() {
+  const status = document.getElementById('arsStatus');
+  const results = document.getElementById('arsResults');
+  status.textContent = '⏳ กำลังเชื่อม cloud...';
+
+  // Wait for cloud
+  let waited = 0;
+  while (!window.cloud?.getAllCustomers && waited < 5000) {
+    await new Promise(r => setTimeout(r, 200)); waited += 200;
+  }
+  if (!window.cloud?.getAllCustomers) {
+    status.style.color = '#dc2626';
+    status.innerHTML = '⚠️ Cloud not ready — รีเฟรชหน้าก่อนลองใหม่';
+    return;
+  }
+
+  status.textContent = '⏳ กำลังโหลดลูกค้า + ออเดอร์ทั้งหมด...';
+  try {
+    // Fetch all customers + all orders fresh from Firestore
+    const [customers, ordersSnap] = await Promise.all([
+      window.cloud.getAllCustomers(),
+      // Inline orders fetch — no need for new cloud function, use the existing one
+      (async () => {
+        // Use db.pendingOrders if already populated by snapshot listener, else fetch
+        if (db.pendingOrders && db.pendingOrders.length > 0) return db.pendingOrders;
+        return [];
+      })(),
+    ]);
+
+    const allOrders = ordersSnap;
+    const custList = Object.values(customers).filter(c => c && !c.is_factory && !c.anonymized);
+    status.textContent = `⏳ วิเคราะห์ ${custList.length} ลูกค้า · ${allOrders.length} ออเดอร์...`;
+
+    // Group orders by customer phone/id for fast lookup
+    const ordersByCust = {};
+    allOrders.forEach(o => {
+      const key = o.customer_phone || o.customer_id;
+      if (!key) return;
+      if (!ordersByCust[key]) ordersByCust[key] = [];
+      ordersByCust[key].push(o);
+    });
+
+    const atRisk = [];
+    custList.forEach(c => {
+      // Skip factory and walk-in customers (no phone-based account)
+      if (!c.phone) return;
+      const myOrders = (ordersByCust[c.phone] || []).concat(c.id !== c.phone ? (ordersByCust[c.id] || []) : []);
+      const doneOrders = myOrders.filter(o => ['done','delivered'].includes(o.status));
+      let earned = 0, used = 0;
+      doneOrders.forEach(o => {
+        const base = o.original_total || o.total || 0;
+        earned += Math.floor(base / 50);
+        (o.redemptions || []).forEach(r => { used += (r.points_used || 0); });
+      });
+      const signup = c.signup_bonus_received ? 5 : 0;
+      const expectedLifetime = signup + earned;
+      const expectedPoints = Math.max(0, expectedLifetime - used);
+      const actualLifetime = c.lifetime_points || 0;
+      const actualPoints = c.points || 0;
+      const lifeDrift = expectedLifetime - actualLifetime;
+      const ptsDrift = expectedPoints - actualPoints;
+      // Risk: actual is LESS than expected (data lost)
+      // Skip ลูกค้าที่ไม่เคยสั่งจริง (signup-only, expected = 5) — ไม่เสี่ยง
+      if (lifeDrift > 0 && doneOrders.length > 0) {
+        atRisk.push({
+          c,
+          orderCount: doneOrders.length,
+          actualLifetime, expectedLifetime, lifeDrift,
+          actualPoints, expectedPoints, ptsDrift,
+        });
+      }
+    });
+
+    atRisk.sort((a, b) => b.lifeDrift - a.lifeDrift); // worst first
+
+    status.style.color = atRisk.length === 0 ? '#16a34a' : '#dc2626';
+    status.textContent = atRisk.length === 0
+      ? `✅ สแกน ${custList.length} ลูกค้า · ไม่พบลูกค้าที่เสี่ยงแต้มหาย`
+      : `⚠️ พบ ${atRisk.length} ลูกค้าเสี่ยง (จาก ${custList.length}) — list ด้านล่าง`;
+
+    if (atRisk.length === 0) {
+      results.innerHTML = `<div style="background:#dcfce7;border:1.5px solid #16a34a;color:#14532d;padding:14px;border-radius:10px;font-size:13px;line-height:1.6">
+        🎉 <b>ทุกบัญชีปกติ!</b><br>
+        แต้ม lifetime ของลูกค้าทุกคนตรงหรือมากกว่าที่ออเดอร์ใน Firestore บอกได้
+      </div>`;
+      return;
+    }
+
+    results.innerHTML = `
+      <div style="background:#fff;border:1.5px solid #dc2626;border-radius:10px;padding:8px;margin-top:6px;max-height:500px;overflow-y:auto">
+        ${atRisk.map(r => {
+          const c = r.c;
+          return `
+          <div style="padding:10px;border-bottom:1px solid #fee2e2;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:800;color:#0a1530;font-size:13px">📱 ${c.phone}${c.name ? ' · ' + c.name : ''}</div>
+              <div style="font-size:11px;color:#6b7280;margin-top:2px">
+                Lifetime: <b style="color:#dc2626">${r.actualLifetime}</b> → ควรเป็น <b style="color:#16a34a">${r.expectedLifetime}</b>
+                <span style="background:#fee2e2;color:#7f1d1d;padding:1px 6px;border-radius:4px;margin-left:4px;font-weight:700">หาย ${r.lifeDrift}</span>
+              </div>
+              <div style="font-size:10px;color:#9ca3af;margin-top:1px">
+                คงเหลือ: ${r.actualPoints} → ควรเป็น ${r.expectedPoints} · ${r.orderCount} ออเดอร์
+              </div>
+            </div>
+            <div style="display:flex;gap:4px;flex-wrap:wrap">
+              <button onclick="arsInspect('${c.phone}')" style="padding:8px 10px;background:#7c3aed;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">🔍 ดู</button>
+              <button onclick="arsFix('${c.phone}', ${r.expectedPoints}, ${r.expectedLifetime})" style="padding:8px 10px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">🔄 กู้แต้ม</button>
+            </div>
+          </div>
+        `;
+        }).join('')}
+        <div style="padding:8px 10px;background:#fef2f2;font-size:11px;color:#991b1b;text-align:center">
+          💡 กดปุ่ม "🔄 กู้แต้ม" เพื่อตั้งค่าให้ตรงสูตร · "🔍 ดู" เพื่อดูรายละเอียดก่อน
+        </div>
+      </div>
+      <button onclick="arsFixAll(${JSON.stringify(atRisk.map(r => ({ phone: r.c.phone, p: r.expectedPoints, l: r.expectedLifetime }))).replace(/"/g,'&quot;')})" style="width:100%;padding:13px;margin-top:8px;background:linear-gradient(135deg,#dc2626,#991b1b);color:#fff;border:none;border-radius:10px;font-weight:900;font-size:14px;cursor:pointer;font-family:inherit">⚡ กู้แต้มทั้งหมด ${atRisk.length} คน (Batch · ใช้สูตรจากออเดอร์)</button>
+    `;
+  } catch (e) {
+    status.style.color = '#dc2626';
+    status.innerHTML = '⚠️ ' + e.message;
+  }
+}
+
+function arsInspect(phone) {
+  showCustomerInspector();
+  setTimeout(() => {
+    const f = document.getElementById('ciPhone');
+    if (f) { f.value = phone; loadCustomerInspector(); }
+  }, 200);
+}
+
+async function arsFix(phone, points, lifetime) {
+  if (!confirm(`กู้แต้มของ ${phone} เป็น ${points} (lifetime ${lifetime})?`)) return;
+  if (!window.cloud?.setCustomerPointsManual) { alert('Cloud not ready'); return; }
+  const ok = await window.cloud.setCustomerPointsManual(phone, points, lifetime, 'at_risk_scan_recover');
+  if (ok) { toast(`✅ ${phone}: กู้แต้มแล้ว ${points}/${lifetime}`); runAtRiskScan(); }
+  else toast(`⚠️ ${phone}: กู้ไม่สำเร็จ`, true);
+}
+
+async function arsFixAll(items) {
+  if (!Array.isArray(items) || !items.length) return;
+  if (!confirm(`กู้แต้มลูกค้า ${items.length} คนพร้อมกัน?\n\nจะตั้งค่าตามสูตรจากออเดอร์จริงใน Firestore\nบันทึกทุกการแก้ใน consent_logs`)) return;
+  let done = 0, failed = 0;
+  toast(`⏳ กำลังกู้แต้ม ${items.length} คน...`);
+  for (const it of items) {
+    try {
+      const ok = await window.cloud.setCustomerPointsManual(it.phone, it.p, it.l, 'at_risk_scan_batch_recover');
+      if (ok) done++; else failed++;
+    } catch (e) { failed++; }
+  }
+  alert(`✅ เสร็จแล้ว\n\n• กู้สำเร็จ: ${done} คน\n• ล้มเหลว: ${failed} คน\n\nสแกนใหม่อีกครั้งเพื่อตรวจสอบ`);
+  runAtRiskScan();
+}
+
+window.showAtRiskScan = showAtRiskScan;
+window.runAtRiskScan = runAtRiskScan;
+window.arsInspect = arsInspect;
+window.arsFix = arsFix;
+window.arsFixAll = arsFixAll;
+
 window.showCleanupTool = showCleanupTool;
 window.anonymizeOne = anonymizeOne;
 window.anonymizeAllInactive = anonymizeAllInactive;
