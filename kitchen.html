@@ -1772,8 +1772,13 @@ async function printViaBluetooth(order, btRef) {
 // internal buffer can keep up with bitmap data. WWR was faster but caused
 // data loss on N160II — bitmap commands got corrupted and printed as garbage.
 async function btSendBytes(chr, data) {
-  const CHUNK = 180;       // smaller chunks fit BLE MTU better
-  const DELAY = 25;        // give printer buffer time to drain
+  // 🔧 Tuned for smooth continuous printing (was 180/25 = ~4s of pure delay
+  // for a 30KB receipt → visible "feed gaps" between chunks). Larger chunk
+  // + smaller delay keeps the printer buffer fed fast enough to avoid the
+  // print head pausing mid-receipt. If your printer model corrupts data
+  // at this speed, increase DELAY back to 15-25ms.
+  const CHUNK = 240;
+  const DELAY = 8;
   for (let i = 0; i < data.length; i += CHUNK) {
     const slice = data.slice(i, i + CHUNK);
     await chr.writeValue(slice);
@@ -2107,11 +2112,16 @@ function canvasToMonochromeBytes(canvas) {
   const px = img.data;
   const bytesPerRow = Math.ceil(canvas.width / 8);
   const out = new Uint8Array(bytesPerRow * canvas.height);
+  // 🔧 Aggressive threshold (180 → was 128) — anti-aliased Thai glyphs that
+  // ended up as gray pixels (brightness 130-170) get pushed to black instead
+  // of white. Result: thicker, darker letters that are easier to read on
+  // thermal paper (which tends to print thinner than the input).
+  const THRESHOLD = 180;
   for (let y = 0; y < canvas.height; y++) {
     for (let x = 0; x < canvas.width; x++) {
       const i = (y * canvas.width + x) * 4;
       const brightness = (px[i] + px[i + 1] + px[i + 2]) / 3;
-      const isBlack = brightness < 128 && px[i + 3] > 128;
+      const isBlack = brightness < THRESHOLD && px[i + 3] > 128;
       if (isBlack) {
         const bi = y * bytesPerRow + (x >> 3);
         out[bi] |= (1 << (7 - (x & 7)));
@@ -2131,9 +2141,10 @@ async function buildBitmapESCPOS(order) {
   const out = [];
   out.push(0x1B, 0x40);                 // init
 
-  // Send raster in chunks. Smaller chunks (50 rows ≈ 3.6KB data block) fit
-  // most printer buffers reliably. N160II had data drops at 200-row chunks.
-  const ROWS_PER_CHUNK = 48;
+  // Send raster in chunks. Larger chunks = fewer GS v 0 commands = printer
+  // doesn't pause to feed paper between chunks (was 48 → visible "stripes").
+  // 96 rows = ~6.9KB per chunk, well under the 16KB safe-zone for N160II.
+  const ROWS_PER_CHUNK = 96;
   let row = 0;
   while (row < H) {
     const rowsThis = Math.min(ROWS_PER_CHUNK, H - row);
