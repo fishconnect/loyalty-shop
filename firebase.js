@@ -332,6 +332,73 @@ window.cloud = {
     } catch (e) { console.warn('[cloud] anonymizeCustomer', e); return false; }
   },
 
+  // 🆔 DEVICE TRUST CODE — mobile-friendly admin-assisted unlock.
+  //   Customer's "verify gate" generates a 4-char code from their deviceId,
+  //   writes the request to /device_trust_requests/{phone}_{code}, and shows
+  //   the code on screen. Customer reads the code aloud to the shop owner,
+  //   who types phone + code into admin → cloud.trustDeviceByCode() looks up
+  //   the request, links the device to the customer's account, and deletes
+  //   the request. No more chicken-and-egg "ติดต่อ admin" lockout.
+  //
+  //   Doc shape: { device_id, phone, code, name, requested_at, user_agent }
+  //   TTL: client clears requests older than 30 min on next access.
+  async requestDeviceTrust(phone, code, deviceId, displayName) {
+    if (!phone || !code || !deviceId) return false;
+    try {
+      const id = String(phone) + '_' + String(code).toUpperCase();
+      await setDoc(doc(fdb, 'device_trust_requests', id), {
+        device_id: deviceId,
+        phone: String(phone),
+        code: String(code).toUpperCase(),
+        name: displayName || '',
+        requested_at: new Date().toISOString(),
+        user_agent: navigator.userAgent.slice(0, 200),
+      });
+      return true;
+    } catch (e) { console.warn('[cloud] requestDeviceTrust', e); return false; }
+  },
+
+  // 👨‍💼 Admin-side: look up the request by phone+code, link the device, delete request.
+  // Returns { ok: true, deviceId, name } on success, { ok: false, error: '...' } on fail.
+  async trustDeviceByCode(phone, code) {
+    if (!phone || !code) return { ok: false, error: 'missing phone or code' };
+    const id = String(phone) + '_' + String(code).toUpperCase();
+    try {
+      const ref = doc(fdb, 'device_trust_requests', id);
+      const snap = await getDoc(ref);
+      if (!snap.exists()) {
+        return { ok: false, error: 'ไม่พบคำขอ — ลูกค้าต้องเปิดประตูยืนยันค้างไว้และอ่านโค้ดที่ขึ้นบนจอ' };
+      }
+      const req = snap.data();
+      // Reject stale requests (> 30 min old) for safety
+      const age = Date.now() - new Date(req.requested_at).getTime();
+      if (age > 30 * 60 * 1000) {
+        await deleteDoc(ref).catch(() => {});
+        return { ok: false, error: 'โค้ดนี้หมดอายุแล้ว (>30 นาที) — ขอให้ลูกค้ารีเฟรชหน้าจอแล้วอ่านโค้ดใหม่' };
+      }
+      // Link the device
+      const linked = await this.linkDeviceToCustomer(req.phone, req.device_id, 'admin_code');
+      if (!linked) return { ok: false, error: 'ไม่พบลูกค้าเบอร์นี้ในระบบ' };
+      // Best-effort cleanup
+      try { await deleteDoc(ref); } catch (e) {}
+      // Audit log specific to this method
+      try {
+        await this.saveConsentLog?.({
+          type: 'admin_device_trust_by_code',
+          customer_id: String(req.phone),
+          customer_phone: String(req.phone),
+          version: '1.1',
+          accepted: true,
+          details: { device_id: req.device_id, code: String(code).toUpperCase() },
+        });
+      } catch (e) {}
+      return { ok: true, deviceId: req.device_id, name: req.name || '' };
+    } catch (e) {
+      console.warn('[cloud] trustDeviceByCode', e);
+      return { ok: false, error: e.message };
+    }
+  },
+
   // 🔒 Add a device ID to the customer's trusted devices list. Called after
   // a successful birthday-verification on a new device. Idempotent.
   async linkDeviceToCustomer(phoneOrId, deviceId, verifiedBy) {

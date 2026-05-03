@@ -1552,7 +1552,7 @@ function renderPopularSection() {
           return `
           <div class="popular-card ${qtyInCart>0?'has-qty':''}" onclick="openCustomize('${it.id}')">
             <div class="img-wrap">
-              <img src="${imgSrc(it)}" alt="" onerror="${_imgFallback}" onclick="event.stopPropagation();openLightbox(this.src)">
+              <img src="${imgSrc(it)}" alt="" onerror="${_imgFallback}">
               <div class="pop-badge">Popular #${i+1}</div>
               ${qtyInCart > 0 ? `<div class="qty-badge-pop">${qtyInCart}</div>` : ''}
             </div>
@@ -1775,7 +1775,7 @@ function renderMenu() {
             return `
             <div class="item ${qtyInCart > 0 ? 'has-qty' : ''} ${isOut ? 'unavailable' : ''}" onclick="${isOut?'':`openCustomize('${it.id}')`}">
               <div class="img">
-                <img src="${imgSrc(it)}" alt="" onerror="${_imgFallback}" onclick="event.stopPropagation();openLightbox(this.src)">
+                <img src="${imgSrc(it)}" alt="" onerror="${_imgFallback}">
                 <div class="overlay-emoji">${c.emoji}</div>
                 ${qtyInCart > 0 ? `<div class="qty-badge">${qtyInCart}</div>` : ''}
                 ${isOut ? '<div class="out-badge">หมด</div>' : ''}
@@ -2636,15 +2636,21 @@ function verifyDeviceWithBirthday(customer, onSuccess, onCancel) {
           <div id="vfStatus" style="font-size:13px;font-weight:700;text-align:center;margin-top:8px;min-height:18px"></div>
         ` : `
           <div style="background:#fef3c7;border:1.5px solid #f59e0b;color:#78350f;padding:12px;border-radius:10px;font-size:13px;line-height:1.6">
-            ⚠️ บัญชีนี้ไม่ได้ตั้งค่า "วันเกิด" ไว้ จึงไม่สามารถยืนยันด้วยตนเองได้<br><br>
-            กรุณาติดต่อ <a href="${mailto}" style="color:#92400e;font-weight:800;text-decoration:underline">admin@fishconnect.co</a> เพื่อขอยืนยันตัวตน
+            ⚠️ บัญชีนี้ไม่ได้ตั้งค่า "วันเกิด" ไว้ — กรุณา<b>บอกร้านโค้ดด้านล่าง</b>เพื่อปลดล็อกให้
           </div>
         `}
+
+        <!-- 🆔 Admin-assisted unlock — customer reads code aloud to shop owner -->
+        <div style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border:1.5px dashed #1652F0;border-radius:12px;padding:12px;margin-top:12px;text-align:center">
+          <div style="font-size:11px;color:#1652F0;font-weight:700;margin-bottom:4px">📞 ลืมวันเกิด? บอกร้านโค้ดนี้</div>
+          <div id="vfTrustCode" style="font-family:'SF Mono',Menlo,Consolas,monospace;font-size:32px;font-weight:900;letter-spacing:5px;color:#0a1530;line-height:1;padding:4px 0">- - - -</div>
+          <div id="vfTrustStatus" style="font-size:10.5px;color:#5c6982;margin-top:4px">ร้านกรอก <b>เบอร์ + โค้ด</b> ในแอดมิน → ปลดล็อกอัตโนมัติ</div>
+        </div>
       </div>
       <div style="padding:14px 20px;border-top:1px solid #e5e7eb;background:#f7f8fb;display:flex;flex-direction:column;gap:6px">
         ${hasBirthday
           ? `<button id="vfSubmit" style="display:block;width:100%;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;padding:13px;border:none;border-radius:12px;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit">✅ ยืนยัน</button>`
-          : `<a href="${mailto}" style="display:block;width:100%;background:linear-gradient(135deg,#1652F0,#0738C9);color:#fff;padding:13px;border-radius:12px;font-weight:800;font-size:14px;text-align:center;text-decoration:none;font-family:inherit">📧 ติดต่อ admin</a>`}
+          : ''}
         <button id="vfCancel" style="display:block;width:100%;padding:10px;background:transparent;color:#6b7280;border:none;font-size:13px;cursor:pointer;font-family:inherit">ยกเลิก</button>
       </div>
     </div>
@@ -2652,6 +2658,38 @@ function verifyDeviceWithBirthday(customer, onSuccess, onCancel) {
 
   modal.querySelector('#vfCancel')?.addEventListener('click', () => close(false));
   modal.onclick = (e) => { if (e.target === modal) close(false); };
+
+  // 🆔 Render trust code + publish request + listen for admin unlock
+  try {
+    const myDeviceId = (typeof getDeviceId === 'function') ? getDeviceId() : 'unknown';
+    const trustCode = (typeof window.deviceTrustCode === 'function')
+      ? window.deviceTrustCode(myDeviceId) : '----';
+    const codeEl = modal.querySelector('#vfTrustCode');
+    if (codeEl) codeEl.textContent = trustCode.split('').join(' ');
+    if (window.cloud?.requestDeviceTrust) {
+      window.cloud.requestDeviceTrust(customer.phone, trustCode, myDeviceId, customer.name || '');
+    }
+    // Listen for admin unlock — auto-close modal as soon as device is linked
+    if (window.cloud?.onCustomers && customer.phone) {
+      const unsub = window.cloud.onCustomers(customers => {
+        const c = customers && customers[customer.phone];
+        if (!c) return;
+        const linked = Array.isArray(c.linked_devices) ? c.linked_devices : [];
+        if (linked.includes(myDeviceId)) {
+          const st = modal.querySelector('#vfTrustStatus');
+          if (st) { st.innerHTML = '✅ <b>ปลดล็อกแล้ว!</b>'; st.style.color = '#16a34a'; }
+          // Mirror locally
+          try {
+            const db = loadDB();
+            db.customers[customer.phone] = c;
+            saveDB(db);
+          } catch (e) {}
+          try { unsub(); } catch (e) {}
+          setTimeout(() => close(true), 700);
+        }
+      });
+    }
+  } catch (e) { console.warn('trust-code wiring failed', e); }
 
   if (hasBirthday) {
     const submitBtn = modal.querySelector('#vfSubmit');

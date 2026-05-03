@@ -1654,9 +1654,16 @@ async function flushPendingPrintJobs() {
 // silently in the background.
 document.addEventListener('visibilitychange', async () => {
   if (document.hidden) return;
-  if (!window.btPrinter?.device) return;
   if (localStorage.getItem('btManuallyDisconnected') === '1') return;
-  // Force a reconnect if the GATT thinks it's disconnected
+
+  // Case 1: no in-memory btPrinter but we have a saved name — try Permitted Devices reconnect
+  if (!window.btPrinter?.device) {
+    if (localStorage.getItem('btPrinterName')) {
+      setTimeout(() => autoReconnectBT({ showToast: false, maxAttempts: 1 }), 300);
+    }
+    return;
+  }
+  // Case 2: btPrinter exists but GATT dropped — reconnect via existing device handle
   if (window.btPrinter.device.gatt && !window.btPrinter.device.gatt.connected) {
     try {
       const server = await window.btPrinter.device.gatt.connect();
@@ -1686,18 +1693,49 @@ async function findWritableCharacteristic(server) {
 }
 
 // Auto-reconnect on page load (uses Permitted Devices API — Chrome 122+)
-async function autoReconnectBT() {
-  if (!('bluetooth' in navigator)) return;
-  if (typeof navigator.bluetooth.getDevices !== 'function') return; // older Chrome
-  if (localStorage.getItem('btManuallyDisconnected') === '1') return;
+// 🔁 Retries 3× with backoff because BLE radio sometimes isn't ready right
+//    after page load, and getDevices() can momentarily return [] on Android.
+async function autoReconnectBT(opts = {}) {
+  const { showToast = false, attempt = 1, maxAttempts = 3 } = opts;
+  if (!('bluetooth' in navigator)) {
+    console.warn('[BT] no Web Bluetooth support'); return false;
+  }
+  if (localStorage.getItem('btManuallyDisconnected') === '1') {
+    console.log('[BT] skipping auto-reconnect (user disconnected manually)'); return false;
+  }
   const lastName = localStorage.getItem('btPrinterName');
-  if (!lastName) return;
+  if (!lastName) { console.log('[BT] no saved printer name'); return false; }
 
+  // Already connected? Skip.
+  if (window.btPrinter?.chr && window.btPrinter.device?.gatt?.connected) {
+    console.log('[BT] already connected — skipping');
+    return true;
+  }
+
+  if (typeof navigator.bluetooth.getDevices !== 'function') {
+    console.warn('[BT] getDevices() not supported — Chrome < 122. User must reconnect manually.');
+    if (showToast) toast('ℹ️ เบราว์เซอร์เก่า ไม่รองรับเชื่อมอัตโนมัติ — กดปุ่ม "🔄 เชื่อมใหม่"');
+    return false;
+  }
+
+  console.log(`[BT] auto-reconnect attempt ${attempt}/${maxAttempts} for "${lastName}"`);
   try {
     const devices = await navigator.bluetooth.getDevices();
-    const device = devices.find(d => d.name === lastName);
-    if (!device) return;
-    console.log('[BT] auto-reconnect attempt for', device.name);
+    console.log(`[BT] getDevices returned ${devices.length} paired device(s):`,
+                devices.map(d => d.name || '(no name)').join(', '));
+    const device = devices.find(d => d.name === lastName) ||
+                   devices.find(d => d.name && d.name.includes(lastName.replace(/\d+/g, ''))); // loose name match
+    if (!device) {
+      if (attempt < maxAttempts) {
+        const delay = attempt * 2000;
+        console.log(`[BT] device not in paired list — retrying in ${delay}ms`);
+        setTimeout(() => autoReconnectBT({ showToast, attempt: attempt + 1, maxAttempts }), delay);
+      } else {
+        console.warn('[BT] device not in paired list after retries — user must re-pair');
+        if (showToast) toast('⚠️ ไม่พบ printer ที่จับคู่ไว้ — กดปุ่ม "🔄 เชื่อมใหม่"');
+      }
+      return false;
+    }
     const server = await device.gatt.connect();
     const chr = await findWritableCharacteristic(server);
     if (chr) {
@@ -1707,15 +1745,64 @@ async function autoReconnectBT() {
       updateBTStatus();
       toast('🔵 เชื่อมต่อ ' + device.name + ' อัตโนมัติ');
       flushPendingPrintJobs();
+      return true;
     }
+    return false;
   } catch (e) {
-    console.warn('[BT] auto-reconnect failed:', e.message);
-    // Common: device out of range or off — silent fail; user can manually connect
+    console.warn(`[BT] auto-reconnect attempt ${attempt} failed:`, e.message);
+    if (attempt < maxAttempts) {
+      const delay = attempt * 2000;
+      console.log(`[BT] retrying in ${delay}ms`);
+      setTimeout(() => autoReconnectBT({ showToast, attempt: attempt + 1, maxAttempts }), delay);
+    } else if (showToast) {
+      toast('⚠️ เชื่อมอัตโนมัติไม่สำเร็จ: ' + e.message);
+    }
+    return false;
   }
 }
 
-// Run auto-reconnect after page load
-window.addEventListener('load', () => setTimeout(autoReconnectBT, 800));
+// 🔄 Manual reconnect — first tries auto, falls back to picker with name filter
+//    so the user just clicks one device instead of scrolling the full list.
+async function reconnectBTManual() {
+  // Clear the "manual disconnect" flag so user intent = reconnect
+  localStorage.removeItem('btManuallyDisconnected');
+  const ok = await autoReconnectBT({ showToast: true, maxAttempts: 1 });
+  if (ok) return;
+
+  // Fallback: show picker filtered to last known device name
+  const lastName = localStorage.getItem('btPrinterName');
+  if (!lastName) {
+    if (typeof connectBluetoothPrinter === 'function') connectBluetoothPrinter();
+    return;
+  }
+  try {
+    toast('📡 กำลังค้นหา ' + lastName + '...');
+    const device = await navigator.bluetooth.requestDevice({
+      filters: [{ name: lastName }],
+      optionalServices: BT_SERVICES
+    });
+    const server = await device.gatt.connect();
+    const chr = await findWritableCharacteristic(server);
+    if (!chr) { alert('❌ ไม่พบ writable characteristic'); return; }
+    window.btPrinter = { device, server, chr };
+    localStorage.setItem('btPrinterName', device.name || lastName);
+    setupAutoReconnect(device);
+    startBtKeepalive();
+    updateBTStatus();
+    toast('🔵 เชื่อม ' + device.name + ' สำเร็จ');
+    flushPendingPrintJobs();
+  } catch (e) {
+    if (e.name === 'NotFoundError') {
+      // Filter found nothing — fall back to full picker
+      if (typeof connectBluetoothPrinter === 'function') connectBluetoothPrinter();
+    } else {
+      alert('❌ เชื่อมล้มเหลว: ' + e.message);
+    }
+  }
+}
+
+// Run auto-reconnect after page load (with retry)
+window.addEventListener('load', () => setTimeout(() => autoReconnectBT({ showToast: false }), 800));
 
 // 🇹🇭 Print a test ticket trying 5 different Thai codepages — user picks the
 // one that prints clearly and saves it as the default.

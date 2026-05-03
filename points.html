@@ -1112,7 +1112,12 @@ function showVerifyGate(customer, allOrders) {
   for (let d = 1; d <= 31; d++) dayOpts += `<option value="${d}">${d}</option>`;
   let monthOpts = '<option value="">— เดือน —</option>';
   for (let m = 1; m <= 12; m++) monthOpts += `<option value="${m}">${months[m]}</option>`;
-  const mailto = `mailto:admin@fishconnect.co?subject=${encodeURIComponent('ขอยืนยันตัวตน - ' + (customer.phone || phone))}&body=${encodeURIComponent('ชื่อ: ' + (customer.name || '') + '\nเบอร์: ' + (customer.phone || phone) + '\nต้องการเข้าใช้บัญชีจากอุปกรณ์ใหม่ — กรุณาช่วยยืนยันตัวตน')}`;
+
+  // 🆔 Trust code — derived from deviceId, deterministic per-device
+  const myDeviceId = (typeof getDeviceId === 'function') ? getDeviceId() : 'unknown';
+  const trustCode = (typeof window.deviceTrustCode === 'function')
+    ? window.deviceTrustCode(myDeviceId) : '----';
+  const codePretty = trustCode.split('').join(' '); // wider spacing for legibility
 
   document.getElementById('main').innerHTML = `
     <div id="verifyDeviceGate" style="background:#fff;border-radius:20px;padding:24px;box-shadow:0 8px 24px rgba(0,0,0,.08);text-align:center">
@@ -1131,20 +1136,66 @@ function showVerifyGate(customer, allOrders) {
           <select id="gateMonth" style="padding:13px;border:1.5px solid #d1ddff;border-radius:10px;font-size:14px;font-family:inherit;background:#fff">${monthOpts}</select>
         </div>
         <div id="gateStatus" style="font-size:13px;font-weight:700;text-align:center;min-height:18px;margin-bottom:10px"></div>
-        <button onclick="submitVerifyGate()" style="display:block;width:100%;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;padding:14px;border:none;border-radius:12px;font-weight:800;font-size:15px;cursor:pointer;font-family:inherit">✅ ยืนยันและเข้าใช้งาน</button>
+        <button onclick="submitVerifyGate()" style="display:block;width:100%;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;padding:14px;border:none;border-radius:12px;font-weight:800;font-size:15px;cursor:pointer;font-family:inherit;margin-bottom:14px">✅ ยืนยันและเข้าใช้งาน</button>
       ` : `
         <div style="background:#fef3c7;border:1.5px solid #f59e0b;color:#78350f;padding:12px;border-radius:10px;font-size:13px;line-height:1.6;text-align:left;margin-bottom:14px">
           ⚠️ บัญชีนี้ไม่ได้ตั้ง "วันเกิด" ไว้ จึงยืนยันด้วยตนเองไม่ได้<br>
-          กรุณาติดต่อ admin เพื่อขอยืนยันตัวตน
+          กรุณา <b>บอกร้านโค้ดด้านล่าง</b> เพื่อปลดล็อกให้
         </div>
-        <a href="${mailto}" style="display:block;width:100%;background:linear-gradient(135deg,#1652F0,#0738C9);color:#fff;padding:14px;border-radius:12px;font-weight:800;font-size:15px;text-align:center;text-decoration:none;font-family:inherit">📧 ติดต่อ admin@fishconnect.co</a>
       `}
+      <!-- 🆔 Admin-assisted unlock: customer reads this code aloud to the shop -->
+      <div style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border:1.5px dashed #1652F0;border-radius:14px;padding:14px 12px;margin-bottom:8px">
+        <div style="font-size:11.5px;color:#1652F0;font-weight:700;margin-bottom:6px">📞 ลืมวันเกิด? บอกร้านโค้ดนี้</div>
+        <div style="font-family:'SF Mono',Menlo,Consolas,monospace;font-size:36px;font-weight:900;letter-spacing:6px;color:#0a1530;line-height:1;padding:6px 0">${codePretty}</div>
+        <div id="trustCodeStatus" style="font-size:11px;color:#5c6982;margin-top:6px">ร้านจะกรอก <b>เบอร์ + โค้ด</b> ในแอดมิน → ปลดล็อกอัตโนมัติ</div>
+      </div>
       <a href="javascript:logout()" style="display:block;margin-top:12px;color:#6b7280;font-size:12px;text-decoration:underline">ใช้เบอร์อื่น</a>
     </div>
   `;
   // Stash for the submit handler
   window._gateCustomer = customer;
   window._gateAllOrders = allOrders;
+
+  // 📡 Publish trust request to Firestore so admin can find it by phone+code,
+  //    and listen for linked_devices update so we auto-unlock when admin acts.
+  try {
+    if (window.cloud?.requestDeviceTrust) {
+      window.cloud.requestDeviceTrust(customer.phone || phone, trustCode, myDeviceId, customer.name || '');
+    }
+  } catch (e) { console.warn('requestDeviceTrust failed', e); }
+  startGateDeviceLinkListener(customer.phone || phone);
+}
+
+// 👀 Watch the customer doc — when this device appears in linked_devices
+//    (admin clicked "ปลดล็อก" with our code), refresh the page so the user
+//    flows past the gate without manually doing anything.
+let _gateLinkUnsub = null;
+function startGateDeviceLinkListener(targetPhone) {
+  if (!targetPhone || !window.cloud?.onCustomers) return;
+  if (_gateLinkUnsub) { try { _gateLinkUnsub(); } catch (e) {} }
+  const myDevice = (typeof getDeviceId === 'function') ? getDeviceId() : null;
+  if (!myDevice) return;
+  _gateLinkUnsub = window.cloud.onCustomers(customers => {
+    const c = customers && customers[targetPhone];
+    if (!c) return;
+    const linked = Array.isArray(c.linked_devices) ? c.linked_devices : [];
+    if (linked.includes(myDevice)) {
+      const status = document.getElementById('trustCodeStatus');
+      if (status) {
+        status.innerHTML = '✅ <b>ปลดล็อกแล้ว!</b> กำลังเข้าระบบ...';
+        status.style.color = '#16a34a';
+      }
+      try { _gateLinkUnsub(); } catch (e) {}
+      _gateLinkUnsub = null;
+      // Mirror locally + render
+      try {
+        const db = loadDB();
+        db.customers[targetPhone] = c;
+        saveDB(db);
+      } catch (e) {}
+      setTimeout(() => renderCustomer(c, window._gateAllOrders || []), 700);
+    }
+  });
 }
 
 async function submitVerifyGate() {

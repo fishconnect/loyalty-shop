@@ -1036,7 +1036,8 @@
       Data Controller: <b>ครัวผู้ใหญ่ปอง</b> · 📞 061-962-3696<br>
       Data Processor: <b>Fish Connect Company Limited</b> · 📧 admin@fishconnect.co
     </div>
-    <button class="btn-primary" onclick="showConsentLogs()" style="width:100%;margin-top:10px">📜 ดู Consent Logs (บันทึกการยินยอม)</button>
+    <button class="btn-primary" onclick="showTrustCodeUnlock()" style="width:100%;margin-top:10px;background:linear-gradient(135deg,#16a34a,#15803d);font-size:15px;padding:14px">🆔 ปลดล็อกลูกค้าด้วยโค้ด (เร็ว · 20 วิ) ⭐</button>
+    <button class="btn-primary" onclick="showConsentLogs()" style="width:100%;margin-top:6px">📜 ดู Consent Logs (บันทึกการยินยอม)</button>
     <button class="btn-primary" onclick="showRecoveryTool()" style="width:100%;margin-top:6px;background:linear-gradient(135deg,#f59e0b,#d97706)">🔓 Recovery Tool · ลูกค้าลืมวันเกิด/เปลี่ยนเครื่อง</button>
     <button class="btn-primary" onclick="showCleanupTool()" style="width:100%;margin-top:6px;background:linear-gradient(135deg,#0d9488,#0f766e)">🧹 PDPA Cleanup · Anonymize ลูกค้าหายนาน</button>
     <button class="btn-primary" onclick="showDeletionRequests()" style="width:100%;margin-top:6px;background:linear-gradient(135deg,#dc2626,#991b1b)">🗑️ คำขอลบบัญชีค้างอยู่</button>
@@ -1118,9 +1119,14 @@
     <div style="background:#ebf0ff;padding:12px;border-radius:10px;margin-bottom:12px">
       <div style="font-weight:700;color:#1652F0;margin-bottom:8px">🔵 Bluetooth (ตรง — แนะนำ)</div>
       <div id="btStatus" style="font-size:13px;margin-bottom:8px">⚫ ยังไม่ได้ตั้ง</div>
-      <div style="display:flex;gap:6px">
-        <button onclick="connectBluetoothPrinter()" style="flex:1;padding:10px;background:#1652F0;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer">🔵 เชื่อมต่อ Bluetooth</button>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button onclick="connectBluetoothPrinter()" style="flex:1;min-width:140px;padding:10px;background:#1652F0;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer">🔵 เชื่อมต่อ Bluetooth</button>
+        <button onclick="reconnectBTAdmin()" style="padding:10px 14px;background:#fff;color:#1652F0;border:1.5px solid #1652F0;border-radius:8px;font-weight:700;cursor:pointer" title="ลองเชื่อมกับเครื่องเดิมโดยไม่ต้องเลือกใหม่">🔄 เชื่อมใหม่</button>
         <button onclick="disconnectBT()" style="padding:10px 14px;background:#fff;color:#dc2626;border:1.5px solid #dc2626;border-radius:8px;font-weight:700;cursor:pointer">ตัดการเชื่อมต่อ</button>
+      </div>
+      <div class="hint" style="font-size:11px;margin-top:6px;color:#5c6982;line-height:1.5">
+        💡 <b>"🔄 เชื่อมใหม่"</b> = พยายามเชื่อมกับเครื่องเดิมที่เคย pair ไว้ — ไม่ต้องเลือกจาก list ใหม่<br>
+        ⚠️ ถ้าหลุดบ่อย: เปิด Chrome → ตั้งค่า → ความเป็นส่วนตัว → "เนื้อหาเว็บไซต์" → <b>อย่า</b>เลือก "ลบข้อมูลเมื่อปิดเบราว์เซอร์"
       </div>
 
       <!-- Payment QR uploader (PromptPay / Thai QR) -->
@@ -1131,6 +1137,16 @@
         <button onclick="document.getElementById('paymentQrFile').click()" style="width:100%;padding:8px;background:#1652F0;color:#fff;border:none;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer">📤 อัพโหลด QR ชำระเงิน</button>
         <button onclick="clearPaymentQr()" style="width:100%;margin-top:4px;padding:6px;background:#fff;color:#dc2626;border:1.5px solid #dc2626;border-radius:6px;font-weight:700;font-size:11px;cursor:pointer">🗑 ลบ QR</button>
         <div class="hint" style="font-size:11px;margin-top:4px">ภาพ QR จะปรากฏท้ายใบเสร็จ — แนะนำให้ตัดเฉพาะ QR ก่อนอัพโหลด</div>
+      </div>
+
+      <!-- 🖨️ Print mode selector — Bitmap (Thai-safe) vs Text (fast, no Thai unless flashed) -->
+      <div style="margin-top:10px;padding:10px;background:rgba(255,255,255,.6);border-radius:8px">
+        <label style="font-size:12px;font-weight:700;color:#0a1530;display:block;margin-bottom:6px">🖨️ โหมดพิมพ์</label>
+        <select id="btPrintModeSelect" onchange="saveBtPrintMode()" style="width:100%;padding:9px;border:1.5px solid #d1ddff;border-radius:6px;font-size:13px;background:#fff;font-family:inherit;font-weight:700">
+          <option value="bitmap">🖼️ Bitmap (default · ภาษาไทยทุก printer)</option>
+          <option value="text">⚡ Text (เร็ว · ใช้ฟอนต์ใน printer · Thai needs flashed font)</option>
+        </select>
+        <div id="btPrintModeHint" class="hint" style="font-size:11px;margin-top:6px;line-height:1.5"></div>
       </div>
 
       <!-- Thai codepage selector (advanced — only if printer has Thai font) -->
@@ -1854,6 +1870,62 @@ function showRopaTemplate() {
   `;
 }
 
+// 🆔 TRUST CODE UNLOCK — primary mobile-friendly path for shop staff to
+//    let a customer use a new device. Customer opens points/menu link →
+//    sees a 4-char code on the verify gate → reads it to the shop owner →
+//    owner enters phone + code here → device gets trusted → customer's
+//    screen auto-refreshes into their account. No birthday lookup needed.
+function showTrustCodeUnlock() {
+  const out = document.getElementById('pdpaPanelOutput');
+  out.innerHTML = `
+    <div style="background:#ecfdf5;border:2px solid #16a34a;color:#064e3b;padding:16px;border-radius:14px">
+      <div style="font-weight:900;font-size:15px;margin-bottom:6px">🆔 ปลดล็อกลูกค้าด้วยโค้ด</div>
+      <div style="font-size:12px;color:#065f46;margin-bottom:14px;line-height:1.6">
+        💬 <b>วิธีใช้:</b> ให้ลูกค้าเปิดลิงก์แต้มในเครื่องของตัวเอง<br>
+        จะเห็นโค้ด 4 ตัวสีน้ำเงินบนจอ → ลูกค้าบอกโค้ดให้ร้าน → ร้านกรอกเบอร์ + โค้ดที่นี่ → ปลดล็อกอัตโนมัติ
+      </div>
+      <input type="tel" id="tcuPhone" placeholder="📱 เบอร์ลูกค้า (เช่น 0815495552)" inputmode="numeric" maxlength="10" style="width:100%;padding:14px;border:2px solid #16a34a;border-radius:10px;font-size:17px;font-family:inherit;margin-bottom:8px;letter-spacing:1px">
+      <input type="text" id="tcuCode" placeholder="🔢 โค้ด 4 ตัว (เช่น K7P9)" maxlength="4" autocapitalize="characters" autocomplete="off" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z2-9]/g,'')" style="width:100%;padding:14px;border:2px solid #16a34a;border-radius:10px;font-size:22px;font-family:'SF Mono',Menlo,monospace;font-weight:900;letter-spacing:8px;text-align:center;margin-bottom:12px;text-transform:uppercase">
+      <button onclick="submitTrustCodeUnlock()" style="width:100%;padding:16px;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border:none;border-radius:12px;font-weight:900;font-size:16px;cursor:pointer;font-family:inherit">✅ ปลดล็อก</button>
+      <div id="tcuStatus" style="margin-top:10px;font-size:13px;font-weight:700;text-align:center;min-height:18px"></div>
+      <div style="font-size:11px;color:#065f46;margin-top:10px;line-height:1.5;border-top:1px dashed #6ee7b7;padding-top:8px">
+        🔒 <b>ทำไมต้องใช้โค้ด?</b> ป้องกันคนแอบเข้าบัญชีคนอื่น — admin ต้องเห็น/ได้ยินโค้ดจริงจากเครื่องลูกค้าเท่านั้น<br>
+        ⏰ โค้ดหมดอายุใน 30 นาที — ถ้าหมดให้ลูกค้ารีเฟรชหน้าจอ
+      </div>
+    </div>
+  `;
+  // Auto-focus phone field for quick keyboard entry
+  setTimeout(() => document.getElementById('tcuPhone')?.focus(), 100);
+}
+
+async function submitTrustCodeUnlock() {
+  const phone = (document.getElementById('tcuPhone').value || '').replace(/\D/g, '');
+  const code = (document.getElementById('tcuCode').value || '').toUpperCase().trim();
+  const status = document.getElementById('tcuStatus');
+  if (phone.length < 9) { status.style.color = '#dc2626'; status.textContent = '⚠️ กรอกเบอร์ให้ครบ'; return; }
+  if (code.length !== 4) { status.style.color = '#dc2626'; status.textContent = '⚠️ โค้ดต้องเป็น 4 ตัว'; return; }
+  if (!window.cloud?.trustDeviceByCode) { status.style.color = '#dc2626'; status.textContent = '⚠️ Cloud not ready'; return; }
+  status.style.color = '#1652F0'; status.textContent = '⏳ กำลังตรวจสอบโค้ด...';
+  try {
+    const r = await window.cloud.trustDeviceByCode(phone, code);
+    if (r.ok) {
+      status.style.color = '#16a34a';
+      status.innerHTML = `✅ <b>ปลดล็อกสำเร็จ!</b><br>${r.name ? '👤 ' + r.name + ' · ' : ''}เครื่องลูกค้าจะรีเฟรชเข้าบัญชีอัตโนมัติ`;
+      // Clear inputs for the next customer
+      setTimeout(() => {
+        const p = document.getElementById('tcuPhone'); if (p) p.value = '';
+        const c = document.getElementById('tcuCode'); if (c) c.value = '';
+      }, 2000);
+    } else {
+      status.style.color = '#dc2626';
+      status.innerHTML = '❌ ' + (r.error || 'ปลดล็อกไม่สำเร็จ');
+    }
+  } catch (e) {
+    status.style.color = '#dc2626';
+    status.innerHTML = '⚠️ Error: ' + e.message;
+  }
+}
+
 // 🔓 Recovery Tool — for customers who lost access (forgot birthday,
 // switched devices, etc.). Admin verifies identity OUT-OF-BAND (call,
 // in person, ID check) and then triggers one of these recovery actions.
@@ -1862,6 +1934,11 @@ function showRecoveryTool() {
   out.innerHTML = `
     <div style="background:#fff7ed;border:1.5px solid #f59e0b;color:#78350f;padding:14px;border-radius:10px">
       <div style="font-weight:900;font-size:14px;margin-bottom:8px">🔓 Recovery Tool</div>
+      <div style="background:#fee2e2;border:1.5px solid #dc2626;color:#7f1d1d;padding:10px;border-radius:8px;margin-bottom:10px;font-size:12px;line-height:1.5">
+        🛑 <b>เตือน — ปกติไม่ต้องใช้ปุ่มเหล่านี้!</b><br>
+        ใช้ปุ่ม <b>"🆔 ปลดล็อกลูกค้าด้วยโค้ด"</b> ด้านบนแทน — เร็วกว่า ปลอดภัยกว่า · ลูกค้าใช้งานต่อได้ทันที<br><br>
+        ⚠️ ปุ่มข้างล่างนี้สำหรับเคสพิเศษเท่านั้น — โดยเฉพาะ <b>"รีเซ็ตวันเกิด"</b> จะทำให้ลูกค้าเข้าระบบไม่ได้จนกว่าจะตั้งวันเกิดใหม่
+      </div>
       <div style="font-size:12px;color:#92400e;margin-bottom:10px;line-height:1.5">
         ⚠️ ใช้เฉพาะหลังจากยืนยันตัวตนลูกค้านอกระบบแล้ว (โทรคุย / เห็นหน้า / ตรวจบัตร)
       </div>
@@ -1990,6 +2067,8 @@ async function anonymizeAllInactive(ids) {
 
 window.showRecoveryTool = showRecoveryTool;
 window.recoveryAction = recoveryAction;
+window.showTrustCodeUnlock = showTrustCodeUnlock;
+window.submitTrustCodeUnlock = submitTrustCodeUnlock;
 window.showCleanupTool = showCleanupTool;
 window.anonymizeOne = anonymizeOne;
 window.anonymizeAllInactive = anonymizeAllInactive;
@@ -5487,6 +5566,40 @@ const BT_SERVICES = [
   'e7810a71-73ae-499d-8c15-faa9aef0c3f2'
 ];
 
+async function _findWritableCharAdmin(server) {
+  const services = await server.getPrimaryServices();
+  for (const svc of services) {
+    try {
+      const chars = await svc.getCharacteristics();
+      const writable = chars.find(c => c.properties.write || c.properties.writeWithoutResponse);
+      if (writable) return writable;
+    } catch (e) {}
+  }
+  return null;
+}
+
+function _setupAdminAutoReconnect(device) {
+  device.addEventListener('gattserverdisconnected', () => {
+    window.btPrinter = null;
+    toast('🔴 เครื่องปริ้นหลุด — กำลังลองเชื่อมใหม่...');
+    updateBTStatus();
+    // Try to bounce back — same device, no picker
+    if (localStorage.getItem('btManuallyDisconnected') === '1') return;
+    setTimeout(async () => {
+      try {
+        const server = await device.gatt.connect();
+        const chr = await _findWritableCharAdmin(server);
+        if (chr) {
+          window.btPrinter = { device, server, chr };
+          _setupAdminAutoReconnect(device);
+          updateBTStatus();
+          toast('✅ เชื่อมปริ้นกลับ');
+        }
+      } catch (e) { console.warn('[BT-admin] reconnect after disconnect failed', e.message); }
+    }, 1500);
+  });
+}
+
 async function connectBluetoothPrinter() {
   if (!navigator.bluetooth) {
     alert('⚠️ เบราว์เซอร์นี้ไม่รองรับ Web Bluetooth\nใช้ Chrome บน Android หรือ Desktop');
@@ -5499,24 +5612,13 @@ async function connectBluetoothPrinter() {
     });
     toast('🔵 กำลังเชื่อมต่อ ' + device.name);
     const server = await device.gatt.connect();
-    let chr = null;
-    const services = await server.getPrimaryServices();
-    for (const svc of services) {
-      try {
-        const chars = await svc.getCharacteristics();
-        const writable = chars.find(c => c.properties.write || c.properties.writeWithoutResponse);
-        if (writable) { chr = writable; break; }
-      } catch (e) {}
-    }
+    const chr = await _findWritableCharAdmin(server);
     if (!chr) { alert('❌ ไม่พบ characteristic ที่เขียนได้'); return; }
 
     window.btPrinter = { device, server, chr };
     localStorage.setItem('btPrinterName', device.name || 'Printer');
-    device.addEventListener('gattserverdisconnected', () => {
-      window.btPrinter = null;
-      toast('🔴 เครื่องปริ้นหลุด');
-      updateBTStatus();
-    });
+    localStorage.removeItem('btManuallyDisconnected');
+    _setupAdminAutoReconnect(device);
     toast('✅ เชื่อมต่อ ' + device.name + ' สำเร็จ');
     updateBTStatus();
   } catch (err) {
@@ -5524,10 +5626,97 @@ async function connectBluetoothPrinter() {
   }
 }
 
+// 🔁 Auto-reconnect on page load — uses Permitted Devices API (Chrome 122+).
+//    Retries 3× because BLE radio sometimes isn't ready right after page load.
+async function autoReconnectBTAdmin(opts = {}) {
+  const { showToast = false, attempt = 1, maxAttempts = 3 } = opts;
+  if (!('bluetooth' in navigator)) return false;
+  if (localStorage.getItem('btManuallyDisconnected') === '1') return false;
+  const lastName = localStorage.getItem('btPrinterName');
+  if (!lastName) return false;
+  if (window.btPrinter?.chr && window.btPrinter.device?.gatt?.connected) return true;
+
+  if (typeof navigator.bluetooth.getDevices !== 'function') {
+    console.warn('[BT-admin] getDevices() not supported (Chrome < 122)');
+    if (showToast) toast('ℹ️ เบราว์เซอร์เก่า — กดปุ่ม "🔄 เชื่อมใหม่"');
+    return false;
+  }
+
+  console.log(`[BT-admin] auto-reconnect ${attempt}/${maxAttempts} for "${lastName}"`);
+  try {
+    const devices = await navigator.bluetooth.getDevices();
+    console.log(`[BT-admin] ${devices.length} paired:`, devices.map(d => d.name || '?').join(', '));
+    const device = devices.find(d => d.name === lastName);
+    if (!device) {
+      if (attempt < maxAttempts) {
+        setTimeout(() => autoReconnectBTAdmin({ showToast, attempt: attempt + 1, maxAttempts }), attempt * 2000);
+      } else if (showToast) {
+        toast('⚠️ ไม่พบ printer ที่จับคู่ไว้ — กด "🔄 เชื่อมใหม่"');
+      }
+      return false;
+    }
+    const server = await device.gatt.connect();
+    const chr = await _findWritableCharAdmin(server);
+    if (chr) {
+      window.btPrinter = { device, server, chr };
+      _setupAdminAutoReconnect(device);
+      updateBTStatus();
+      toast('🔵 เชื่อมต่อ ' + device.name + ' อัตโนมัติ');
+      return true;
+    }
+    return false;
+  } catch (e) {
+    console.warn(`[BT-admin] attempt ${attempt} failed:`, e.message);
+    if (attempt < maxAttempts) {
+      setTimeout(() => autoReconnectBTAdmin({ showToast, attempt: attempt + 1, maxAttempts }), attempt * 2000);
+    } else if (showToast) {
+      toast('⚠️ เชื่อมไม่สำเร็จ: ' + e.message);
+    }
+    return false;
+  }
+}
+
+// 🔄 Manual reconnect button — tries auto first, then picker filtered by name
+async function reconnectBTAdmin() {
+  localStorage.removeItem('btManuallyDisconnected');
+  const ok = await autoReconnectBTAdmin({ showToast: true, maxAttempts: 1 });
+  if (ok) return;
+  const lastName = localStorage.getItem('btPrinterName');
+  if (!lastName) { connectBluetoothPrinter(); return; }
+  try {
+    toast('📡 กำลังค้นหา ' + lastName + '...');
+    const device = await navigator.bluetooth.requestDevice({
+      filters: [{ name: lastName }],
+      optionalServices: BT_SERVICES
+    });
+    const server = await device.gatt.connect();
+    const chr = await _findWritableCharAdmin(server);
+    if (!chr) { alert('❌ ไม่พบ writable characteristic'); return; }
+    window.btPrinter = { device, server, chr };
+    localStorage.setItem('btPrinterName', device.name || lastName);
+    _setupAdminAutoReconnect(device);
+    toast('🔵 เชื่อม ' + device.name + ' สำเร็จ');
+    updateBTStatus();
+  } catch (e) {
+    if (e.name === 'NotFoundError') connectBluetoothPrinter();
+    else alert('❌ เชื่อมล้มเหลว: ' + e.message);
+  }
+}
+
+// Run auto-reconnect after page load
+window.addEventListener('load', () => setTimeout(() => autoReconnectBTAdmin({ showToast: false }), 800));
+// Re-check when user returns to tab
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && !window.btPrinter?.chr) {
+    setTimeout(() => autoReconnectBTAdmin({ showToast: false, maxAttempts: 1 }), 500);
+  }
+});
+
 function disconnectBT() {
   if (window.btPrinter?.device?.gatt?.connected) window.btPrinter.device.gatt.disconnect();
   window.btPrinter = null;
   localStorage.removeItem('btPrinterName');
+  localStorage.setItem('btManuallyDisconnected', '1'); // don't auto-reconnect
   updateBTStatus();
   toast('🔴 ตัดการเชื่อมต่อแล้ว');
 }
@@ -5986,6 +6175,46 @@ function saveThaiCodepage() {
   localStorage.setItem('btThaiCodepage', v);
   toast('✅ บันทึก codepage: ' + v + ' (ลองพิมพ์ใบเสร็จดู)');
 }
+
+// 🖨️ Print mode: bitmap (default — Thai works on every printer) or text (faster but
+//    needs the printer to have a Thai font flashed in ROM, otherwise prints Chinese).
+function saveBtPrintMode() {
+  const sel = document.getElementById('btPrintModeSelect');
+  if (!sel) return;
+  const mode = sel.value;
+  localStorage.setItem('btPrintMode', mode);
+  updateBtPrintModeHint();
+  toast(mode === 'text'
+    ? '⚡ Text mode — ระวัง! ถ้า printer ไม่มี Thai font จะออกเป็นภาษาจีน'
+    : '🖼️ Bitmap mode — ภาษาไทยสวยทุก printer');
+}
+function updateBtPrintModeHint() {
+  const sel = document.getElementById('btPrintModeSelect');
+  const hint = document.getElementById('btPrintModeHint');
+  if (!sel || !hint) return;
+  if (sel.value === 'text') {
+    hint.innerHTML =
+      '⚠️ <b>โหมด Text เร็วกว่า bitmap 5–10×</b> แต่ใช้ฟอนต์ใน printer<br>' +
+      '• ถ้า printer ไม่มีฟอนต์ไทย → จะพิมพ์เป็น <b>ภาษาจีน</b> หรือสัญลักษณ์<br>' +
+      '• แก้: ใช้ XPrinter Setting Tool (Windows) → Download Font → flash <b>TIS-620 / CP874 (70)</b><br>' +
+      '• ตั้ง codepage ใน "ตั้งค่าขั้นสูง" ด้านล่างให้ตรงกับฟอนต์ที่ flash<br>' +
+      '• สติกเกอร์รายจาน <b>ใช้ไม่ได้</b> ในโหมด text (ภาพต้องเป็น bitmap)';
+    hint.style.color = '#dc2626';
+  } else {
+    hint.innerHTML =
+      '✅ <b>Bitmap = ภาพ</b> — render ใบเสร็จเป็นรูปก่อนส่ง printer<br>' +
+      '• ใช้ได้ทุก printer ไม่ต้อง flash ฟอนต์<br>' +
+      '• ภาษาไทย วรรณยุกต์ สัญลักษณ์ครบ · พิมพ์ช้ากว่า text แต่ชัดทุกตัว';
+    hint.style.color = '#16a34a';
+  }
+}
+function initBtPrintModeUI() {
+  const sel = document.getElementById('btPrintModeSelect');
+  if (!sel) return;
+  sel.value = localStorage.getItem('btPrintMode') || 'bitmap';
+  updateBtPrintModeHint();
+}
+document.addEventListener('DOMContentLoaded', initBtPrintModeUI);
 
 // Payment QR upload — saves as base64 dataURL in localStorage + cloud
 async function onPaymentQrSelected(ev) {

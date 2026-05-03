@@ -39,6 +39,29 @@ window.isDeviceTrusted = function(customer) {
   return linked.includes(myId);
 };
 
+// 🆔 Short 4-char code derived from deviceId — used for admin-assisted unlock.
+// Customer reads this code aloud → admin types it into the unlock form →
+// device gets added to linked_devices. Deterministic per-device so refreshing
+// the page gives the same code (no race conditions). Alphabet excludes
+// confusable chars (0/O, 1/I/L) so it's easy to read over the phone.
+window.deviceTrustCode = function(deviceId) {
+  const id = deviceId || window.getDeviceId();
+  const ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ'; // 30 chars, no 0/1/I/L/O
+  // Simple, stable hash — no crypto needed (this isn't a secret, it's a pairing code)
+  let h = 5381;
+  for (let i = 0; i < id.length; i++) {
+    h = ((h << 5) + h) + id.charCodeAt(i); // h*33 + c
+    h = h & 0xFFFFFFFF;
+  }
+  let n = Math.abs(h);
+  let code = '';
+  for (let i = 0; i < 4; i++) {
+    code += ALPHABET[n % ALPHABET.length];
+    n = Math.floor(n / ALPHABET.length);
+  }
+  return code;
+};
+
 // 📍 Haversine — distance in km between two {lat, lng} points
 window.haversineKm = function(a, b) {
   if (!a || !b) return Infinity;
