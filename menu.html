@@ -1192,9 +1192,9 @@
 
 <div class="toast" id="toast"></div>
 
-<script type="module" src="firebase.js?v=20260503d"></script>
-<script src="offline-banner.js?v=20260503d"></script>
-<script src="menu-data.js?v=20260503d"></script>
+<script type="module" src="firebase.js?v=20260503e"></script>
+<script src="offline-banner.js?v=20260503e"></script>
+<script src="menu-data.js?v=20260503e"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 const STORAGE_KEY = 'loyaltyShopV2';
@@ -3068,6 +3068,21 @@ async function submitOrder() {
   const db = loadDB();
   const customerId = phone || (isFactoryMode ? 'factory-' + Date.now() : (isShopWalkin ? 'walkin-' + Date.now() : 'walkin-' + Date.now()));
   let customer = phone ? db.customers[phone] : null;
+  // 🔒 CRITICAL DATA SAFETY: if customer is missing locally but exists in
+  //    Firestore, fetch + mirror BEFORE deciding to "create new". Otherwise
+  //    the saveCustomer({merge:true}) below will overwrite real points/
+  //    lifetime_points with the 5-point signup default — wiping their history.
+  //    (Bug fix for: customer opens menu on a fresh device, no localStorage,
+  //    submits order → cloud points reset to 5.)
+  if (!customer && phone && window.cloud?.getCustomer) {
+    try {
+      const cloudCust = await window.cloud.getCustomer(phone);
+      if (cloudCust) {
+        customer = cloudCust;
+        db.customers[phone] = cloudCust; // mirror to local so subsequent code finds it
+      }
+    } catch (e) { console.warn('[submitOrder] cloud fetch failed — proceeding with local', e); }
+  }
   let signupBonusGiven = false;
   if (!customer) {
     const customerName = name || (phone ? 'ลูกค้า ' + phone.slice(-4) : (isFactoryMode ? 'โรงงาน' : (isShopWalkin ? 'ลูกค้าหน้าร้าน' : 'ไม่ระบุชื่อ')));
