@@ -1201,9 +1201,9 @@
 
 <div class="toast" id="toast"></div>
 
-<script type="module" src="firebase.js?v=20260503j"></script>
-<script src="offline-banner.js?v=20260503j"></script>
-<script src="menu-data.js?v=20260503j"></script>
+<script type="module" src="firebase.js?v=20260503k"></script>
+<script src="offline-banner.js?v=20260503k"></script>
+<script src="menu-data.js?v=20260503k"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 const STORAGE_KEY = 'loyaltyShopV2';
@@ -1756,7 +1756,7 @@ async function submitSignup() {
   } catch (e) { console.warn('cloud signup sync failed', e); }
 
   // 🔐 Mark this device as PIN-authenticated so customer doesn't have to log in again
-  localStorage.setItem('pinSessionPhone', phone);
+  (typeof window.savePinSession === 'function' ? window.savePinSession(phone) : localStorage.setItem('pinSessionPhone', phone));
 
   status.style.color = '#16a34a';
   status.textContent = `🎉 สมัครสำเร็จ! รับ +${SIGNUP} แต้ม — กำลังพาไปดูแต้มของคุณ...`;
@@ -4075,6 +4075,12 @@ window.addEventListener('online', () => setTimeout(flushOutbox, 1500));
 setTimeout(flushOutbox, 5000);
 
 // ============ Init ============
+// 🪧 Show "open in Safari/Chrome" banner if loaded inside FB/LINE/IG in-app
+//    browser. Helps customers escape the in-app sandbox so PIN session
+//    persists across visits (in-app browsers have isolated localStorage).
+if (typeof window.mountInAppBrowserBanner === 'function') {
+  setTimeout(() => window.mountInAppBrowserBanner(), 200);
+}
 renderMenu();
 updateCartBar();
 renderHeroChips();

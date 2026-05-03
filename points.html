@@ -195,9 +195,9 @@
 
 <main id="main"></main>
 
-<script type="module" src="firebase.js?v=20260503j"></script>
-<script src="offline-banner.js?v=20260503j"></script>
-<script src="menu-data.js?v=20260503j"></script>
+<script type="module" src="firebase.js?v=20260503k"></script>
+<script src="offline-banner.js?v=20260503k"></script>
+<script src="menu-data.js?v=20260503k"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 const STORAGE_KEY = 'loyaltyShopV2';
@@ -1032,7 +1032,8 @@ function setShareStatus(msg, color) {
 function logout() {
   if (!confirm('🚪 ออกจากระบบ?\n\n• ครั้งหน้าจะต้องกรอกเบอร์ + PIN ใหม่')) return;
   localStorage.removeItem('lastCustomerPhone');
-  localStorage.removeItem('pinSessionPhone');
+  if (typeof window.clearPinSession === 'function') window.clearPinSession();
+  else localStorage.removeItem('pinSessionPhone');
   // Note: deviceId is intentionally NOT cleared — keeps legacy device-trust
   // working for customers who haven't set a PIN yet.
   location.href = 'points.html';
@@ -1078,12 +1079,15 @@ function tryRender() {
 // Returns true if gate is showing (caller should NOT render normally).
 function gateOrRender(customer, allOrders) {
   // 🔐 PIN-based gate (new). Customer logs in with phone + 4-digit PIN once,
-  //    session lives in localStorage as 'pinSessionPhone'. Works on any
-  //    device/browser (no device-id binding).
+  //    session is dated and lasts 365 days ("remember me" by default) so
+  //    they don't have to re-enter PIN every visit. Works on any device/
+  //    browser (no device-id binding).
   //    Fallback: if customer doc has no pin_hash AND device is trusted,
   //    legacy device-trust still grants access (backward compat during migration).
-  const pinSessionPhone = localStorage.getItem('pinSessionPhone');
-  if (pinSessionPhone === customer.phone) {
+  const sessionPhone = (typeof window.getPinSessionPhone === 'function')
+    ? window.getPinSessionPhone()
+    : localStorage.getItem('pinSessionPhone');
+  if (sessionPhone === customer.phone) {
     renderCustomer(customer, allOrders);
     return false;
   }
@@ -1189,7 +1193,7 @@ async function submitPinLogin() {
     const r = await window.cloud.verifyCustomerPin(cust.phone, pin);
     if (r.ok) {
       status.style.color = '#16a34a'; status.textContent = '✅ ถูกต้อง — กำลังเข้าระบบ...';
-      localStorage.setItem('pinSessionPhone', cust.phone);
+      (typeof window.savePinSession === 'function' ? window.savePinSession(cust.phone) : localStorage.setItem('pinSessionPhone', cust.phone));
       setTimeout(() => renderCustomer(r.customer || cust, window._gateAllOrders || []), 600);
     } else {
       status.style.color = '#dc2626';
@@ -1257,7 +1261,7 @@ async function submitSetPinViaBirthday() {
     const r = await window.cloud.setCustomerPinByBirthday(cust.phone, d, m, pin1);
     if (r.ok) {
       status.style.color = '#16a34a'; status.textContent = '✅ ตั้ง PIN สำเร็จ — กำลังเข้าระบบ...';
-      localStorage.setItem('pinSessionPhone', cust.phone);
+      (typeof window.savePinSession === 'function' ? window.savePinSession(cust.phone) : localStorage.setItem('pinSessionPhone', cust.phone));
       setTimeout(() => renderCustomer(r.customer || cust, window._gateAllOrders || []), 800);
     } else {
       status.style.color = '#dc2626';
@@ -1420,6 +1424,13 @@ async function submitVerifyGate() {
   setTimeout(() => renderCustomer(cust, window._gateAllOrders || []), 600);
 }
 window.submitVerifyGate = submitVerifyGate;
+
+// 🪧 Show "open in Safari/Chrome" banner if loaded inside FB/LINE/IG in-app
+//    browser so customers can escape the in-app sandbox (which has isolated
+//    localStorage → PIN session doesn't persist across browsers).
+if (typeof window.mountInAppBrowserBanner === 'function') {
+  setTimeout(() => window.mountInAppBrowserBanner(), 200);
+}
 
 tryRender();
 

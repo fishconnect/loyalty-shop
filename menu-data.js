@@ -29,6 +29,165 @@ window.getDeviceId = function() {
   return id;
 };
 
+// 🔐 PIN session helpers — 365-day "remember me" by default. Stores phone +
+//    expiry in localStorage so customers stay logged in for a year on each
+//    browser. Cross-browser (Facebook in-app vs Safari) still requires
+//    re-entering PIN on each, but ONLY ONCE per browser per year.
+window.PIN_SESSION_KEY = 'pinSession';
+window.PIN_SESSION_DAYS = 365;
+window.savePinSession = function(phone) {
+  try {
+    const expiresAt = Date.now() + (window.PIN_SESSION_DAYS * 24 * 60 * 60 * 1000);
+    localStorage.setItem(window.PIN_SESSION_KEY, JSON.stringify({ phone: String(phone), expiresAt }));
+    // Backward compat: also write the legacy key some pages still read
+    localStorage.setItem('pinSessionPhone', String(phone));
+  } catch (e) {}
+};
+window.getPinSessionPhone = function() {
+  try {
+    const raw = localStorage.getItem(window.PIN_SESSION_KEY);
+    if (raw) {
+      const o = JSON.parse(raw);
+      if (o && o.phone && o.expiresAt && o.expiresAt > Date.now()) return o.phone;
+      // Expired — clear
+      localStorage.removeItem(window.PIN_SESSION_KEY);
+      localStorage.removeItem('pinSessionPhone');
+      return null;
+    }
+    // Legacy key fallback (no expiry — accept once, then upgrade to dated session)
+    const legacy = localStorage.getItem('pinSessionPhone');
+    if (legacy) {
+      window.savePinSession(legacy);
+      return legacy;
+    }
+  } catch (e) {}
+  return null;
+};
+window.clearPinSession = function() {
+  try {
+    localStorage.removeItem(window.PIN_SESSION_KEY);
+    localStorage.removeItem('pinSessionPhone');
+  } catch (e) {}
+};
+
+// 📱 Detect if the page is being shown inside an in-app browser
+//    (Facebook, Messenger, Instagram, LINE, TikTok, etc.). Each app has its
+//    own webview with isolated localStorage/cookies, so PIN sessions stored
+//    on one app don't carry to Safari/Chrome — leading to "have to log in
+//    again" friction. We use this to show a "เปิดใน Safari/Chrome" banner.
+window.isInAppBrowser = function() {
+  const ua = navigator.userAgent || '';
+  return /FBAN|FBAV|FB_IAB|FBIOS|Instagram|Line\/|TikTok|BytedanceWebview|Snapchat|wv|Twitter/i.test(ua);
+};
+
+// Identify which app for tailored instructions
+window.detectInAppBrowser = function() {
+  const ua = navigator.userAgent || '';
+  if (/FBAN|FBAV|FB_IAB|FBIOS/i.test(ua)) return 'facebook';
+  if (/Instagram/i.test(ua)) return 'instagram';
+  if (/Line\//i.test(ua)) return 'line';
+  if (/TikTok|BytedanceWebview/i.test(ua)) return 'tiktok';
+  if (/Snapchat/i.test(ua)) return 'snapchat';
+  if (/Twitter/i.test(ua)) return 'twitter';
+  if (/wv/i.test(ua)) return 'webview';
+  return null;
+};
+
+// Best-effort "open in real browser" — works on Android via intent://
+//    On iOS, no programmatic way exists (sandbox), so we return false and
+//    the caller should show instructions instead.
+window.tryOpenExternalBrowser = function() {
+  const isAndroid = /Android/i.test(navigator.userAgent);
+  if (!isAndroid) return false;
+  const url = location.href;
+  // Strip protocol so intent:// can prepend it
+  const stripped = url.replace(/^https?:\/\//, '');
+  // intent URL: tries Chrome first, falls back to system default
+  const intentUrl = `intent://${stripped}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(url)};end`;
+  location.href = intentUrl;
+  return true;
+};
+
+// 🪧 Mount the "open in browser" banner at the top of the page if we detect
+//    a Facebook/LINE/Instagram in-app browser. Persistent dismissal: once
+//    user closes it, sessionStorage flag means it won't re-show this session.
+window.mountInAppBrowserBanner = function() {
+  if (!window.isInAppBrowser || !window.isInAppBrowser()) return;
+  if (sessionStorage.getItem('inAppBannerDismissed') === '1') return;
+  if (document.getElementById('inAppBrowserBanner')) return; // already mounted
+
+  const isAndroid = /Android/i.test(navigator.userAgent);
+  const app = (window.detectInAppBrowser && window.detectInAppBrowser()) || 'app';
+  const appLabels = {
+    facebook: 'Facebook', instagram: 'Instagram', line: 'LINE',
+    tiktok: 'TikTok', snapchat: 'Snapchat', twitter: 'Twitter', webview: 'แอป',
+  };
+  const appName = appLabels[app] || 'แอป';
+
+  const banner = document.createElement('div');
+  banner.id = 'inAppBrowserBanner';
+  banner.style.cssText = 'position:sticky;top:0;left:0;right:0;background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#78350f;padding:10px 14px;font-size:13px;line-height:1.5;z-index:9000;box-shadow:0 2px 8px rgba(0,0,0,.1);font-family:inherit';
+  banner.innerHTML = `
+    <div style="display:flex;align-items:flex-start;gap:8px;max-width:600px;margin:0 auto">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:800;margin-bottom:2px">💡 คุณกำลังเปิดผ่าน ${appName}</div>
+        <div style="font-size:11.5px;color:#92400e">
+          ${isAndroid
+            ? 'กดปุ่มขวาเพื่อเปิดใน Chrome — จะไม่ต้องใส่ PIN ทุกครั้ง'
+            : 'กดปุ่มขวาเพื่อดูวิธีเปิดใน Safari — ใส่ PIN แค่ครั้งเดียว'}
+        </div>
+      </div>
+      ${isAndroid
+        ? `<button onclick="window.tryOpenExternalBrowser()" style="flex-shrink:0;padding:8px 12px;background:#78350f;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap">📱 เปิดใน Chrome</button>`
+        : `<button onclick="window.showOpenInSafariHelp()" style="flex-shrink:0;padding:8px 12px;background:#78350f;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap">📋 วิธีเปิด</button>`}
+      <button onclick="document.getElementById('inAppBrowserBanner').remove();sessionStorage.setItem('inAppBannerDismissed','1')" style="flex-shrink:0;padding:8px 10px;background:transparent;color:#78350f;border:1.5px solid #78350f;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit" title="ปิด">✕</button>
+    </div>
+  `;
+  document.body.insertBefore(banner, document.body.firstChild);
+};
+
+// iOS instructions modal — show how to open in Safari from FB/IG/LINE
+window.showOpenInSafariHelp = function() {
+  const app = (window.detectInAppBrowser && window.detectInAppBrowser()) || 'facebook';
+  const url = location.href;
+
+  // App-specific menu location hint
+  const hint = {
+    facebook: 'กดเมนู ⋯ มุมขวาบน → เลือก "เปิดใน Safari"',
+    instagram: 'กดเมนู ⋯ มุมขวาบน → เลือก "เปิดใน Browser ภายนอก"',
+    line: 'กดเมนู ⋯ มุมขวาบน → เลือก "เปิดด้วยเบราว์เซอร์อื่น"',
+    tiktok: 'กดเมนู ⋯ มุมขวาบน → เลือก "เปิดใน Safari"',
+  }[app] || 'กดเมนู ⋯ มุมบน แล้วหา "เปิดใน Safari/Browser"';
+
+  let modal = document.getElementById('safariHelpModal');
+  if (modal) modal.remove();
+  modal = document.createElement('div');
+  modal.id = 'safariHelpModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;font-family:inherit';
+  modal.innerHTML = `
+    <div style="background:#fff;max-width:420px;width:100%;border-radius:18px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.3)">
+      <div style="padding:16px 20px;background:linear-gradient(135deg,#1652F0,#0738C9);color:#fff">
+        <div style="font-size:18px;font-weight:900">📲 วิธีเปิดใน Safari</div>
+        <div style="font-size:12px;opacity:.9;margin-top:2px">เปิดในเบราว์เซอร์ปกติ = ไม่ต้องใส่ PIN ทุกครั้ง</div>
+      </div>
+      <div style="padding:20px;font-size:14px;line-height:1.7;color:#0a1530">
+        <div style="background:#fef3c7;border-radius:10px;padding:12px;margin-bottom:14px;font-weight:700">
+          🔍 <b>${hint}</b>
+        </div>
+        <div style="font-size:13px;color:#5c6982">หรือ คัดลอกลิงก์แล้ววางใน Safari/Chrome เอง:</div>
+        <div style="background:#f3f4f6;padding:10px;border-radius:8px;font-family:'SF Mono',Menlo,monospace;font-size:11px;word-break:break-all;margin-top:6px;border:1px dashed #d1d5db">${url}</div>
+        <button onclick="navigator.clipboard.writeText('${url.replace(/'/g, "\\'")}').then(()=>{const b=document.getElementById('copyBtn');if(b){b.textContent='✓ คัดลอกแล้ว';b.style.background='#16a34a';}})" id="copyBtn" style="display:block;width:100%;margin-top:8px;padding:11px;background:#1652F0;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">📋 คัดลอกลิงก์</button>
+      </div>
+      <div style="padding:14px 20px;border-top:1px solid #e5e7eb;background:#f7f8fb">
+        <button onclick="document.getElementById('safariHelpModal').remove()" style="width:100%;padding:11px;background:#fff;color:#1652F0;border:1.5px solid #1652F0;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">เข้าใจแล้ว</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  // Click outside to close
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+};
+
 // 🛡️ XSS-safe HTML escape for any user-supplied string (customer name, note,
 //    address, etc.) that we interpolate into innerHTML. JS template literals
 //    don't escape — without this, a customer named '<img onerror=alert(1)>'
