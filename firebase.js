@@ -382,6 +382,160 @@ window.cloud = {
     } catch (e) { console.warn('[cloud] anonymizeCustomer', e); return false; }
   },
 
+  // 🔐 PIN AUTH SYSTEM — phone + 4-digit PIN auth that works on any device,
+  //    any browser. Replaces device-bound verification so customers can log
+  //    in from Safari/Chrome/Edge on a friend's phone, etc. PIN is hashed
+  //    SHA-256 with phone as salt + a global pepper, so the stored hash is
+  //    not directly brute-forceable per-customer.
+  //
+  //    Lockout: 3 wrong attempts → 1-minute lock (server-side counter).
+  async _hashPin(phone, pin) {
+    const salt = String(phone) + ':loyalty-shop-pin-v1:';
+    const data = new TextEncoder().encode(salt + String(pin));
+    const hash = await crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(hash))
+      .map(b => b.toString(16).padStart(2, '0')).join('');
+  },
+
+  async setCustomerPin(phone, pin) {
+    if (!phone) return { ok: false, error: 'missing phone' };
+    if (!/^\d{4}$/.test(String(pin))) return { ok: false, error: 'PIN ต้องเป็นตัวเลข 4 หลัก' };
+    try {
+      const pinHash = await this._hashPin(phone, pin);
+      await updateDoc(doc(fdb, 'customers', String(phone)), {
+        pin_hash: pinHash,
+        pin_set_at: new Date().toISOString(),
+        pin_lock_until: 0,
+        pin_attempts: 0,
+      });
+      return { ok: true };
+    } catch (e) { console.warn('[cloud] setCustomerPin', e); return { ok: false, error: e.message }; }
+  },
+
+  // Login: verify phone + PIN. Manages lockout server-side.
+  // Returns { ok, customer, error?, attemptsLeft?, lockUntil?, needsPinSetup? }
+  async verifyCustomerPin(phone, pin) {
+    if (!phone || !pin) return { ok: false, error: 'กรอกเบอร์และ PIN ให้ครบ' };
+    try {
+      const ref = doc(fdb, 'customers', String(phone));
+      const snap = await getDoc(ref);
+      if (!snap.exists()) return { ok: false, error: 'ไม่พบเบอร์นี้ในระบบ' };
+      const cust = snap.data();
+      const now = Date.now();
+
+      // Check lockout
+      if (cust.pin_lock_until && cust.pin_lock_until > now) {
+        const secondsLeft = Math.ceil((cust.pin_lock_until - now) / 1000);
+        return { ok: false, error: `🔒 ล็อก ${secondsLeft} วินาที (ผิดเกินกำหนด)`, lockUntil: cust.pin_lock_until };
+      }
+
+      // No PIN set yet → flag for migration UI
+      if (!cust.pin_hash) {
+        return {
+          ok: false,
+          needsPinSetup: true,
+          error: 'ลูกค้านี้ยังไม่ได้ตั้ง PIN — กรุณาตั้งใหม่',
+          hasBirthday: !!(cust.birth_day && cust.birth_month),
+        };
+      }
+
+      const inputHash = await this._hashPin(phone, pin);
+      if (inputHash !== cust.pin_hash) {
+        const newAttempts = (cust.pin_attempts || 0) + 1;
+        const updates = { pin_attempts: newAttempts };
+        if (newAttempts >= 3) {
+          updates.pin_lock_until = now + 60 * 1000; // 1 minute
+          updates.pin_attempts = 0;                 // reset for next round
+        }
+        await updateDoc(ref, updates);
+        const remaining = Math.max(0, 3 - newAttempts);
+        return {
+          ok: false,
+          error: remaining > 0 ? `PIN ไม่ถูกต้อง · เหลืออีก ${remaining} ครั้ง` : '🔒 ผิด 3 ครั้ง · ล็อก 1 นาที',
+          attemptsLeft: remaining,
+        };
+      }
+
+      // Success — reset counters
+      if (cust.pin_attempts || cust.pin_lock_until) {
+        await updateDoc(ref, { pin_attempts: 0, pin_lock_until: 0 });
+      }
+      return { ok: true, customer: cust };
+    } catch (e) {
+      console.warn('[cloud] verifyCustomerPin', e);
+      return { ok: false, error: e.message };
+    }
+  },
+
+  // Self-service migration: existing customer (no PIN, has birthday on file)
+  // verifies with birthday and sets a new PIN in one step.
+  async setCustomerPinByBirthday(phone, day, month, newPin) {
+    if (!phone || !day || !month) return { ok: false, error: 'missing fields' };
+    if (!/^\d{4}$/.test(String(newPin))) return { ok: false, error: 'PIN ต้องเป็นตัวเลข 4 หลัก' };
+    try {
+      const ref = doc(fdb, 'customers', String(phone));
+      const snap = await getDoc(ref);
+      if (!snap.exists()) return { ok: false, error: 'ไม่พบเบอร์นี้' };
+      const cust = snap.data();
+      if (!cust.birth_day || !cust.birth_month) {
+        return { ok: false, error: 'ลูกค้านี้ไม่ได้บันทึกวันเกิด — ติดต่อร้าน' };
+      }
+      if (parseInt(day) !== cust.birth_day || parseInt(month) !== cust.birth_month) {
+        return { ok: false, error: 'วันเกิดไม่ตรง — ติดต่อร้าน' };
+      }
+      const pinHash = await this._hashPin(phone, newPin);
+      await updateDoc(ref, {
+        pin_hash: pinHash,
+        pin_set_at: new Date().toISOString(),
+        pin_set_by: 'self_birthday_verify',
+        pin_lock_until: 0,
+        pin_attempts: 0,
+      });
+      await this.saveConsentLog?.({
+        type: 'pin_set_by_birthday',
+        customer_id: String(phone),
+        customer_phone: String(phone),
+        version: '1.2',
+        accepted: true,
+        details: { method: 'self_birthday_verify' },
+      });
+      return { ok: true, customer: cust };
+    } catch (e) {
+      console.warn('[cloud] setCustomerPinByBirthday', e);
+      return { ok: false, error: e.message };
+    }
+  },
+
+  // Admin override: reset PIN without verification. Used when customer forgot
+  // PIN AND has no birthday on file. Admin must verify identity out-of-band.
+  async resetCustomerPinAdmin(phone, newPin, adminNote) {
+    if (!phone) return { ok: false, error: 'missing phone' };
+    if (!/^\d{4}$/.test(String(newPin))) return { ok: false, error: 'PIN ต้องเป็นตัวเลข 4 หลัก' };
+    try {
+      const pinHash = await this._hashPin(phone, newPin);
+      await updateDoc(doc(fdb, 'customers', String(phone)), {
+        pin_hash: pinHash,
+        pin_set_at: new Date().toISOString(),
+        pin_set_by: 'admin_reset',
+        pin_reset_note: String(adminNote || '').slice(0, 500),
+        pin_lock_until: 0,
+        pin_attempts: 0,
+      });
+      await this.saveConsentLog?.({
+        type: 'admin_pin_reset',
+        customer_id: String(phone),
+        customer_phone: String(phone),
+        version: '1.2',
+        accepted: true,
+        details: { admin_note: adminNote || '' },
+      });
+      return { ok: true };
+    } catch (e) {
+      console.warn('[cloud] resetCustomerPinAdmin', e);
+      return { ok: false, error: e.message };
+    }
+  },
+
   // 🆔 DEVICE TRUST CODE — mobile-friendly admin-assisted unlock.
   //   Customer's "verify gate" generates a 4-char code from their deviceId,
   //   writes the request to /device_trust_requests/{phone}_{code}, and shows

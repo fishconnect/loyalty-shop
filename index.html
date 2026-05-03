@@ -1123,7 +1123,8 @@
       Data Controller: <b>ครัวผู้ใหญ่ปอง</b> · 📞 061-962-3696<br>
       Data Processor: <b>Fish Connect Company Limited</b> · 📧 admin@fishconnect.co
     </div>
-    <button class="btn-primary" onclick="showTrustCodeUnlock()" style="width:100%;margin-top:10px;background:linear-gradient(135deg,#16a34a,#15803d);font-size:15px;padding:14px">🆔 ปลดล็อกลูกค้าด้วยโค้ด (เร็ว · 20 วิ) ⭐</button>
+    <button class="btn-primary" onclick="showAdminPinReset()" style="width:100%;margin-top:10px;background:linear-gradient(135deg,#0891b2,#0e7490);font-size:15px;padding:14px">🔑 ตั้ง / รีเซ็ต PIN ลูกค้า ⭐</button>
+    <button class="btn-primary" onclick="showTrustCodeUnlock()" style="width:100%;margin-top:6px;background:linear-gradient(135deg,#16a34a,#15803d);font-size:13px">🆔 ปลดล็อกด้วยโค้ด (วิธีเก่า)</button>
     <button class="btn-primary" onclick="showCustomerInspector()" style="width:100%;margin-top:6px;background:linear-gradient(135deg,#7c3aed,#5b21b6)">🔍 ดูข้อมูลลูกค้า + กู้แต้ม (Manual)</button>
     <button class="btn-primary" onclick="showAtRiskScan()" style="width:100%;margin-top:6px;background:linear-gradient(135deg,#dc2626,#991b1b)">🚨 สแกนลูกค้าเสี่ยงแต้มหาย (เหมือน 0815495552)</button>
     <button class="btn-primary" onclick="showConsentLogs()" style="width:100%;margin-top:6px">📜 ดู Consent Logs (บันทึกการยินยอม)</button>
@@ -1389,10 +1390,10 @@
 <!-- Print receipt area (hidden until print) -->
 <div id="printArea"></div>
 
-<script type="module" src="firebase.js?v=20260503i"></script>
-<script src="offline-banner.js?v=20260503i"></script>
-<script src="menu-data.js?v=20260503i"></script>
-<script src="notifier.js?v=20260503i"></script>
+<script type="module" src="firebase.js?v=20260503j"></script>
+<script src="offline-banner.js?v=20260503j"></script>
+<script src="menu-data.js?v=20260503j"></script>
+<script src="notifier.js?v=20260503j"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 
@@ -2160,6 +2161,78 @@ window.showTrustCodeUnlock = showTrustCodeUnlock;
 window.submitTrustCodeUnlock = submitTrustCodeUnlock;
 window.refreshTcuPending = refreshTcuPending;
 window.tcuSelectPending = tcuSelectPending;
+
+// 🔑 ADMIN PIN RESET — for customers who forgot PIN AND have no birthday
+//    on file (or refused to set PIN themselves). Admin verifies identity
+//    out-of-band (call / in-person / ID check), enters phone + new PIN +
+//    reason. Audit logged in consent_logs.
+function showAdminPinReset() {
+  const out = document.getElementById('pdpaPanelOutput');
+  out.innerHTML = `
+    <div style="background:#ecfeff;border:2px solid #0891b2;color:#164e63;padding:16px;border-radius:14px">
+      <div style="font-weight:900;font-size:15px;margin-bottom:6px">🔑 ตั้ง / รีเซ็ต PIN ลูกค้า</div>
+      <div style="font-size:12px;color:#0e7490;margin-bottom:12px;line-height:1.6">
+        💬 <b>วิธีใช้:</b> ใช้สำหรับลูกค้าที่ลืม PIN, ลูกค้าใหม่ที่ admin สมัครให้, หรือลูกค้าเก่าที่ยังไม่มี PIN<br>
+        ⚠️ ใช้หลังจากยืนยันตัวตนนอกระบบแล้ว (โทรคุย, เห็นหน้า, ตรวจบัตร)
+      </div>
+      <input type="tel" id="aprPhone" placeholder="📱 เบอร์ลูกค้า" inputmode="numeric" maxlength="10" style="width:100%;padding:13px;border:2px solid #0891b2;border-radius:10px;font-size:16px;font-family:inherit;margin-bottom:8px;letter-spacing:1px">
+      <input type="tel" id="aprPin" placeholder="🔢 PIN 4 หลักที่จะตั้ง (เช่น 1234)" inputmode="numeric" maxlength="4" autocomplete="off" oninput="this.value=this.value.replace(/\\D/g,'').slice(0,4)" style="width:100%;padding:13px;border:2px solid #0891b2;border-radius:10px;font-size:22px;font-weight:900;letter-spacing:8px;text-align:center;font-family:'SF Mono',Menlo,monospace;margin-bottom:8px">
+      <input type="text" id="aprReason" placeholder="📝 เหตุผล (เช่น 'ลูกค้าโทรขอรีเซ็ต ยืนยันตัวตนด้วยชื่อ + ที่อยู่')" style="width:100%;padding:11px;border:1.5px solid #0891b2;border-radius:8px;font-size:13px;font-family:inherit;margin-bottom:12px">
+      <button onclick="submitAdminPinReset()" style="width:100%;padding:14px;background:linear-gradient(135deg,#0891b2,#0e7490);color:#fff;border:none;border-radius:10px;font-weight:900;font-size:15px;cursor:pointer;font-family:inherit">✅ บันทึก PIN</button>
+      <div id="aprStatus" style="margin-top:10px;font-size:13px;font-weight:700;text-align:center;min-height:18px"></div>
+      <div style="font-size:11px;color:#0e7490;margin-top:10px;line-height:1.5;border-top:1px dashed #67e8f9;padding-top:8px">
+        🔒 ทุกการตั้ง/รีเซ็ต PIN จะ audit ลง consent_logs (type: admin_pin_reset) · เก็บไว้ตรวจสอบย้อนหลังได้
+      </div>
+    </div>
+  `;
+  setTimeout(() => document.getElementById('aprPhone')?.focus(), 100);
+}
+
+async function submitAdminPinReset() {
+  const phone = (document.getElementById('aprPhone').value || '').replace(/\D/g, '');
+  const pin = (document.getElementById('aprPin').value || '').trim();
+  const reason = (document.getElementById('aprReason').value || '').trim();
+  const status = document.getElementById('aprStatus');
+  if (phone.length < 9) { status.style.color = '#dc2626'; status.textContent = '⚠️ กรอกเบอร์ให้ครบ'; return; }
+  if (!/^\d{4}$/.test(pin)) { status.style.color = '#dc2626'; status.textContent = '⚠️ PIN ต้องเป็นตัวเลข 4 หลัก'; return; }
+  if (!reason) { status.style.color = '#dc2626'; status.textContent = '⚠️ กรอกเหตุผล (ใช้ audit)'; return; }
+
+  // Wait for cloud
+  status.style.color = '#0891b2'; status.textContent = '⏳ กำลังเชื่อม cloud...';
+  let waited = 0;
+  while (!window.cloud?.resetCustomerPinAdmin && waited < 5000) {
+    await new Promise(r => setTimeout(r, 200)); waited += 200;
+  }
+  if (!window.cloud?.resetCustomerPinAdmin) {
+    status.style.color = '#dc2626';
+    status.innerHTML = '⚠️ <b>Browser cache เก่า</b> — ปิดแท็บ + เปิดใหม่ลองอีกครั้ง';
+    return;
+  }
+  if (!confirm(`ตั้ง PIN ของ ${phone} เป็น ${pin}?\n\nเหตุผล: ${reason}\n\nกด OK เพื่อบันทึก`)) return;
+
+  status.style.color = '#1652F0'; status.textContent = '⏳ กำลังบันทึก...';
+  try {
+    const r = await window.cloud.resetCustomerPinAdmin(phone, pin, reason);
+    if (r.ok) {
+      status.style.color = '#16a34a';
+      status.innerHTML = `✅ <b>ตั้ง PIN สำเร็จ!</b><br>ลูกค้าใช้เบอร์ <b>${phone}</b> + PIN <b>${pin}</b> เข้าระบบได้ทันทีจากเครื่องไหนก็ได้`;
+      setTimeout(() => {
+        const p = document.getElementById('aprPhone'); if (p) p.value = '';
+        const pn = document.getElementById('aprPin'); if (pn) pn.value = '';
+        const re = document.getElementById('aprReason'); if (re) re.value = '';
+      }, 3000);
+    } else {
+      status.style.color = '#dc2626';
+      status.innerHTML = '❌ ' + (r.error || 'ไม่สำเร็จ');
+    }
+  } catch (e) {
+    status.style.color = '#dc2626';
+    status.innerHTML = '⚠️ Error: ' + e.message;
+  }
+}
+
+window.showAdminPinReset = showAdminPinReset;
+window.submitAdminPinReset = submitAdminPinReset;
 
 // 🔍 Customer Inspector — read straight from Firestore (not local cache) and
 //    show points / lifetime / signup_bonus / linked_devices / order count.

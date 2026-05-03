@@ -951,7 +951,16 @@
         <input type="text" id="signupName" placeholder="เช่น สมชาย ใจดี" style="width:100%;padding:12px 14px;border:1.5px solid #d1ddff;border-radius:10px;font-size:15px;font-family:inherit">
       </div>
       <div style="margin-bottom:14px">
-        <label style="font-weight:700;color:#0a1530;font-size:13px;display:block;margin-bottom:5px">🎂 วันเกิด <span style="color:#9ca3af;font-weight:500">(ไม่บังคับ — รับ +5 แต้มในวันเกิดทุกปี)</span></label>
+        <label style="font-weight:700;color:#0a1530;font-size:13px;display:block;margin-bottom:5px">🔢 PIN 4 หลัก <span style="color:#dc2626">*</span> <span style="color:#9ca3af;font-weight:500;font-size:11px">(ใช้เข้าระบบ — ตั้งให้จำได้)</span></label>
+        <input type="tel" id="signupPin" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="••••" oninput="this.value=this.value.replace(/\D/g,'').slice(0,4)" style="width:100%;padding:13px;border:1.5px solid #0891b2;border-radius:10px;font-size:24px;font-weight:900;letter-spacing:12px;text-align:center;font-family:'SF Mono',Menlo,monospace;background:#fff">
+        <div style="font-size:11px;color:#6b7280;margin-top:4px">⚠️ <b>อย่าใช้</b> 1234, 0000, เลขเรียง — เดาง่ายเกินไป</div>
+      </div>
+      <div style="margin-bottom:14px">
+        <label style="font-weight:700;color:#0a1530;font-size:13px;display:block;margin-bottom:5px">🔢 ยืนยัน PIN อีกครั้ง <span style="color:#dc2626">*</span></label>
+        <input type="tel" id="signupPin2" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="••••" oninput="this.value=this.value.replace(/\D/g,'').slice(0,4)" style="width:100%;padding:13px;border:1.5px solid #0891b2;border-radius:10px;font-size:24px;font-weight:900;letter-spacing:12px;text-align:center;font-family:'SF Mono',Menlo,monospace;background:#fff">
+      </div>
+      <div style="margin-bottom:14px">
+        <label style="font-weight:700;color:#0a1530;font-size:13px;display:block;margin-bottom:5px">🎂 วันเกิด <span style="color:#9ca3af;font-weight:500">(ไม่บังคับ — รับ +5 แต้มในวันเกิด · ใช้กู้ PIN เองได้)</span></label>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
           <select id="signupBirthDay" style="padding:12px;border:1.5px solid #d1ddff;border-radius:10px;font-size:14px;font-family:inherit;background:#fff">
             <option value="">— วัน —</option>
@@ -1192,9 +1201,9 @@
 
 <div class="toast" id="toast"></div>
 
-<script type="module" src="firebase.js?v=20260503i"></script>
-<script src="offline-banner.js?v=20260503i"></script>
-<script src="menu-data.js?v=20260503i"></script>
+<script type="module" src="firebase.js?v=20260503j"></script>
+<script src="offline-banner.js?v=20260503j"></script>
+<script src="menu-data.js?v=20260503j"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 const STORAGE_KEY = 'loyaltyShopV2';
@@ -1654,6 +1663,8 @@ function closeSignupModal() {
 async function submitSignup() {
   const phone = (document.getElementById('signupPhone').value || '').replace(/\D/g, '');
   const name = (document.getElementById('signupName').value || '').trim();
+  const pin = (document.getElementById('signupPin')?.value || '').trim();
+  const pin2 = (document.getElementById('signupPin2')?.value || '').trim();
   const bd = parseInt(document.getElementById('signupBirthDay').value) || null;
   const bm = parseInt(document.getElementById('signupBirthMonth').value) || null;
   const consentEl = document.getElementById('signupConsent');
@@ -1663,6 +1674,11 @@ async function submitSignup() {
 
   if (phone.length < 9) { status.style.color = '#dc2626'; status.textContent = '⚠️ เบอร์โทรไม่ถูกต้อง (ต้อง 9-10 หลัก)'; return; }
   if (!name) { status.style.color = '#dc2626'; status.textContent = '⚠️ กรุณากรอกชื่อ'; return; }
+  if (!/^\d{4}$/.test(pin)) { status.style.color = '#dc2626'; status.textContent = '⚠️ PIN ต้องเป็นเลข 4 หลัก'; return; }
+  if (pin !== pin2) { status.style.color = '#dc2626'; status.textContent = '⚠️ PIN ทั้งสองช่องไม่ตรงกัน'; return; }
+  // Block obvious-weak PINs to nudge customers toward something safer
+  const weakPins = ['0000','1111','2222','3333','4444','5555','6666','7777','8888','9999','1234','4321','0123','9876'];
+  if (weakPins.includes(pin)) { status.style.color = '#dc2626'; status.textContent = '⚠️ PIN เดาง่ายเกินไป — กรุณาเปลี่ยน'; return; }
   if (!consented) { status.style.color = '#dc2626'; status.textContent = '⚠️ กรุณายอมรับนโยบายความเป็นส่วนตัวและเงื่อนไขบริการ'; return; }
 
   btn.disabled = true; btn.style.opacity = '.6';
@@ -1716,6 +1732,11 @@ async function submitSignup() {
   // Sync to cloud (best-effort — local copy already saved)
   try {
     if (window.cloud?.saveCustomer) await window.cloud.saveCustomer(customer);
+    // 🔐 Set PIN (separate call so the hash never lives in plaintext anywhere)
+    if (window.cloud?.setCustomerPin) {
+      const pinResult = await window.cloud.setCustomerPin(phone, pin);
+      if (!pinResult.ok) console.warn('[signup] PIN save failed:', pinResult.error);
+    }
     // 🔒 PDPA — write immutable consent log to /consent_logs in Firestore
     if (window.cloud?.saveConsentLog) {
       await window.cloud.saveConsentLog({
@@ -1733,6 +1754,9 @@ async function submitSignup() {
       });
     }
   } catch (e) { console.warn('cloud signup sync failed', e); }
+
+  // 🔐 Mark this device as PIN-authenticated so customer doesn't have to log in again
+  localStorage.setItem('pinSessionPhone', phone);
 
   status.style.color = '#16a34a';
   status.textContent = `🎉 สมัครสำเร็จ! รับ +${SIGNUP} แต้ม — กำลังพาไปดูแต้มของคุณ...`;
