@@ -1549,9 +1549,11 @@ async function connectBluetoothPrinter() {
     localStorage.setItem('btPrinterName', device.name || 'Unknown');
     localStorage.removeItem('btManuallyDisconnected'); // user wants this device, allow auto-reconnect
     setupAutoReconnect(device);
+    startBtKeepalive();   // 💓 keep BT link warm so idle disconnects don't fire
 
     toast('✅ เชื่อมต่อ ' + device.name + ' สำเร็จ');
     updateBTStatus();
+    flushPendingPrintJobs();
   } catch (err) {
     if (err.name !== 'NotFoundError') alert('❌ เชื่อมต่อล้มเหลว: ' + err.message);
   }
@@ -1562,14 +1564,18 @@ function setupAutoReconnect(device) {
   device.addEventListener('gattserverdisconnected', async () => {
     window.btPrinter = null;
     updateBTStatus();
+    stopBtKeepalive();        // pause heartbeat while disconnected
     if (localStorage.getItem('btManuallyDisconnected') === '1') {
       toast('🔴 ตัดการเชื่อมต่อแล้ว');
       return;
     }
     toast('🔄 ปริ้นหลุด — กำลังเชื่อมใหม่...');
-    // Retry with backoff up to ~30s
-    for (let attempt = 1; attempt <= 5; attempt++) {
-      await new Promise(r => setTimeout(r, attempt * 2000));
+    // Aggressive initial reconnect (500ms → 1s → 2s → 3s → 5s → 8s → 10s)
+    // Faster than the old 2/4/6/8/10s schedule because most BT drops are
+    // momentary (idle timeout, brief interference).
+    const delays = [500, 1000, 2000, 3000, 5000, 8000, 10000];
+    for (let attempt = 0; attempt < delays.length; attempt++) {
+      await new Promise(r => setTimeout(r, delays[attempt]));
       if (localStorage.getItem('btManuallyDisconnected') === '1') return;
       try {
         const server = await device.gatt.connect();
@@ -1577,16 +1583,94 @@ function setupAutoReconnect(device) {
         if (chr) {
           window.btPrinter = { device, server, chr };
           updateBTStatus();
+          startBtKeepalive();   // resume heartbeat
           toast('✅ เชื่อมต่อใหม่สำเร็จ');
+          flushPendingPrintJobs();
           return;
         }
       } catch (e) {
-        console.warn('[BT] reconnect attempt', attempt, 'failed:', e.message);
+        console.warn('[BT] reconnect attempt', attempt + 1, 'failed:', e.message);
       }
     }
     toast('⚠️ เชื่อมต่อใหม่ไม่สำเร็จ — กรุณากดเชื่อมต่อในตั้งค่า', true);
   });
 }
+
+// 💓 KEEPALIVE — send a NUL byte every 20s to keep the BT link warm.
+// Many thermal printers idle-disconnect after 30-60s of inactivity.
+// 0x00 is ignored by ESC/POS printers but enough activity to reset the
+// link's idle timer. Also pairs well with PRINT QUEUE below.
+let _btKeepaliveTimer = null;
+function startBtKeepalive() {
+  stopBtKeepalive();
+  _btKeepaliveTimer = setInterval(async () => {
+    if (!window.btPrinter?.chr || !window.btPrinter.device?.gatt?.connected) {
+      stopBtKeepalive();
+      return;
+    }
+    try {
+      await window.btPrinter.chr.writeValue(new Uint8Array([0x00]));
+    } catch (e) {
+      // Write failed → connection actually dead; gattserverdisconnected
+      // will fire and trigger reconnect.
+      console.warn('[BT] keepalive failed', e.message);
+    }
+  }, 20000);
+}
+function stopBtKeepalive() {
+  if (_btKeepaliveTimer) { clearInterval(_btKeepaliveTimer); _btKeepaliveTimer = null; }
+}
+
+// 🖨️ PRINT QUEUE — if a print is requested while BT is disconnected, queue
+// the order JSON and print as soon as we reconnect. Prevents the kitchen
+// from missing tickets during momentary BT drops.
+function queuePrintJob(order) {
+  try {
+    const list = JSON.parse(localStorage.getItem('btPrintQueue') || '[]');
+    if (list.find(o => o.id === order.id)) return;
+    list.push(order);
+    localStorage.setItem('btPrintQueue', JSON.stringify(list));
+    toast('🖨️ พิมพ์ค้างในคิว — จะพิมพ์เมื่อปริ้นกลับมา');
+  } catch (e) {}
+}
+async function flushPendingPrintJobs() {
+  if (!window.btPrinter?.chr) return;
+  let list;
+  try { list = JSON.parse(localStorage.getItem('btPrintQueue') || '[]'); } catch (e) { return; }
+  if (!list.length) return;
+  console.log('[BT] flushing', list.length, 'queued print job(s)');
+  for (const o of [...list]) {
+    try {
+      await bluetoothPrint(o, window.btPrinter);
+      list = list.filter(x => x.id !== o.id);
+      localStorage.setItem('btPrintQueue', JSON.stringify(list));
+    } catch (e) { console.warn('[BT] queued print failed', o.id, e); }
+  }
+  if (list.length === 0) toast('✅ พิมพ์งานค้างเรียบร้อย');
+}
+
+// 👁️ VISIBILITY — when tab regains focus, check BT and reconnect if needed.
+// Browser throttles BT writes when tab is hidden → connection may have died
+// silently in the background.
+document.addEventListener('visibilitychange', async () => {
+  if (document.hidden) return;
+  if (!window.btPrinter?.device) return;
+  if (localStorage.getItem('btManuallyDisconnected') === '1') return;
+  // Force a reconnect if the GATT thinks it's disconnected
+  if (window.btPrinter.device.gatt && !window.btPrinter.device.gatt.connected) {
+    try {
+      const server = await window.btPrinter.device.gatt.connect();
+      const chr = await findWritableCharacteristic(server);
+      if (chr) {
+        window.btPrinter = { device: window.btPrinter.device, server, chr };
+        updateBTStatus();
+        startBtKeepalive();
+        toast('✅ เชื่อมปริ้นกลับ');
+        flushPendingPrintJobs();
+      }
+    } catch (e) { console.warn('[BT] visibility reconnect failed', e); }
+  }
+});
 
 // Helper to scan services for a writable characteristic
 async function findWritableCharacteristic(server) {
@@ -1619,8 +1703,10 @@ async function autoReconnectBT() {
     if (chr) {
       window.btPrinter = { device, server, chr };
       setupAutoReconnect(device);
+      startBtKeepalive();
       updateBTStatus();
       toast('🔵 เชื่อมต่อ ' + device.name + ' อัตโนมัติ');
+      flushPendingPrintJobs();
     }
   } catch (e) {
     console.warn('[BT] auto-reconnect failed:', e.message);
@@ -1728,7 +1814,13 @@ function updateBTStatus() {
 
 async function printViaBluetooth(order, btRef) {
   const bt = btRef || window.btPrinter;
-  if (!bt?.chr) return { error: 'ยังไม่ได้เชื่อมต่อ' };
+  if (!bt?.chr) {
+    // 🖨️ Queue the order — flushPendingPrintJobs() will print it when the
+    // BT printer reconnects. Prevents kitchen from missing tickets during
+    // momentary BT drops.
+    if (order && order.id && typeof queuePrintJob === 'function') queuePrintJob(order);
+    return { error: 'ยังไม่ได้เชื่อมต่อ — ใส่ในคิวรอพิมพ์เมื่อเชื่อมต่อใหม่' };
+  }
 
   const mode = localStorage.getItem('btPrintMode') || 'bitmap';
   // 🏷️ Sticker mode: print 1 mini-sticker per dish unit (qty matters), each
