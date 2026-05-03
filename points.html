@@ -195,9 +195,9 @@
 
 <main id="main"></main>
 
-<script type="module" src="firebase.js?v=20260503k"></script>
-<script src="offline-banner.js?v=20260503k"></script>
-<script src="menu-data.js?v=20260503k"></script>
+<script type="module" src="firebase.js?v=20260503l"></script>
+<script src="offline-banner.js?v=20260503l"></script>
+<script src="menu-data.js?v=20260503l"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 const STORAGE_KEY = 'loyaltyShopV2';
@@ -1166,6 +1166,12 @@ function showPinGate(customer, allOrders) {
           ? `<button onclick="showSetPinViaBirthday()" style="display:block;width:100%;background:linear-gradient(135deg,#0891b2,#0e7490);color:#fff;padding:14px;border:none;border-radius:12px;font-weight:800;font-size:15px;cursor:pointer;font-family:inherit">🔑 ตั้ง PIN ใหม่ด้วยวันเกิด</button>`
           : `<a href="tel:061-962-3696" style="display:block;width:100%;background:linear-gradient(135deg,#1652F0,#0738C9);color:#fff;padding:14px;border-radius:12px;font-weight:800;font-size:15px;text-align:center;text-decoration:none;font-family:inherit">📞 โทรร้าน 061-962-3696</a>`}
       `}
+      <!-- 🆔 Fallback to old "device code" method — admin uses ปลดล็อกด้วยโค้ด in Settings -->
+      <div style="margin-top:14px;padding:10px 12px;background:#f9fafb;border:1px dashed #d1d5db;border-radius:10px">
+        <div style="font-size:11px;color:#6b7280;margin-bottom:6px;text-align:center">ลืมทุกอย่าง? ใช้วิธีเก่า:</div>
+        <button onclick="useOldVerifyMethod()" style="display:block;width:100%;background:#fff;color:#0a1530;padding:11px;border:1.5px solid #d1d5db;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">🆔 ใช้รหัสเครื่อง 4 ตัว (ให้ admin ปลดล็อก)</button>
+      </div>
+
       <a href="javascript:logout()" style="display:block;margin-top:12px;color:#6b7280;font-size:12px;text-decoration:underline">ใช้เบอร์อื่น</a>
     </div>
   `;

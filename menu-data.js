@@ -188,6 +188,121 @@ window.showOpenInSafariHelp = function() {
   modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
 };
 
+// 🍳 OPTION PRESETS — exposed to admin UI so when shop owner adds a new
+//    custom menu item, they can pick which option groups apply (spice level,
+//    protein selection, egg, premium, etc.) without writing JSON.
+//
+//    Each preset has:
+//      - label   : display text in the admin dropdown
+//      - desc    : short description of the choices
+//      - build() : returns the actual option group object
+//
+//    Custom items in menuConfig.custom[] reference presets via
+//    `optionPresetKeys: ['spice_level', 'egg_5']`. applyMenuConfig() (below)
+//    materializes these into real optionGroups at render time.
+window.OPTION_PRESETS = {
+  protein_required_basic: {
+    label: '🥩 เลือกเนื้อ (1 อย่าง บังคับ)',
+    desc: 'หมูชิ้น/หมูสับ/ไก่/แหนม',
+    build: () => ({ kind: 'required', label: '🥩 เลือกเนื้อ (1 อย่าง · ไม่คิดเงินเพิ่ม)', min: 1, max: 1, priceEach: 0, choices: ['หมูชิ้น','หมูสับ','ไก่','แหนม'] }),
+  },
+  protein_required_kaopad_kai: {
+    label: '🥩 เลือกเนื้อ ข้าวไข่เจียว',
+    desc: 'หมูสับ/ไก่สับ/แหนม',
+    build: () => ({ kind: 'required', label: '🥩 เลือกเนื้อ (1 อย่าง · ไม่คิดเงินเพิ่ม)', min: 1, max: 1, priceEach: 0, choices: ['หมูสับ','ไก่สับ','แหนม'] }),
+  },
+  protein_required_noodle: {
+    label: '🥩 เลือกเนื้อผัด/ราดหน้า',
+    desc: 'หมูชิ้น/หมูสับ/ไก่',
+    build: () => ({ kind: 'required', label: '🥩 เลือกเนื้อ (1 อย่าง · ไม่คิดเงินเพิ่ม)', min: 1, max: 1, priceEach: 0, choices: ['หมูชิ้น','หมูสับ','ไก่'] }),
+  },
+  protein_basic_kaprao: {
+    label: '🥩 เนื้อพื้นฐานกระเพรา 0-3 อย่าง (ฟรี)',
+    desc: 'หมูสับ/หมูชิ้น/ไก่/เครื่องในไก่/หน่อไม้ดอง',
+    build: () => ({ kind: 'addOn', label: '🥩 เนื้อพื้นฐาน (เลือก 1-3 · ไม่คิดเงินเพิ่ม)', min: 0, max: 3, priceEach: 0, choices: ['หมูสับ','หมูชิ้น','ไก่','เครื่องในไก่','หน่อไม้ดอง'] }),
+  },
+  protein_basic_tomyum: {
+    label: '🥩 เนื้อพื้นฐานต้มยำ 0-3 อย่าง (ฟรี)',
+    desc: 'หมูสับ/หมูชิ้น/ไก่',
+    build: () => ({ kind: 'addOn', label: '🥩 เนื้อพื้นฐาน (เลือก 1-3 · ไม่คิดเงินเพิ่ม)', min: 0, max: 3, priceEach: 0, choices: ['หมูสับ','หมูชิ้น','ไก่'] }),
+  },
+  premium_kaprao: {
+    label: '🦐 พรีเมี่ยมกระเพรา +10',
+    desc: 'หมูกรอบ/กุ้ง/ปลาหมึก/ไข่เยี้ยวม้า/รวมมิตร/ไข่ข้น',
+    build: () => ({ kind: 'addOn', label: '🦐 เนื้อพรีเมี่ยม (+10 ต่อรายการ)', min: 0, max: 99, priceEach: 10, choices: ['หมูกรอบ','กุ้ง','ปลาหมึก','ไข่เยี้ยวม้า','รวมมิตร(หมู+หมึก+กุ้ง)','ไข่ข้น'] }),
+  },
+  premium_kaopad: {
+    label: '🦐 พรีเมี่ยมข้าวผัด/ผัดทั่วไป +10',
+    desc: 'รวมมิตร/กุ้ง/ปลาหมึก/หมูกรอบ',
+    build: () => ({ kind: 'addOn', label: '🦐 เนื้อพรีเมี่ยม (+10 ต่อรายการ)', min: 0, max: 99, priceEach: 10, choices: ['รวมมิตร(หมู+หมึก+กุ้ง)','กุ้ง','ปลาหมึก','หมูกรอบ'] }),
+  },
+  premium_tomyum: {
+    label: '🦐 พรีเมี่ยมต้มยำ +10',
+    desc: 'กุ้ง/ปลาหมึก/รวมมิตร',
+    build: () => ({ kind: 'addOn', label: '🦐 เนื้อพรีเมี่ยม (+10 ต่อรายการ)', min: 0, max: 99, priceEach: 10, choices: ['กุ้ง','ปลาหมึก','รวมมิตร(หมู+หมึก+กุ้ง)'] }),
+  },
+  spice_level: {
+    label: '🌶️ ระดับความเผ็ด',
+    desc: 'ไม่เผ็ด/น้อย/ปกติ/มาก',
+    build: () => ({ kind: 'required', label: '🌶️ ระดับความเผ็ด', min: 1, max: 1, priceEach: 0, choices: ['ไม่เผ็ด','เผ็ดน้อย','เผ็ดปรกติ','เผ็ดมาก'] }),
+  },
+  egg_5: {
+    label: '🥚 เพิ่มไข่ +5',
+    desc: 'ไข่ดาวสุก/ไม่สุก/เจียว/ต้ม',
+    build: () => ({ kind: 'addOn', label: 'เพิ่มไข่ (+5)', min: 0, max: 99, priceEach: 5, choices: ['ไข่ดาวสุก','ไข่ดาวไม่สุก','ไข่เจียว','ไข่ต้ม'] }),
+  },
+  extra_10: {
+    label: '⭐ เพิ่มพิเศษ +10',
+    desc: 'พิเศษ',
+    build: () => ({ kind: 'addOn', label: 'เพิ่ม', min: 0, max: 1, priceEach: 10, choices: ['พิเศษ'] }),
+  },
+  extra_20: {
+    label: '⭐ เพิ่มพิเศษ +20 (ต้มยำ)',
+    desc: 'พิเศษ +20',
+    build: () => ({ kind: 'addOn', label: 'เพิ่ม', min: 0, max: 1, priceEach: 20, choices: ['พิเศษ'] }),
+  },
+  extra_kab_30: {
+    label: '⭐ พิเศษ +10 / กับข้าว +30',
+    desc: 'พิเศษ +10 หรือ กับข้าว +30',
+    build: () => ({ kind: 'addOn', label: 'เพิ่ม', min: 0, max: 99, priceEach: 0, choices: ['พิเศษ','กับข้าว'], prices: { 'พิเศษ': 10, 'กับข้าว': 30 } }),
+  },
+  extra_kab_10: {
+    label: '⭐ พิเศษ +10 / กับข้าว +10',
+    desc: 'พิเศษ +10 หรือ กับข้าว +10',
+    build: () => ({ kind: 'addOn', label: 'เพิ่ม', min: 0, max: 99, priceEach: 0, choices: ['พิเศษ','กับข้าว'], prices: { 'พิเศษ': 10, 'กับข้าว': 10 } }),
+  },
+  noodle_6: {
+    label: '🍜 เลือกเส้น 6 แบบ (ก๋วยเตี๋ยว)',
+    desc: 'เล็ก/ใหญ่/หมี่ขาว/บะหมี่/วุ้นเส้น/มาม่า',
+    build: () => ({ kind: 'required', label: 'เลือกเส้น', min: 1, max: 1, priceEach: 0, choices: ['เส้นเล็ก','เส้นใหญ่','หมี่ขาว','บะหมี่','วุ้นเส้น','มาม่า'] }),
+  },
+  noodle_4: {
+    label: '🍜 เลือกเส้น 4 แบบ (ผัด)',
+    desc: 'ใหญ่/หมี่/มาม่า/เล็ก',
+    build: () => ({ kind: 'required', label: 'เลือกเส้น', min: 1, max: 1, priceEach: 0, choices: ['เส้นใหญ่','เส้นหมี่','เส้นมาม่า','เส้นเล็ก'] }),
+  },
+  seafood_mix_10: {
+    label: '🦐 รวมมิตรทะเล +10',
+    desc: 'หมู+หมึก+กุ้ง',
+    build: () => ({ kind: 'addOn', label: 'เพิ่ม (+10)', min: 0, max: 1, priceEach: 10, choices: ['รวมมิตรทะเล (หมู+หมึก+กุ้ง)'] }),
+  },
+  sweetness: {
+    label: '🍯 ระดับความหวาน',
+    desc: 'ไม่หวาน/น้อย/ปกติ/มาก',
+    build: () => ({ kind: 'required', label: '🍯 ระดับความหวาน', min: 1, max: 1, priceEach: 0, choices: ['ไม่หวาน','หวานน้อย','หวานปกติ','หวานมาก'] }),
+  },
+  drink_blend: {
+    label: '🥤 ปั่น +5',
+    desc: 'ปั่น (เครื่องดื่ม)',
+    build: () => ({ kind: 'addOn', label: 'ตัวเลือก (+5)', min: 0, max: 1, priceEach: 5, choices: ['ปั่น'] }),
+  },
+  drink_taiwan: {
+    label: '🥤 ปั่น/ไข่มุก/บุก/ฟรุ๊ตสลัด +5',
+    desc: 'ตัวเลือกชานมไต้หวัน',
+    build: () => ({ kind: 'addOn', label: 'ตัวเลือกพิเศษ (+5)', min: 0, max: 99, priceEach: 5, choices: ['ปั่น','ไข่มุก','บุก','ฟรุ๊ตสลัด'] }),
+  },
+};
+
 // 🛡️ XSS-safe HTML escape for any user-supplied string (customer name, note,
 //    address, etc.) that we interpolate into innerHTML. JS template literals
 //    don't escape — without this, a customer named '<img onerror=alert(1)>'
@@ -967,11 +1082,26 @@ window.applyMenuConfig = function(config) {
   }));
 
   custom.forEach(c => {
+    // 🩹 Materialize optionGroups from preset keys (new) — falls back to
+    //    raw optionGroups for legacy items that stored full groups directly.
+    let optionGroups = null;
+    if (Array.isArray(c.optionPresetKeys) && c.optionPresetKeys.length && window.OPTION_PRESETS) {
+      optionGroups = c.optionPresetKeys
+        .map(k => {
+          const p = window.OPTION_PRESETS[k];
+          if (!p || typeof p.build !== 'function') return null;
+          try { return p.build(); } catch (e) { console.warn('preset build', k, e); return null; }
+        })
+        .filter(Boolean);
+    } else if (Array.isArray(c.optionGroups) && c.optionGroups.length) {
+      optionGroups = c.optionGroups;
+    }
+
     const item = _filterDisabledChoices({
       id: c.id, name: c.name, price: Number(c.price),
       available: c.available !== false,
       ...(c.image ? { image: c.image } : {}),
-      ...(c.optionGroups ? { optionGroups: c.optionGroups } : {})
+      ...(optionGroups ? { optionGroups } : {})
     }, disabled);
     const targetCat = result.find(cat => cat.cat === c.category);
     if (targetCat) targetCat.items.push(item);
