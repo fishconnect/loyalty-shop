@@ -316,10 +316,10 @@
   <source src="data:audio/wav;base64,UklGRkIBAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YR4BAAAAAACA/n/8f/p/+H/2f/N/8H/sf+h/5H/gf9p/1n/Rf8t/xX/Af7p/tH+vf6l/o3+ef5h/k3+Of4N/fn94f3J/bX9o/2N/Xn9Yf1N/Tn9Jf0R/QH86fzZ/Mn8tfyl/JX8gfxx/GH8VfxJ/Dn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8I" type="audio/wav">
 </audio>
 
-<script type="module" src="firebase.js?v=20260503g"></script>
-<script src="offline-banner.js?v=20260503g"></script>
-<script src="menu-data.js?v=20260503g"></script>
-<script src="notifier.js?v=20260503g"></script>
+<script type="module" src="firebase.js?v=20260503h"></script>
+<script src="offline-banner.js?v=20260503h"></script>
+<script src="menu-data.js?v=20260503h"></script>
+<script src="notifier.js?v=20260503h"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 const STORAGE_KEY = 'loyaltyShopV2';
@@ -2135,7 +2135,11 @@ async function renderStickerCanvas(order, item, unitIdx, totalUnits, globalIdx, 
   ctx.imageSmoothingQuality = 'high';
   ctx.textRendering = 'geometricPrecision';
 
-  let y = 8;
+  // 🩹 No top padding inside the bitmap — the gap between the previous cut
+  //   and where this sticker's content starts is already imposed by the
+  //   physical cutter→print-head distance (~14-15mm hardware constant).
+  //   Adding more here just wastes paper.
+  let y = 0;
   const FONT = '"Sarabun", "Tahoma", "Noto Sans Thai", sans-serif';
   const setFont = (size, bold = false) => { ctx.font = `${bold ? 'bold ' : ''}${size}px ${FONT}`; };
   const center = (text, size, bold = false) => {
@@ -2252,7 +2256,11 @@ async function renderStickerCanvas(order, item, unitIdx, totalUnits, globalIdx, 
     y += 22;
   }
 
-  y += 4;
+  // 🩹 Bottom buffer inside the bitmap so the last text line has visible
+  //   white space before the cut, even if line-feed timing varies. Combined
+  //   with 3 line feeds below = ~3.5mm bitmap padding + ~12.6mm feeds =
+  //   ~16mm total clearance, enough for the ~14-15mm cutter→head gap.
+  y += 30;
   // Trim
   const final = document.createElement('canvas');
   final.width = W;
@@ -2285,7 +2293,10 @@ async function buildStickerESCPOS(order, item, unitIdx, totalUnits, globalIdx, g
     for (let i = start; i < end; i++) out.push(raster[i]);
     row += rowsThis;
   }
-  out.push(0x0A, 0x0A, 0x0A, 0x0A);   // 4 feeds for cutter clearance (~15mm)
+  // 🩹 3 line feeds (~12.6mm) — combined with the 30px bitmap bottom padding
+  //   above, gives ~16mm total clearance. Was 4 feeds (16.8mm) which over-fed
+  //   and left ~4mm of blank paper at the top of the NEXT sticker.
+  out.push(0x0A, 0x0A, 0x0A);
   out.push(0x1D, 0x56, 0x00);         // GS V 0 — full cut
   return new Uint8Array(out);
 }

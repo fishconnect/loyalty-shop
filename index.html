@@ -1026,6 +1026,90 @@
     <div class="hint">⬆️ คลิกเพื่อ copy link ส่งให้ลูกค้า</div>
   </div>
 
+  <!-- 🖨️ Printer card — moved above PDPA so shop can change settings quickly -->
+  <div class="card">
+    <h2>🖨️ เครื่องปริ้นใบเสร็จ</h2>
+    <p class="hint">รองรับ Thermal Printer กระดาษ 80mm — เชื่อมต่อ Bluetooth ตรง หรือใช้ระบบของ OS</p>
+
+    <div style="background:#ebf0ff;padding:12px;border-radius:10px;margin-bottom:12px">
+      <div style="font-weight:700;color:#1652F0;margin-bottom:8px">🔵 Bluetooth (ตรง — แนะนำ)</div>
+      <div id="btStatus" style="font-size:13px;margin-bottom:8px">⚫ ยังไม่ได้ตั้ง</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button onclick="connectBluetoothPrinter()" style="flex:1;min-width:140px;padding:10px;background:#1652F0;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer">🔵 เชื่อมต่อ Bluetooth</button>
+        <button onclick="reconnectBTAdmin()" style="padding:10px 14px;background:#fff;color:#1652F0;border:1.5px solid #1652F0;border-radius:8px;font-weight:700;cursor:pointer" title="ลองเชื่อมกับเครื่องเดิมโดยไม่ต้องเลือกใหม่">🔄 เชื่อมใหม่</button>
+        <button onclick="disconnectBT()" style="padding:10px 14px;background:#fff;color:#dc2626;border:1.5px solid #dc2626;border-radius:8px;font-weight:700;cursor:pointer">ตัดการเชื่อมต่อ</button>
+      </div>
+      <div class="hint" style="font-size:11px;margin-top:6px;color:#5c6982;line-height:1.5">
+        💡 <b>"🔄 เชื่อมใหม่"</b> = พยายามเชื่อมกับเครื่องเดิมที่เคย pair ไว้ — ไม่ต้องเลือกจาก list ใหม่<br>
+        ⚠️ ถ้าหลุดบ่อย: เปิด Chrome → ตั้งค่า → ความเป็นส่วนตัว → "เนื้อหาเว็บไซต์" → <b>อย่า</b>เลือก "ลบข้อมูลเมื่อปิดเบราว์เซอร์"
+      </div>
+
+      <!-- Payment QR uploader (PromptPay / Thai QR) -->
+      <div style="margin-top:10px;padding:10px;background:rgba(255,255,255,.5);border-radius:8px">
+        <label style="font-size:12px;font-weight:700;color:#1652F0;display:block;margin-bottom:6px">💰 QR ชำระเงิน (PromptPay / Thai QR)</label>
+        <div id="paymentQrPreview" style="text-align:center;padding:8px;background:#fff;border:1.5px dashed #d1ddff;border-radius:6px;margin-bottom:6px;min-height:80px;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:11px">ยังไม่ได้ตั้ง</div>
+        <input type="file" id="paymentQrFile" accept="image/*" onchange="onPaymentQrSelected(event)" style="display:none">
+        <button onclick="document.getElementById('paymentQrFile').click()" style="width:100%;padding:8px;background:#1652F0;color:#fff;border:none;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer">📤 อัพโหลด QR ชำระเงิน</button>
+        <button onclick="clearPaymentQr()" style="width:100%;margin-top:4px;padding:6px;background:#fff;color:#dc2626;border:1.5px solid #dc2626;border-radius:6px;font-weight:700;font-size:11px;cursor:pointer">🗑 ลบ QR</button>
+        <div class="hint" style="font-size:11px;margin-top:4px">ภาพ QR จะปรากฏท้ายใบเสร็จ — แนะนำให้ตัดเฉพาะ QR ก่อนอัพโหลด</div>
+      </div>
+
+      <!-- 🖨️ Print mode selector — Bitmap (Thai-safe) vs Text (fast, no Thai unless flashed) -->
+      <div style="margin-top:10px;padding:10px;background:rgba(255,255,255,.6);border-radius:8px">
+        <label style="font-size:12px;font-weight:700;color:#0a1530;display:block;margin-bottom:6px">🖨️ โหมดพิมพ์</label>
+        <select id="btPrintModeSelect" onchange="saveBtPrintMode()" style="width:100%;padding:9px;border:1.5px solid #d1ddff;border-radius:6px;font-size:13px;background:#fff;font-family:inherit;font-weight:700">
+          <option value="bitmap">🖼️ Bitmap (default · ภาษาไทยทุก printer)</option>
+          <option value="text">⚡ Text (เร็ว · ใช้ฟอนต์ใน printer · Thai needs flashed font)</option>
+        </select>
+        <div id="btPrintModeHint" class="hint" style="font-size:11px;margin-top:6px;line-height:1.5"></div>
+      </div>
+
+      <!-- Thai codepage selector (advanced — only if printer has Thai font) -->
+      <details style="margin-top:10px">
+        <summary style="font-size:12px;color:#6b7280;cursor:pointer">⚙️ ตั้งค่าขั้นสูง (Codepage / Layout)</summary>
+        <div style="margin-top:8px;padding:10px;background:rgba(255,255,255,.5);border-radius:8px">
+          <label style="font-size:12px;font-weight:700;color:#1652F0;display:block;margin-bottom:6px">🇹🇭 รหัสภาษาไทย (Thai Codepage)</label>
+          <select id="thaiCodepage" onchange="saveThaiCodepage()" style="width:100%;padding:8px;border:1.5px solid #d1ddff;border-radius:6px;font-size:13px;background:#fff;font-family:inherit">
+            <option value="21">21 — TIS-620 Thai Char Code 11</option>
+            <option value="20">20 — Thai Char Code 42</option>
+            <option value="30">30 — บางรุ่น</option>
+            <option value="70">70 — PC874 (Xprinter custom)</option>
+            <option value="255">255 — Thai (alt)</option>
+          </select>
+          <button onclick="bluetoothPrintThaiTest()" style="width:100%;margin-top:6px;padding:8px;background:#fff;color:#1652F0;border:1.5px solid #1652F0;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer">🇹🇭 ทดสอบพิมพ์ภาษาไทย (ลอง 5 รหัส)</button>
+          <div class="hint" style="font-size:11px;margin-top:4px;color:#dc2626">⚠️ <b>"5 รหัส" ใช้ text mode</b> — ถ้า printer ไม่มี Thai font จะออกเป็นภาษาจีน · ใช้ปุ่มข้างล่างแทน ⬇️</div>
+          <button onclick="bluetoothPrintBitmapTest()" style="width:100%;margin-top:8px;padding:10px;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border:none;border-radius:6px;font-weight:800;font-size:13px;cursor:pointer">🖼️ ทดสอบพิมพ์ Bitmap (ภาษาไทยสวยที่สุด ⭐)</button>
+          <div class="hint" style="font-size:11px;margin-top:4px;color:#16a34a">✅ <b>Bitmap mode = render ไทยเป็นรูป</b> — ใช้ได้ทุก printer · ไม่ต้องมี Thai font ใน printer</div>
+        </div>
+      </details>
+
+      <div class="hint" style="margin-top:8px;font-size:11.5px">
+        💡 รองรับ Chrome บน Android/Mac/Windows · iOS Safari ไม่รองรับ Web Bluetooth (ใช้ AirPrint แทน)
+      </div>
+    </div>
+
+    <div class="toggle-row">
+      <input type="checkbox" id="autoPrintToggle" onchange="saveAutoPrint()">
+      <label for="autoPrintToggle" style="margin:0">🔔 พิมพ์ใบเสร็จอัตโนมัติเมื่อมี order ใหม่</label>
+    </div>
+    <div class="toggle-row" style="margin-top:6px">
+      <input type="checkbox" id="stickerPrintToggle" onchange="saveStickerSetting()">
+      <label for="stickerPrintToggle" style="margin:0">🏷️ พิมพ์สติกเกอร์ติดกล่องอาหาร (1 จาน 1 สติกเกอร์ · auto-cut)</label>
+    </div>
+    <div class="hint" style="font-size:11px;color:#5c6982;margin:4px 0 0 28px">
+      ✅ ใบเสร็จรวมพิมพ์ก่อน → auto-cut → แล้วตามด้วยสติกเกอร์รายจาน (cut คั่นทุกอัน)<br>
+      ใช้ผ่าน Bluetooth printer เท่านั้น · กดปุ่ม 🖨️ ที่ครัว = พิมพ์ทั้งใบเสร็จ + สติกเกอร์
+    </div>
+    <button class="btn-secondary" onclick="testPrintReceipt()" style="width:100%;margin-top:8px">🖨️ ทดสอบพิมพ์ใบเสร็จ (ใช้ระบบ OS Print)</button>
+
+    <div class="hint" style="margin-top:10px;line-height:1.6;font-size:12px">
+      <b>📋 ตั้งค่าเครื่องปริ้น 80mm:</b><br>
+      <b>วิธี A (แนะนำ — Bluetooth ตรง):</b> เปิด Bluetooth บนเครื่อง → กด "🔵 เชื่อมต่อ" ด้านบน → เลือกเครื่อง<br>
+      <b>วิธี B (ผ่าน OS):</b> Pair Bluetooth/USB ที่ OS → ติดตั้ง driver → ใช้ปุ่ม "ทดสอบพิมพ์"<br>
+      📝 รองรับ ESC/POS · กระดาษ 80mm × 80mm
+    </div>
+  </div>
+
   <!-- 🔒 PDPA Panel -->
   <div class="card" style="border:2px solid #1652F0">
     <h2>🔒 PDPA · ข้อมูลส่วนบุคคล</h2>
@@ -1113,89 +1197,6 @@
         <button id="editorDeleteBtn" class="btn-danger" onclick="deleteItemEditor()" style="width:100%;display:none">🗑️ ลบเมนูนี้</button>
         <button class="btn-ghost" onclick="closeItemEditor()" style="width:100%">ยกเลิก</button>
       </div>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>🖨️ เครื่องปริ้นใบเสร็จ</h2>
-    <p class="hint">รองรับ Thermal Printer กระดาษ 80mm — เชื่อมต่อ Bluetooth ตรง หรือใช้ระบบของ OS</p>
-
-    <div style="background:#ebf0ff;padding:12px;border-radius:10px;margin-bottom:12px">
-      <div style="font-weight:700;color:#1652F0;margin-bottom:8px">🔵 Bluetooth (ตรง — แนะนำ)</div>
-      <div id="btStatus" style="font-size:13px;margin-bottom:8px">⚫ ยังไม่ได้ตั้ง</div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap">
-        <button onclick="connectBluetoothPrinter()" style="flex:1;min-width:140px;padding:10px;background:#1652F0;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer">🔵 เชื่อมต่อ Bluetooth</button>
-        <button onclick="reconnectBTAdmin()" style="padding:10px 14px;background:#fff;color:#1652F0;border:1.5px solid #1652F0;border-radius:8px;font-weight:700;cursor:pointer" title="ลองเชื่อมกับเครื่องเดิมโดยไม่ต้องเลือกใหม่">🔄 เชื่อมใหม่</button>
-        <button onclick="disconnectBT()" style="padding:10px 14px;background:#fff;color:#dc2626;border:1.5px solid #dc2626;border-radius:8px;font-weight:700;cursor:pointer">ตัดการเชื่อมต่อ</button>
-      </div>
-      <div class="hint" style="font-size:11px;margin-top:6px;color:#5c6982;line-height:1.5">
-        💡 <b>"🔄 เชื่อมใหม่"</b> = พยายามเชื่อมกับเครื่องเดิมที่เคย pair ไว้ — ไม่ต้องเลือกจาก list ใหม่<br>
-        ⚠️ ถ้าหลุดบ่อย: เปิด Chrome → ตั้งค่า → ความเป็นส่วนตัว → "เนื้อหาเว็บไซต์" → <b>อย่า</b>เลือก "ลบข้อมูลเมื่อปิดเบราว์เซอร์"
-      </div>
-
-      <!-- Payment QR uploader (PromptPay / Thai QR) -->
-      <div style="margin-top:10px;padding:10px;background:rgba(255,255,255,.5);border-radius:8px">
-        <label style="font-size:12px;font-weight:700;color:#1652F0;display:block;margin-bottom:6px">💰 QR ชำระเงิน (PromptPay / Thai QR)</label>
-        <div id="paymentQrPreview" style="text-align:center;padding:8px;background:#fff;border:1.5px dashed #d1ddff;border-radius:6px;margin-bottom:6px;min-height:80px;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:11px">ยังไม่ได้ตั้ง</div>
-        <input type="file" id="paymentQrFile" accept="image/*" onchange="onPaymentQrSelected(event)" style="display:none">
-        <button onclick="document.getElementById('paymentQrFile').click()" style="width:100%;padding:8px;background:#1652F0;color:#fff;border:none;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer">📤 อัพโหลด QR ชำระเงิน</button>
-        <button onclick="clearPaymentQr()" style="width:100%;margin-top:4px;padding:6px;background:#fff;color:#dc2626;border:1.5px solid #dc2626;border-radius:6px;font-weight:700;font-size:11px;cursor:pointer">🗑 ลบ QR</button>
-        <div class="hint" style="font-size:11px;margin-top:4px">ภาพ QR จะปรากฏท้ายใบเสร็จ — แนะนำให้ตัดเฉพาะ QR ก่อนอัพโหลด</div>
-      </div>
-
-      <!-- 🖨️ Print mode selector — Bitmap (Thai-safe) vs Text (fast, no Thai unless flashed) -->
-      <div style="margin-top:10px;padding:10px;background:rgba(255,255,255,.6);border-radius:8px">
-        <label style="font-size:12px;font-weight:700;color:#0a1530;display:block;margin-bottom:6px">🖨️ โหมดพิมพ์</label>
-        <select id="btPrintModeSelect" onchange="saveBtPrintMode()" style="width:100%;padding:9px;border:1.5px solid #d1ddff;border-radius:6px;font-size:13px;background:#fff;font-family:inherit;font-weight:700">
-          <option value="bitmap">🖼️ Bitmap (default · ภาษาไทยทุก printer)</option>
-          <option value="text">⚡ Text (เร็ว · ใช้ฟอนต์ใน printer · Thai needs flashed font)</option>
-        </select>
-        <div id="btPrintModeHint" class="hint" style="font-size:11px;margin-top:6px;line-height:1.5"></div>
-      </div>
-
-      <!-- Thai codepage selector (advanced — only if printer has Thai font) -->
-      <details style="margin-top:10px">
-        <summary style="font-size:12px;color:#6b7280;cursor:pointer">⚙️ ตั้งค่าขั้นสูง (Codepage / Layout)</summary>
-        <div style="margin-top:8px;padding:10px;background:rgba(255,255,255,.5);border-radius:8px">
-          <label style="font-size:12px;font-weight:700;color:#1652F0;display:block;margin-bottom:6px">🇹🇭 รหัสภาษาไทย (Thai Codepage)</label>
-          <select id="thaiCodepage" onchange="saveThaiCodepage()" style="width:100%;padding:8px;border:1.5px solid #d1ddff;border-radius:6px;font-size:13px;background:#fff;font-family:inherit">
-            <option value="21">21 — TIS-620 Thai Char Code 11</option>
-            <option value="20">20 — Thai Char Code 42</option>
-            <option value="30">30 — บางรุ่น</option>
-            <option value="70">70 — PC874 (Xprinter custom)</option>
-            <option value="255">255 — Thai (alt)</option>
-          </select>
-          <button onclick="bluetoothPrintThaiTest()" style="width:100%;margin-top:6px;padding:8px;background:#fff;color:#1652F0;border:1.5px solid #1652F0;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer">🇹🇭 ทดสอบพิมพ์ภาษาไทย (ลอง 5 รหัส)</button>
-          <div class="hint" style="font-size:11px;margin-top:4px;color:#dc2626">⚠️ <b>"5 รหัส" ใช้ text mode</b> — ถ้า printer ไม่มี Thai font จะออกเป็นภาษาจีน · ใช้ปุ่มข้างล่างแทน ⬇️</div>
-          <button onclick="bluetoothPrintBitmapTest()" style="width:100%;margin-top:8px;padding:10px;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border:none;border-radius:6px;font-weight:800;font-size:13px;cursor:pointer">🖼️ ทดสอบพิมพ์ Bitmap (ภาษาไทยสวยที่สุด ⭐)</button>
-          <div class="hint" style="font-size:11px;margin-top:4px;color:#16a34a">✅ <b>Bitmap mode = render ไทยเป็นรูป</b> — ใช้ได้ทุก printer · ไม่ต้องมี Thai font ใน printer</div>
-        </div>
-      </details>
-
-      <div class="hint" style="margin-top:8px;font-size:11.5px">
-        💡 รองรับ Chrome บน Android/Mac/Windows · iOS Safari ไม่รองรับ Web Bluetooth (ใช้ AirPrint แทน)
-      </div>
-    </div>
-
-    <div class="toggle-row">
-      <input type="checkbox" id="autoPrintToggle" onchange="saveAutoPrint()">
-      <label for="autoPrintToggle" style="margin:0">🔔 พิมพ์ใบเสร็จอัตโนมัติเมื่อมี order ใหม่</label>
-    </div>
-    <div class="toggle-row" style="margin-top:6px">
-      <input type="checkbox" id="stickerPrintToggle" onchange="saveStickerSetting()">
-      <label for="stickerPrintToggle" style="margin:0">🏷️ พิมพ์สติกเกอร์ติดกล่องอาหาร (1 จาน 1 สติกเกอร์ · auto-cut)</label>
-    </div>
-    <div class="hint" style="font-size:11px;color:#5c6982;margin:4px 0 0 28px">
-      ✅ ใบเสร็จรวมพิมพ์ก่อน → auto-cut → แล้วตามด้วยสติกเกอร์รายจาน (cut คั่นทุกอัน)<br>
-      ใช้ผ่าน Bluetooth printer เท่านั้น · กดปุ่ม 🖨️ ที่ครัว = พิมพ์ทั้งใบเสร็จ + สติกเกอร์
-    </div>
-    <button class="btn-secondary" onclick="testPrintReceipt()" style="width:100%;margin-top:8px">🖨️ ทดสอบพิมพ์ใบเสร็จ (ใช้ระบบ OS Print)</button>
-
-    <div class="hint" style="margin-top:10px;line-height:1.6;font-size:12px">
-      <b>📋 ตั้งค่าเครื่องปริ้น 80mm:</b><br>
-      <b>วิธี A (แนะนำ — Bluetooth ตรง):</b> เปิด Bluetooth บนเครื่อง → กด "🔵 เชื่อมต่อ" ด้านบน → เลือกเครื่อง<br>
-      <b>วิธี B (ผ่าน OS):</b> Pair Bluetooth/USB ที่ OS → ติดตั้ง driver → ใช้ปุ่ม "ทดสอบพิมพ์"<br>
-      📝 รองรับ ESC/POS · กระดาษ 80mm × 80mm
     </div>
   </div>
 
@@ -1388,10 +1389,10 @@
 <!-- Print receipt area (hidden until print) -->
 <div id="printArea"></div>
 
-<script type="module" src="firebase.js?v=20260503g"></script>
-<script src="offline-banner.js?v=20260503g"></script>
-<script src="menu-data.js?v=20260503g"></script>
-<script src="notifier.js?v=20260503g"></script>
+<script type="module" src="firebase.js?v=20260503h"></script>
+<script src="offline-banner.js?v=20260503h"></script>
+<script src="menu-data.js?v=20260503h"></script>
+<script src="notifier.js?v=20260503h"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 
