@@ -1214,9 +1214,9 @@
 
 <div class="toast" id="toast"></div>
 
-<script type="module" src="firebase.js?v=20260504i"></script>
-<script src="offline-banner.js?v=20260504i"></script>
-<script src="menu-data.js?v=20260504i"></script>
+<script type="module" src="firebase.js?v=20260504j"></script>
+<script src="offline-banner.js?v=20260504j"></script>
+<script src="menu-data.js?v=20260504j"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 const STORAGE_KEY = 'loyaltyShopV2';
@@ -1849,6 +1849,37 @@ function renderMenu() {
 // Subscribe to menu config changes from cloud (regular OR factory)
 whenCloudReady(() => {
   if (isFactoryMode) {
+    // 🔍 In factory mode we ALSO subscribe to the regular menu so the
+    //    factory can borrow images from regular items via fuzzy name match.
+    //    Cache as window._regularEffectiveMenu — applyFactoryConfig reads
+    //    it during the next refresh.
+    window.cloud.onMenuConfig?.(rconfig => {
+      const rcfg = rconfig || { overrides: {}, custom: [] };
+      // Merge cached cloud images so the regular menu carries images here too
+      if (window._menuImagesCache) {
+        if (Array.isArray(rcfg.custom)) rcfg.custom.forEach(c => {
+          if (c && c.id && window._menuImagesCache[c.id]) c.image = window._menuImagesCache[c.id];
+        });
+        Object.entries(window._menuImagesCache).forEach(([id, dataUrl]) => {
+          if (!rcfg.overrides) rcfg.overrides = {};
+          if (!rcfg.overrides[id]) rcfg.overrides[id] = {};
+          if (!rcfg.overrides[id].image) rcfg.overrides[id].image = dataUrl;
+        });
+      }
+      window._regularEffectiveMenu = window.applyMenuConfig(rcfg);
+      // Recompute factory menu with regular images now available
+      EFFECTIVE_MENU = window.applyFactoryConfig(factoryConfig);
+      renderMenu();
+    });
+    if (window.cloud?.onMenuImages) {
+      window.cloud.onMenuImages(images => {
+        window._menuImagesCache = images || {};
+        // No menuConfig here, so just trigger a recompute via the existing
+        // cached _regularEffectiveMenu path on the next onMenuConfig fire.
+        EFFECTIVE_MENU = window.applyFactoryConfig(factoryConfig);
+        renderMenu();
+      });
+    }
     window.cloud.onFactoryConfig?.(config => {
       factoryConfig = config || { overrides: {}, custom: [] };
       localStorage.setItem('factoryConfig', JSON.stringify(factoryConfig));
@@ -1863,6 +1894,8 @@ whenCloudReady(() => {
       if (window._menuImagesCache) _mergeMenuImagesIntoConfig(window._menuImagesCache);
       localStorage.setItem('menuConfig', JSON.stringify(menuConfig));
       EFFECTIVE_MENU = window.applyMenuConfig(menuConfig);
+      // 🔍 Cache for fuzzy image borrows by factory mode
+      window._regularEffectiveMenu = isFactoryMode ? window._regularEffectiveMenu : EFFECTIVE_MENU;
       renderMenu();
       updateCartBar();
       renderHeroChips();
@@ -1875,6 +1908,7 @@ whenCloudReady(() => {
         _mergeMenuImagesIntoConfig(images || {});
         localStorage.setItem('menuConfig', JSON.stringify(menuConfig));
         EFFECTIVE_MENU = window.applyMenuConfig(menuConfig);
+        if (!isFactoryMode) window._regularEffectiveMenu = EFFECTIVE_MENU;
         renderMenu();
       });
     }

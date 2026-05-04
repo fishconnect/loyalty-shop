@@ -1068,12 +1068,65 @@ function _filterDisabledChoices(item, disabledSet) {
   return { ...item, optionGroups: filtered };
 }
 
+// 🔍 Fuzzy match a factory item name to a regular MENU item — used to
+//    auto-borrow images so admin doesn't have to upload twice. Strategy:
+//    1. exact name match (case + whitespace insensitive)
+//    2. either name contains the other after stripping common prefixes
+//       like "ข้าว", "ผัด", "ราด" — e.g. factory "ผัดกระเพรา" matches
+//       customer "ข้าวผัดกระเพรา" because both end with "กระเพรา"
+//    Returns the regular menu item that wins, or null.
+//
+//    `sourceMenu` lets the caller pass an EFFECTIVE menu (post-applyMenuConfig
+//    + cloud images merged) so the returned item carries its current image.
+//    Defaults to window._regularEffectiveMenu (set by menu.html / index.html
+//    once their menuConfig syncs) → window.MENU (raw, no images) as last resort.
+window.findRegularMenuByFuzzyName = function(factoryName, sourceMenu) {
+  const menu = sourceMenu || window._regularEffectiveMenu || window.MENU || [];
+  if (!factoryName || !menu.length) return null;
+  const normalize = (s) => String(s || '').toLowerCase().replace(/\s+/g, '').trim();
+  const stripPrefix = (s) => normalize(s)
+    .replace(/^(ข้าว|ผัด|ราด|ราดข้าว|มาม่า|ก๋วยเตี๋ยว)/g, '');
+  const target = normalize(factoryName);
+  const targetCore = stripPrefix(factoryName);
+  if (!target) return null;
+
+  let exact = null, fuzzy = null;
+  for (const cat of menu) {
+    for (const it of (cat.items || [])) {
+      const n = normalize(it.name);
+      if (n === target) { exact = it; break; }
+      if (!fuzzy && targetCore.length >= 4) {
+        const itCore = stripPrefix(it.name);
+        // 🩹 Both cores must be non-trivial (≥4 chars) to count as a match —
+        //    empty/short itCore would `.includes(anything) → true` and cause
+        //    junk matches like "มาม่าผัดขี้เมา" → "ข้าวผัด".
+        if (itCore && itCore.length >= 4 && (
+          itCore === targetCore ||
+          itCore.includes(targetCore) ||
+          targetCore.includes(itCore)
+        )) {
+          fuzzy = it;
+        }
+      }
+    }
+    if (exact) break;
+  }
+  return exact || fuzzy || null;
+};
+
 // 🏭 Apply factory menu config (overrides + custom factory items + disabledChoices)
 window.applyFactoryConfig = function(config) {
   config = config || { overrides: {}, custom: [], disabledChoices: [] };
   const ov = config.overrides || {};
   const custom = config.custom || [];
   const disabled = new Set(config.disabledChoices || []);
+
+  // Helper: borrow image from regular menu by fuzzy name match. Used when
+  //    factory item has no explicit image — saves admin from uploading twice.
+  const _borrowImage = (factoryName) => {
+    const m = window.findRegularMenuByFuzzyName(factoryName);
+    return m && m.image ? m.image : null;
+  };
 
   let result = (window.FACTORY_MENU || []).map(cat => ({
     ...cat,
@@ -1085,18 +1138,38 @@ window.applyFactoryConfig = function(config) {
         ...it,
         ...(o.name ? { name: o.name } : {}),
         ...(o.price != null ? { price: Number(o.price) } : {}),
+        ...(o.image ? { image: o.image } : {}),
         available: o.available !== false
       };
+      // 🩹 If still no image, try to borrow from regular menu
+      if (!item.image) {
+        const borrowed = _borrowImage(item.name);
+        if (borrowed) item.image = borrowed;
+      }
       return _filterDisabledChoices(item, disabled);
     })
   }));
 
   custom.forEach(c => {
+    const explicitImage = c.image || null;
     const item = _filterDisabledChoices({
       id: c.id, name: c.name, price: Number(c.price),
       available: c.available !== false,
-      ...(c.optionGroups ? { optionGroups: c.optionGroups } : {})
+      ...(explicitImage ? { image: explicitImage } : {}),
+      ...(c.optionGroups ? { optionGroups: c.optionGroups } : {}),
+      ...(Array.isArray(c.optionPresetKeys) ? { optionPresetKeys: c.optionPresetKeys } : {}),
     }, disabled);
+    if (!item.image) {
+      const borrowed = _borrowImage(item.name);
+      if (borrowed) item.image = borrowed;
+    }
+    // Materialize optionPresetKeys → optionGroups if the helper exists (added
+    // in commit 8f1d59a for regular menu — same logic applies for factory)
+    if (Array.isArray(item.optionPresetKeys) && window.OPTION_PRESETS) {
+      item.optionGroups = item.optionPresetKeys
+        .map(k => { const p = window.OPTION_PRESETS[k]; if (!p?.build) return null; try { return p.build(); } catch (e) { return null; } })
+        .filter(Boolean);
+    }
     const targetCat = result.find(cat => cat.cat === c.category);
     if (targetCat) targetCat.items.push(item);
     else result.push({ cat: c.category || 'อื่นๆ', emoji: c.emoji || '🏭', items: [item] });

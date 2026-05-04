@@ -1147,6 +1147,17 @@
     </div>
   </div>
 
+  <!-- 🏭 Factory menu manager — same item editor as regular, scoped to factoryConfig -->
+  <div class="card">
+    <h2>🏭 จัดการเมนูโรงงาน</h2>
+    <p class="hint">เมนูสำหรับโรงงาน · เลือก add-on / รูปได้เหมือนเมนูทั่วไป · รูปจะ borrow จากเมนูทั่วไปอัตโนมัติ ถ้าชื่อตรงกัน</p>
+    <div id="factoryMenuManager"></div>
+    <button class="btn-primary" onclick="openNewItemEditor({factory:true})" style="width:100%;margin-top:12px;background:linear-gradient(135deg,#1652F0,#0738C9)">➕ เพิ่มเมนูโรงงาน</button>
+    <div class="hint" style="font-size:11px;margin-top:8px;line-height:1.5">
+      💡 รูปอาหาร: ถ้าไม่ใส่ ระบบจะค้นเมนูทั่วไปด้วยชื่อใกล้เคียง (เช่น "ผัดกระเพรา" ↔ "ข้าวผัดกระเพรา") แล้วใช้รูปเดียวกัน — ลด work อัปโหลด 2 ที่
+    </div>
+  </div>
+
   <div class="card">
     <h2>📋 จัดการเมนู</h2>
     <p class="hint">กดที่เมนูเพื่อแก้ — ตั้งราคา ใส่รูป ตั้ง "หมด" ลูกค้าเห็นทันที</p>
@@ -1416,10 +1427,10 @@
 <!-- Print receipt area (hidden until print) -->
 <div id="printArea"></div>
 
-<script type="module" src="firebase.js?v=20260504i"></script>
-<script src="offline-banner.js?v=20260504i"></script>
-<script src="menu-data.js?v=20260504i"></script>
-<script src="notifier.js?v=20260504i"></script>
+<script type="module" src="firebase.js?v=20260504j"></script>
+<script src="offline-banner.js?v=20260504j"></script>
+<script src="menu-data.js?v=20260504j"></script>
+<script src="notifier.js?v=20260504j"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 
@@ -1611,6 +1622,7 @@ document.querySelectorAll('.tab').forEach(t => {
       document.getElementById('settingGoal').value = db.settings.goal;
       document.getElementById('settingPrice').value = db.settings.pricePerBox || 50;
       renderMenuManager();
+      if (typeof renderFactoryMenuManager === 'function') try { renderFactoryMenuManager(); } catch (e) {}
       if (typeof renderPromoCardsList === 'function') try { renderPromoCardsList(); } catch (e) {}
       initPrinterToggle();
     }
@@ -6081,6 +6093,44 @@ function renderMenuManager() {
   `).join('');
 }
 
+// 🏭 Factory menu manager — same shape as renderMenuManager but reads
+//    factoryConfig and opens the editor in factory mode.
+function renderFactoryMenuManager() {
+  const wrap = document.getElementById('factoryMenuManager');
+  if (!wrap) return;
+  const allCats = window.applyFactoryConfig ? window.applyFactoryConfig(factoryConfig) : (window.FACTORY_MENU || []);
+  wrap.innerHTML = allCats.map(cat => `
+    <div style="margin-bottom:18px">
+      <div style="font-weight:700;color:#1652F0;font-size:14px;padding:8px 0;display:flex;justify-content:space-between;align-items:center">
+        <span>${escapeHtml(cat.emoji || '🏭')} ${escapeHtml(cat.cat || '')}</span>
+        <span style="font-size:11px;color:#9ca3af;font-weight:500">${cat.items.length} รายการ</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      ${cat.items.map(it => {
+        const isCustom = !!factoryConfig.custom?.find(c => c.id === it.id);
+        const ov = factoryConfig.overrides?.[it.id] || {};
+        const img = it.image || ov.image || '';   // empty falls back to emoji below
+        return `
+        <div onclick="openItemEditor('${it.id}', {factory:true})" style="background:#fff;border:1.5px solid ${it.available!==false?'#e2e7ef':'#fee2e2'};border-radius:12px;padding:10px;cursor:pointer;display:flex;gap:10px;align-items:center;position:relative;transition:border-color .15s">
+          <div style="width:50px;height:50px;flex-shrink:0;border-radius:8px;overflow:hidden;background:linear-gradient(135deg,#ebf0ff,#c5d3ff);display:grid;place-items:center;font-size:24px">
+            ${img ? `<img src="${img}" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none';this.parentElement.innerHTML='${escapeHtml(cat.emoji || '🏭')}'">` : (cat.emoji || '🏭')}
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:700;font-size:13px;color:#0a1530;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(it.name)}</div>
+            <div style="display:flex;gap:6px;align-items:center;margin-top:4px">
+              <span style="font-size:13px;font-weight:800;color:#1652F0">฿${it.price}</span>
+              ${it.available===false ? '<span style="background:#fee2e2;color:#dc2626;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:700">หมด</span>' : ''}
+              ${isCustom ? '<span style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:700">ใหม่</span>' : ''}
+            </div>
+          </div>
+        </div>`;
+      }).join('')}
+      </div>
+    </div>
+  `).join('') || '<div style="text-align:center;color:#9ca3af;font-size:13px;padding:14px">ยังไม่มีเมนูโรงงาน — กดปุ่ม "เพิ่มเมนูโรงงาน" ด้านล่าง</div>';
+}
+window.renderFactoryMenuManager = renderFactoryMenuManager;
+
 // ========== Web Bluetooth Printer ==========
 const BT_SERVICES = [
   '000018f0-0000-1000-8000-00805f9b34fb',
@@ -7028,10 +7078,15 @@ let editingItemOptionPresetKeys = []; // 🍳 list of OPTION_PRESETS keys for th
 let editingItemOptionsMode = 'default'; // 'default' = use built-in · 'override' = use preset keys
 let editingItemDefaultOptionLabels = []; // 🍳 labels of built-in groups (for display in default mode)
 let editingItemDefaultPresetKeys = []; // 🍳 original built-in mapped keys (for "↩️ คืนค่าเริ่มต้น")
+let editingIsFactory = false; // 🏭 true when the editor is editing a factory menu item (writes to factoryConfig)
 
 
-function openItemEditor(itemId) {
-  const allCats = window.applyMenuConfig ? window.applyMenuConfig(menuConfig) : (window.MENU || []);
+function openItemEditor(itemId, opts) {
+  const isFactory = !!(opts && opts.factory);
+  editingIsFactory = isFactory;
+  const sourceConfig = isFactory ? factoryConfig : menuConfig;
+  const apply = isFactory ? window.applyFactoryConfig : window.applyMenuConfig;
+  const allCats = apply ? apply(sourceConfig) : (isFactory ? (window.FACTORY_MENU || []) : (window.MENU || []));
   let foundItem = null, foundCat = null;
   for (const c of allCats) {
     const it = c.items.find(i => i.id === itemId);
@@ -7040,15 +7095,15 @@ function openItemEditor(itemId) {
   if (!foundItem) { toast('⚠️ ไม่พบเมนู'); return; }
 
   editingItemId = itemId;
-  editingItemImage = foundItem.image || (menuConfig.overrides?.[itemId]?.image) || null;
-  editingIsCustom = !!menuConfig.custom?.find(c => c.id === itemId);
+  editingItemImage = foundItem.image || (sourceConfig.overrides?.[itemId]?.image) || null;
+  editingIsCustom = !!sourceConfig.custom?.find(c => c.id === itemId);
   // 🍳 Load option preset keys based on item type:
   //    - Custom item: always uses optionPresetKeys (mode = 'override')
   //    - Built-in item: check if override has optionPresetKeys
   //        if yes → mode = 'override', load those keys
   //        if no  → mode = 'default', editor shows current built-in groups read-only
-  const customRecord = menuConfig.custom?.find(c => c.id === itemId);
-  const overrideRecord = menuConfig.overrides?.[itemId];
+  const customRecord = sourceConfig.custom?.find(c => c.id === itemId);
+  const overrideRecord = sourceConfig.overrides?.[itemId];
   if (editingIsCustom) {
     editingItemOptionsMode = 'override';
     editingItemOptionPresetKeys = (customRecord && Array.isArray(customRecord.optionPresetKeys))
@@ -7076,8 +7131,13 @@ function openItemEditor(itemId) {
   editingItemDefaultOptionLabels = (foundItem.optionGroups || []).map(g => g.label || '(no label)');
   const isAddOn = !!foundCat.isAddOn;
 
-  // Build category list (exclude add-on category from picker — addOn toggle handles that)
-  const cats = (window.MENU || []).filter(c => !c.isAddOn).map(c => c.cat);
+  // Build category list — pull from factory or regular menu depending on mode.
+  //    Pull current categories from the EFFECTIVE menu so freshly-added custom
+  //    categories (created by admin themselves) show up in the picker too.
+  const baseCats = isFactory
+    ? ((typeof getEffectiveFactoryMenu === 'function' ? getEffectiveFactoryMenu() : (window.FACTORY_MENU || [])))
+    : (window.MENU || []);
+  const cats = baseCats.filter(c => !c.isAddOn).map(c => c.cat);
 
   // Title
   document.getElementById('editorTitle').textContent = `✏️ ${foundItem.name.slice(0, 30)}${foundItem.name.length > 30 ? '…' : ''}`;
@@ -7112,7 +7172,9 @@ function openItemEditor(itemId) {
   }, 100);
 }
 
-function openNewItemEditor() {
+function openNewItemEditor(opts) {
+  const isFactory = !!(opts && opts.factory);
+  editingIsFactory = isFactory;
   editingItemId = null;
   editingItemImage = null;
   editingIsCustom = true;
@@ -7120,7 +7182,10 @@ function openNewItemEditor() {
   editingItemOptionsMode = 'override'; // custom items always in override mode
   editingItemDefaultOptionLabels = [];
   editingItemDefaultPresetKeys = [];
-  const cats = (window.MENU || []).filter(c => !c.isAddOn).map(c => c.cat);
+  const baseCats = isFactory
+    ? ((typeof getEffectiveFactoryMenu === 'function' ? getEffectiveFactoryMenu() : (window.FACTORY_MENU || [])))
+    : (window.MENU || []);
+  const cats = baseCats.filter(c => !c.isAddOn).map(c => c.cat);
   document.getElementById('editorTitle').textContent = '➕ เพิ่มเมนูใหม่';
   document.getElementById('editorName').value = '';
   document.getElementById('editorPrice').value = '50';
@@ -7143,6 +7208,7 @@ function closeItemEditor() {
   editingItemOptionsMode = 'default';
   editingItemDefaultOptionLabels = [];
   editingItemDefaultPresetKeys = [];
+  editingIsFactory = false;
 }
 
 // 🍳 Render the options section. UX is identical for built-in and custom:
@@ -7418,11 +7484,19 @@ async function saveItemEditor() {
   if (!name) { toast('⚠️ กรอกชื่อเมนู', true); nameEl?.focus(); return; }
   if (isNaN(price) || price < 0) { toast('⚠️ ราคาไม่ถูกต้อง', true); priceEl?.focus(); return; }
 
+  // 🏭 Pick the right config + storage key + cloud save method based on
+  //    whether the editor was opened in factory or regular mode.
+  const isFactory = !!editingIsFactory;
+  const targetConfig = isFactory ? factoryConfig : menuConfig;
+  const storageKey = isFactory ? 'factoryConfig' : 'menuConfig';
+  const customIdPrefix = isFactory ? 'cf-' : 'cust-';
+  const customEmoji = isAddOn ? '🍳' : (isFactory ? '🏭' : '🍽️');
+
   // 🔍 Build the override / custom record to write
   if (editingItemId && !editingIsCustom) {
     // Built-in item — write/update override
-    menuConfig.overrides = menuConfig.overrides || {};
-    const o = menuConfig.overrides[editingItemId] = menuConfig.overrides[editingItemId] || {};
+    targetConfig.overrides = targetConfig.overrides || {};
+    const o = targetConfig.overrides[editingItemId] = targetConfig.overrides[editingItemId] || {};
     o.name = name;
     o.price = price;
     o.available = available;
@@ -7438,11 +7512,11 @@ async function saveItemEditor() {
       delete o.optionPresetKeys;
     }
   } else if (editingItemId && editingIsCustom) {
-    menuConfig.custom = menuConfig.custom || [];
-    const idx = menuConfig.custom.findIndex(c => c.id === editingItemId);
+    targetConfig.custom = targetConfig.custom || [];
+    const idx = targetConfig.custom.findIndex(c => c.id === editingItemId);
     if (idx >= 0) {
       const updated = {
-        ...menuConfig.custom[idx],
+        ...targetConfig.custom[idx],
         name, price, available,
         category: isAddOn ? '_addon_' : catName,
         isAddOn: !!isAddOn,
@@ -7453,32 +7527,32 @@ async function saveItemEditor() {
       else delete updated.image;
       // Drop legacy raw optionGroups so the keys take precedence
       if (updated.optionGroups) delete updated.optionGroups;
-      menuConfig.custom[idx] = updated;
+      targetConfig.custom[idx] = updated;
     }
   } else {
-    menuConfig.custom = menuConfig.custom || [];
+    targetConfig.custom = targetConfig.custom || [];
     const newItem = {
-      id: 'cust-' + Date.now(),
+      id: customIdPrefix + Date.now(),
       name, price, available,
       category: isAddOn ? '_addon_' : catName,
       isAddOn: !!isAddOn,
-      emoji: isAddOn ? '🍳' : '🍽️',
+      emoji: customEmoji,
       optionPresetKeys: [...editingItemOptionPresetKeys],
     };
     if (editingItemImage) newItem.image = editingItemImage;
-    menuConfig.custom.push(newItem);
+    targetConfig.custom.push(newItem);
   }
 
   // 💾 Save locally — this is the SOURCE OF TRUTH for images on this device
   let localSaveOK = false, localErr = null;
   try {
-    const json = JSON.stringify(menuConfig);
+    const json = JSON.stringify(targetConfig);
     const sizeMB = (json.length / 1024 / 1024).toFixed(2);
-    console.log('[saveMenu] localStorage size:', sizeMB, 'MB');
+    console.log('[saveMenu]', storageKey, 'localStorage size:', sizeMB, 'MB');
     if (json.length > 9 * 1024 * 1024) {
-      throw new Error(`menuConfig ใหญ่เกิน 9MB (ตอนนี้ ${sizeMB} MB) — รูปบางตัวต้องลด`);
+      throw new Error(`${storageKey} ใหญ่เกิน 9MB (ตอนนี้ ${sizeMB} MB) — รูปบางตัวต้องลด`);
     }
-    localStorage.setItem('menuConfig', json);
+    localStorage.setItem(storageKey, json);
     localSaveOK = true;
   } catch (e) {
     localErr = e;
@@ -7490,14 +7564,18 @@ async function saveItemEditor() {
     return;
   }
 
-  // ☁️ Cloud sync — image-stripped (Firestore 1MB doc limit on settings/menu)
+  // ☁️ Cloud sync — image-stripped (Firestore 1MB doc limit)
   let cloudOK = true, cloudErr = null;
   if (window.cloud?.ready) {
-    try { await window.cloud.saveMenuConfig(menuConfig); }
+    try {
+      if (isFactory) await window.cloud.saveFactoryConfig?.(targetConfig);
+      else await window.cloud.saveMenuConfig(targetConfig);
+    }
     catch (e) { cloudOK = false; cloudErr = e; console.warn('[saveMenu] cloud failed:', e); }
     // 🖼️ Save image to separate collection so it propagates to customer
     //    devices (other shops/admin/customer phones). Per-item doc bypasses
-    //    the 1MB limit on the menuConfig doc itself.
+    //    the 1MB limit on the menuConfig doc itself. Shared collection for
+    //    both regular + factory items (IDs don't collide).
     if (editingItemId && window.cloud?.saveMenuImage) {
       try {
         if (editingItemImage) {
@@ -7511,19 +7589,24 @@ async function saveItemEditor() {
   }
 
   // ✅ Verify by re-reading what we just wrote
-  const verify = JSON.parse(localStorage.getItem('menuConfig') || '{}');
+  const verify = JSON.parse(localStorage.getItem(storageKey) || '{}');
   const verifiedItem = editingItemId
     ? (editingIsCustom
         ? (verify.custom || []).find(c => c.id === editingItemId)
         : verify.overrides?.[editingItemId])
     : null;
-  console.log('[saveMenu] verified saved:', { name: verifiedItem?.name, hasImage: !!verifiedItem?.image });
+  console.log('[saveMenu]', storageKey, 'verified:', { name: verifiedItem?.name, hasImage: !!verifiedItem?.image });
 
   closeItemEditor();
   // Force re-render — clear DOM, then rebuild
   setTimeout(() => {
-    renderMenuManager();
-    if (typeof renderRegularItemList === 'function') try { renderRegularItemList(); } catch (e) {}
+    if (isFactory) {
+      if (typeof renderFactoryMenuManager === 'function') try { renderFactoryMenuManager(); } catch (e) {}
+      if (typeof renderFactoryManager === 'function') try { renderFactoryManager(); } catch (e) {}
+    } else {
+      renderMenuManager();
+      if (typeof renderRegularItemList === 'function') try { renderRegularItemList(); } catch (e) {}
+    }
   }, 50);
 
   if (cloudOK) {
@@ -7536,13 +7619,25 @@ async function saveItemEditor() {
 function deleteItemEditor() {
   if (!editingItemId || !editingIsCustom) return;
   if (!confirm('ลบเมนูนี้ถาวร?')) return;
-  menuConfig.custom = (menuConfig.custom || []).filter(c => c.id !== editingItemId);
-  delete menuConfig.overrides[editingItemId];
-  localStorage.setItem('menuConfig', JSON.stringify(menuConfig));
-  if (window.cloud?.ready) window.cloud.saveMenuConfig(menuConfig).catch(()=>{});
+  const isFactory = !!editingIsFactory;
+  const targetConfig = isFactory ? factoryConfig : menuConfig;
+  const storageKey = isFactory ? 'factoryConfig' : 'menuConfig';
+  targetConfig.custom = (targetConfig.custom || []).filter(c => c.id !== editingItemId);
+  if (targetConfig.overrides) delete targetConfig.overrides[editingItemId];
+  localStorage.setItem(storageKey, JSON.stringify(targetConfig));
+  if (window.cloud?.ready) {
+    if (isFactory) window.cloud.saveFactoryConfig?.(targetConfig).catch(()=>{});
+    else window.cloud.saveMenuConfig(targetConfig).catch(()=>{});
+  }
   toast('🗑️ ลบแล้ว');
+  const wasFactory = isFactory;
   closeItemEditor();
-  renderMenuManager();
+  if (wasFactory) {
+    if (typeof renderFactoryMenuManager === 'function') renderFactoryMenuManager();
+    if (typeof renderFactoryManager === 'function') renderFactoryManager();
+  } else {
+    renderMenuManager();
+  }
 }
 
 // Legacy alias
