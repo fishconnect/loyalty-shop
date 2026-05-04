@@ -1176,10 +1176,13 @@ window.findRegularMenuByFuzzyName = function(factoryName, sourceMenu) {
 
 // 🏭 Apply factory menu config (overrides + custom factory items + disabledChoices)
 window.applyFactoryConfig = function(config) {
-  config = config || { overrides: {}, custom: [], disabledChoices: [] };
+  config = config || { overrides: {}, custom: [], disabledChoices: [], deletedIds: [] };
   const ov = config.overrides || {};
   const custom = config.custom || [];
   const disabled = new Set(config.disabledChoices || []);
+  // 🗑️ deletedIds = built-in items the admin permanently removed. Filter
+  //    them out as if they never existed in FACTORY_MENU.
+  const deleted = new Set(config.deletedIds || []);
 
   // Helper: borrow image from regular menu by fuzzy name match. Used when
   //    factory item has no explicit image — saves admin from uploading twice.
@@ -1190,7 +1193,7 @@ window.applyFactoryConfig = function(config) {
 
   let result = (window.FACTORY_MENU || []).map(cat => ({
     ...cat,
-    items: cat.items.map(it => {
+    items: cat.items.filter(it => !deleted.has(it.id)).map(it => {
       const o = ov[it.id];
       let item;
       if (!o) item = { ...it, available: true };
@@ -1239,14 +1242,17 @@ window.applyFactoryConfig = function(config) {
 };
 
 window.applyMenuConfig = function(config) {
-  config = config || { overrides: {}, custom: [], disabledChoices: [] };
+  config = config || { overrides: {}, custom: [], disabledChoices: [], deletedIds: [] };
   const ov = config.overrides || {};
   const custom = config.custom || [];
   const disabled = new Set(config.disabledChoices || []);
+  // 🗑️ deletedIds = built-in items the admin permanently removed. Filter
+  //    them out as if they never existed in MENU.
+  const deleted = new Set(config.deletedIds || []);
 
   let result = MENU.map(cat => ({
     ...cat,
-    items: cat.items.map(it => {
+    items: cat.items.filter(it => !deleted.has(it.id)).map(it => {
       const o = ov[it.id];
       let item;
       if (!o) item = { ...it, available: true };

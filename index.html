@@ -1470,10 +1470,10 @@
 <!-- Print receipt area (hidden until print) -->
 <div id="printArea"></div>
 
-<script type="module" src="firebase.js?v=20260504o"></script>
-<script src="offline-banner.js?v=20260504o"></script>
-<script src="menu-data.js?v=20260504o"></script>
-<script src="notifier.js?v=20260504o"></script>
+<script type="module" src="firebase.js?v=20260504p"></script>
+<script src="offline-banner.js?v=20260504p"></script>
+<script src="menu-data.js?v=20260504p"></script>
+<script src="notifier.js?v=20260504p"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 
@@ -6417,15 +6417,41 @@ function renderMenuManager() {
               </div>
             </div>
           </div>
-          ${isCustom
-            ? `<button onclick="quickDeleteItem('${it.id}', false, event)" title="ลบเมนูนี้" style="background:#fee2e2;color:#dc2626;border:none;width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:14px;flex-shrink:0">🗑️</button>`
-            : `<button onclick="quickToggleAvailable('${it.id}', false, event)" title="${it.available!==false?'ซ่อน (ตั้งหมด)':'แสดงอีกครั้ง'}" style="background:${it.available!==false?'#fef3c7':'#dcfce7'};color:${it.available!==false?'#92400e':'#166534'};border:none;width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:14px;flex-shrink:0">${it.available!==false?'🚫':'✅'}</button>`
-          }
+          <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
+            ${!isCustom ? `<button onclick="quickToggleAvailable('${it.id}', false, event)" title="${it.available!==false?'ซ่อน (ตั้งหมด)':'แสดงอีกครั้ง'}" style="background:${it.available!==false?'#fef3c7':'#dcfce7'};color:${it.available!==false?'#92400e':'#166534'};border:none;width:32px;height:28px;border-radius:6px;cursor:pointer;font-size:12.5px;flex-shrink:0">${it.available!==false?'🚫':'✅'}</button>` : ''}
+            <button onclick="quickDeleteItem('${it.id}', false, event)" title="ลบเมนูนี้ถาวร" style="background:#fee2e2;color:#dc2626;border:none;width:32px;height:28px;border-radius:6px;cursor:pointer;font-size:12.5px;flex-shrink:0">🗑️</button>
+          </div>
         </div>`;
       }).join('')}
       </div>
     </div>
-  `).join('');
+  `).join('') + _renderDeletedItemsPanel(menuConfig, false);
+}
+
+// 🗑️ Show items that were soft-deleted via deletedIds, with a "↩️ คืน" button
+//    so admin can recover an accidental delete without editing JSON.
+function _renderDeletedItemsPanel(cfg, isFactory) {
+  const ids = Array.isArray(cfg?.deletedIds) ? cfg.deletedIds : [];
+  if (!ids.length) return '';
+  const baseMenu = isFactory ? (window.FACTORY_MENU || []) : (window.MENU || []);
+  const lookup = id => {
+    for (const cat of baseMenu) {
+      const it = (cat.items || []).find(x => x.id === id);
+      if (it) return it.name;
+    }
+    return id;
+  };
+  return `
+    <div style="margin-top:18px;background:#fef2f2;border:1px dashed #fca5a5;border-radius:10px;padding:10px 12px">
+      <div style="font-weight:700;color:#dc2626;font-size:12.5px;margin-bottom:8px">🗑️ เมนูที่ถูกลบ (กด ↩️ เพื่อคืนค่า)</div>
+      ${ids.map(id => `
+        <div style="display:flex;justify-content:space-between;align-items:center;background:#fff;border:1px solid #fecaca;border-radius:8px;padding:6px 10px;margin-bottom:6px">
+          <div style="font-size:12.5px;color:#7f1d1d;flex:1;min-width:0">${escapeHtml(lookup(id))} <span style="color:#9ca3af;font-size:10.5px">· ${escapeHtml(id)}</span></div>
+          <button onclick="restoreDeletedItem('${id}', ${isFactory}, event)" title="คืนค่า" style="background:#dcfce7;color:#166534;border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11.5px;font-weight:700">↩️ คืน</button>
+        </div>
+      `).join('')}
+    </div>
+  `;
 }
 
 // 🏭 Factory menu manager — same shape as renderMenuManager but reads
@@ -6460,41 +6486,79 @@ function renderFactoryMenuManager() {
               </div>
             </div>
           </div>
-          ${isCustom
-            ? `<button onclick="quickDeleteItem('${it.id}', true, event)" title="ลบเมนูนี้" style="background:#fee2e2;color:#dc2626;border:none;width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:14px;flex-shrink:0">🗑️</button>`
-            : `<button onclick="quickToggleAvailable('${it.id}', true, event)" title="${it.available!==false?'ซ่อน (ตั้งหมด)':'แสดงอีกครั้ง'}" style="background:${it.available!==false?'#fef3c7':'#dcfce7'};color:${it.available!==false?'#92400e':'#166534'};border:none;width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:14px;flex-shrink:0">${it.available!==false?'🚫':'✅'}</button>`
-          }
+          <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
+            ${!isCustom ? `<button onclick="quickToggleAvailable('${it.id}', true, event)" title="${it.available!==false?'ซ่อน (ตั้งหมด)':'แสดงอีกครั้ง'}" style="background:${it.available!==false?'#fef3c7':'#dcfce7'};color:${it.available!==false?'#92400e':'#166534'};border:none;width:32px;height:28px;border-radius:6px;cursor:pointer;font-size:12.5px;flex-shrink:0">${it.available!==false?'🚫':'✅'}</button>` : ''}
+            <button onclick="quickDeleteItem('${it.id}', true, event)" title="ลบเมนูนี้ถาวร" style="background:#fee2e2;color:#dc2626;border:none;width:32px;height:28px;border-radius:6px;cursor:pointer;font-size:12.5px;flex-shrink:0">🗑️</button>
+          </div>
         </div>`;
       }).join('')}
       </div>
     </div>
-  `).join('') || '<div style="text-align:center;color:#9ca3af;font-size:13px;padding:14px">ยังไม่มีเมนูโรงงาน — กดปุ่ม "เพิ่มเมนูโรงงาน" ด้านล่าง</div>';
+  `).join('') + _renderDeletedItemsPanel(factoryConfig, true) || '<div style="text-align:center;color:#9ca3af;font-size:13px;padding:14px">ยังไม่มีเมนูโรงงาน — กดปุ่ม "เพิ่มเมนูโรงงาน" ด้านล่าง</div>';
 }
 window.renderFactoryMenuManager = renderFactoryMenuManager;
 
-// 🗑️ Quick-delete a custom menu item (regular or factory) without opening
-//    the editor. Built-in items can't be deleted — admin should use 🚫 to
-//    set them unavailable instead.
+// 🗑️ Quick-delete a menu item (regular or factory) — works for BOTH custom
+//    items (removed from .custom) AND built-in items (added to .deletedIds).
+//    applyMenuConfig + applyFactoryConfig honor .deletedIds, so the deletion
+//    propagates to customer pages, kitchen, factory mode, and the loyalty
+//    redemption picker — single source of truth.
 async function quickDeleteItem(itemId, isFactory, ev) {
   if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
   const targetConfig = isFactory ? factoryConfig : menuConfig;
   const storageKey = isFactory ? 'factoryConfig' : 'menuConfig';
-  const item = (targetConfig.custom || []).find(c => c.id === itemId);
-  if (!item) return toast('⚠️ ลบได้เฉพาะเมนูที่เพิ่มเอง — เมนูในระบบใช้ปุ่ม 🚫 เพื่อซ่อน');
-  if (!confirm(`ลบเมนู "${item.name}" ถาวร?`)) return;
-  targetConfig.custom = targetConfig.custom.filter(c => c.id !== itemId);
+  const customItem = (targetConfig.custom || []).find(c => c.id === itemId);
+  // Look up display name for the confirm prompt — from custom or effective menu
+  let displayName = customItem?.name;
+  if (!displayName) {
+    const apply = isFactory ? window.applyFactoryConfig : window.applyMenuConfig;
+    const effective = apply ? apply(targetConfig) : (isFactory ? (window.FACTORY_MENU || []) : (window.MENU || []));
+    for (const cat of effective) {
+      const it = (cat.items || []).find(i => i.id === itemId);
+      if (it) { displayName = it.name; break; }
+    }
+  }
+  if (!confirm(`ลบเมนู "${displayName || itemId}" ถาวร?\n\n⚠️ จะถูกลบจากเมนูลูกค้า, ครัว, และตัวแลกแต้มทั้งหมด`)) return;
+
+  if (customItem) {
+    // Custom item — drop it from the custom array
+    targetConfig.custom = targetConfig.custom.filter(c => c.id !== itemId);
+  } else {
+    // Built-in item — add to deletedIds (idempotent)
+    targetConfig.deletedIds = Array.isArray(targetConfig.deletedIds) ? targetConfig.deletedIds : [];
+    if (!targetConfig.deletedIds.includes(itemId)) targetConfig.deletedIds.push(itemId);
+  }
   if (targetConfig.overrides) delete targetConfig.overrides[itemId];
+
   localStorage.setItem(storageKey, JSON.stringify(targetConfig));
   if (window.cloud?.ready) {
     if (isFactory) try { await window.cloud.saveFactoryConfig?.(targetConfig); } catch (e) {}
     else try { await window.cloud.saveMenuConfig?.(targetConfig); } catch (e) {}
     if (window.cloud?.deleteMenuImage) try { await window.cloud.deleteMenuImage(itemId); } catch (e) {}
   }
-  toast('🗑️ ลบเมนูแล้ว');
+  toast('🗑️ ลบเมนูแล้ว · sync ทุกหน้าจอเรียบร้อย');
   if (isFactory) renderFactoryMenuManager();
   else renderMenuManager();
 }
 window.quickDeleteItem = quickDeleteItem;
+
+// ↩️ Restore a built-in item that was previously deleted via deletedIds.
+async function restoreDeletedItem(itemId, isFactory, ev) {
+  if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
+  const targetConfig = isFactory ? factoryConfig : menuConfig;
+  const storageKey = isFactory ? 'factoryConfig' : 'menuConfig';
+  if (!Array.isArray(targetConfig.deletedIds)) return;
+  targetConfig.deletedIds = targetConfig.deletedIds.filter(id => id !== itemId);
+  localStorage.setItem(storageKey, JSON.stringify(targetConfig));
+  if (window.cloud?.ready) {
+    if (isFactory) try { await window.cloud.saveFactoryConfig?.(targetConfig); } catch (e) {}
+    else try { await window.cloud.saveMenuConfig?.(targetConfig); } catch (e) {}
+  }
+  toast('↩️ คืนค่าเมนูแล้ว');
+  if (isFactory) renderFactoryMenuManager();
+  else renderMenuManager();
+}
+window.restoreDeletedItem = restoreDeletedItem;
 
 // 🚫 Toggle a built-in item between available and "หมด" without opening the
 //    editor. Customer-facing menu hides "หมด" items behind a disabled badge.
@@ -8244,6 +8308,30 @@ async function saveItemEditor() {
   console.log('[saveMenu]', storageKey, 'verified:', { name: verifiedItem?.name, hasImage: !!verifiedItem?.image });
 
   closeItemEditor();
+  // 🩹 Echo race: Firestore strips images from menuConfig/factoryConfig docs
+  //    (1MB limit) so the onSnapshot callback echoes a stripped version that
+  //    can race past our local copy and wipe images. Re-merge from the freshly
+  //    written menu_images collection NOW so the next render shows the upload.
+  if (window.cloud?.getAllMenuImages && editingItemImage) {
+    try {
+      const fresh = await window.cloud.getAllMenuImages();
+      window._menuImagesCache = fresh || {};
+      _mergeImagesIntoFactoryConfig(window._menuImagesCache);
+      // Also merge into menuConfig for the regular side
+      if (Array.isArray(menuConfig.custom)) {
+        menuConfig.custom.forEach(c => {
+          if (c && c.id && window._menuImagesCache[c.id]) c.image = window._menuImagesCache[c.id];
+        });
+      }
+      if (!menuConfig.overrides) menuConfig.overrides = {};
+      Object.entries(window._menuImagesCache).forEach(([id, dataUrl]) => {
+        if (!menuConfig.overrides[id]) menuConfig.overrides[id] = {};
+        menuConfig.overrides[id].image = dataUrl;
+      });
+      localStorage.setItem('menuConfig', JSON.stringify(menuConfig));
+      localStorage.setItem('factoryConfig', JSON.stringify(factoryConfig));
+    } catch (e) { console.warn('[saveItemEditor] image refresh', e); }
+  }
   // Force re-render — clear DOM, then rebuild
   setTimeout(() => {
     if (isFactory) {
