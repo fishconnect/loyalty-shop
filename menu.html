@@ -1214,9 +1214,9 @@
 
 <div class="toast" id="toast"></div>
 
-<script type="module" src="firebase.js?v=20260504d"></script>
-<script src="offline-banner.js?v=20260504d"></script>
-<script src="menu-data.js?v=20260504d"></script>
+<script type="module" src="firebase.js?v=20260504e"></script>
+<script src="offline-banner.js?v=20260504e"></script>
+<script src="menu-data.js?v=20260504e"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 const STORAGE_KEY = 'loyaltyShopV2';
@@ -3134,9 +3134,11 @@ async function submitOrder() {
   if (!cart.length) return toast('⚠️ ตะกร้าว่าง', true);
 
   // 🩹 Re-validate every cart line against the LIVE menu before submit.
-  //    Items can be marked unavailable while the cart is open (admin toggles
-  //    "หมด" remotely). Submitting an unavailable item leaves the kitchen
-  //    with an order they can't fulfil and a customer who gets disappointed.
+  //    Two cases:
+  //    A) Item NOT in this menu at all (orphan from factory mode, deleted item,
+  //       stale localStorage from old session) → silently auto-remove from cart.
+  //    B) Item exists but admin marked "หมด" while cart was open → block submit
+  //       with the human-readable name so customer knows what to take out.
   const _liveMenu = (typeof effectiveMenu !== 'undefined') ? effectiveMenu
                   : (typeof window.applyMenuConfig === 'function' ? window.applyMenuConfig(menuConfig) : MENU);
   const _findLive = (id) => {
@@ -3146,16 +3148,28 @@ async function submitOrder() {
     }
     return null;
   };
-  const _unavailable = [];
+  const _unavailable = [];      // exists but out of stock — block + tell user
+  const _orphanIds = [];        // not in this menu at all — auto-remove
   for (const line of cart) {
-    if (line.isCustom) continue; // custom factory items aren't gated
+    if (line.isCustom) continue;
     const live = _findLive(line.mainId);
-    if (!live || live.available === false) {
-      _unavailable.push(line.mainName || (live && live.name) || line.mainId);
+    if (!live) {
+      _orphanIds.push(line.mainId);
+    } else if (live.available === false) {
+      _unavailable.push(line.mainName || live.name || line.mainId);
     }
   }
+  if (_orphanIds.length) {
+    // Silently clean cart of orphan items, save, and let user continue
+    cart = cart.filter(l => l.isCustom || !_orphanIds.includes(l.mainId));
+    if (typeof saveCart === 'function') saveCart();
+    if (typeof updateCartBar === 'function') updateCartBar();
+    if (typeof renderOrderBreakdown === 'function') renderOrderBreakdown();
+    if (!cart.length) { toast('🛒 ตะกร้าว่าง — เลือกเมนูใหม่อีกครั้ง', true); return; }
+    toast('🧹 ลบรายการที่ไม่มีในเมนูออก ' + _orphanIds.length + ' อัน', false);
+  }
   if (_unavailable.length) {
-    toast('⚠️ เมนูบางรายการหมดแล้ว: ' + _unavailable.join(', ') + ' — กรุณาเอาออกก่อนสั่ง', true);
+    toast('⚠️ เมนูหมดชั่วคราว: ' + _unavailable.join(', ') + ' — กรุณาเอาออกก่อนสั่ง', true);
     return;
   }
 
