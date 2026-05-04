@@ -303,6 +303,43 @@ window.OPTION_PRESETS = {
   },
 };
 
+// 🔍 Reverse-lookup: given a built option group, find which OPTION_PRESETS
+//    key (if any) would produce it. Used by the admin item editor to convert
+//    a built-in item's hardcoded optionGroups back into editable preset chips.
+window.findMatchingPresetKey = function(group) {
+  if (!group || !window.OPTION_PRESETS) return null;
+  for (const [key, preset] of Object.entries(window.OPTION_PRESETS)) {
+    let built;
+    try { built = preset.build(); } catch (e) { continue; }
+    if (_optionGroupsEqual(built, group)) return key;
+  }
+  return null;
+};
+
+function _optionGroupsEqual(a, b) {
+  if (!a || !b) return false;
+  if (a.kind !== b.kind) return false;
+  if (a.label !== b.label) return false;
+  if ((a.min || 0) !== (b.min || 0)) return false;
+  if ((a.max || 0) !== (b.max || 0)) return false;
+  if ((a.priceEach || 0) !== (b.priceEach || 0)) return false;
+  if (!Array.isArray(a.choices) || !Array.isArray(b.choices)) return false;
+  if (a.choices.length !== b.choices.length) return false;
+  for (let i = 0; i < a.choices.length; i++) {
+    if (a.choices[i] !== b.choices[i]) return false;
+  }
+  // Compare `prices` map if present (e.g. extra_kab_30 has per-choice prices)
+  const ap = a.prices || null, bp = b.prices || null;
+  if (!ap && !bp) return true;
+  if (!ap || !bp) return false;
+  const ak = Object.keys(ap).sort(), bk = Object.keys(bp).sort();
+  if (ak.length !== bk.length) return false;
+  for (let i = 0; i < ak.length; i++) {
+    if (ak[i] !== bk[i] || ap[ak[i]] !== bp[bk[i]]) return false;
+  }
+  return true;
+}
+
 // 🛡️ XSS-safe HTML escape for any user-supplied string (customer name, note,
 //    address, etc.) that we interpolate into innerHTML. JS template literals
 //    don't escape — without this, a customer named '<img onerror=alert(1)>'
