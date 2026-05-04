@@ -1214,9 +1214,9 @@
 
 <div class="toast" id="toast"></div>
 
-<script type="module" src="firebase.js?v=20260504e"></script>
-<script src="offline-banner.js?v=20260504e"></script>
-<script src="menu-data.js?v=20260504e"></script>
+<script type="module" src="firebase.js?v=20260504f"></script>
+<script src="offline-banner.js?v=20260504f"></script>
+<script src="menu-data.js?v=20260504f"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 const STORAGE_KEY = 'loyaltyShopV2';
@@ -3139,8 +3139,16 @@ async function submitOrder() {
   //       stale localStorage from old session) → silently auto-remove from cart.
   //    B) Item exists but admin marked "หมด" while cart was open → block submit
   //       with the human-readable name so customer knows what to take out.
-  const _liveMenu = (typeof effectiveMenu !== 'undefined') ? effectiveMenu
-                  : (typeof window.applyMenuConfig === 'function' ? window.applyMenuConfig(menuConfig) : MENU);
+  // 🩹 Bug fix: was reading `effectiveMenu` (lowercase) which doesn't exist —
+  //    the actual var is EFFECTIVE_MENU. In factory mode that meant every
+  //    fc-* item got mis-classified as orphan and auto-removed → empty cart.
+  //    Prefer EFFECTIVE_MENU (already correctly built for factory vs regular)
+  //    and only fall back to applyMenuConfig for safety.
+  const _liveMenu = (typeof EFFECTIVE_MENU !== 'undefined' && Array.isArray(EFFECTIVE_MENU))
+    ? EFFECTIVE_MENU
+    : (isFactoryMode
+        ? (typeof window.applyFactoryConfig === 'function' ? window.applyFactoryConfig(factoryConfig) : (window.FACTORY_MENU || []))
+        : (typeof window.applyMenuConfig === 'function' ? window.applyMenuConfig(menuConfig) : (window.MENU || [])));
   const _findLive = (id) => {
     for (const c of (_liveMenu || [])) {
       const it = (c.items || []).find(i => i.id === id);
