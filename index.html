@@ -1470,10 +1470,10 @@
 <!-- Print receipt area (hidden until print) -->
 <div id="printArea"></div>
 
-<script type="module" src="firebase.js?v=20260504p"></script>
-<script src="offline-banner.js?v=20260504p"></script>
-<script src="menu-data.js?v=20260504p"></script>
-<script src="notifier.js?v=20260504p"></script>
+<script type="module" src="firebase.js?v=20260504q"></script>
+<script src="offline-banner.js?v=20260504q"></script>
+<script src="menu-data.js?v=20260504q"></script>
+<script src="notifier.js?v=20260504q"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 
@@ -6390,6 +6390,8 @@ function renderMenuManager() {
   const wrap = document.getElementById('menuManager');
   if (!wrap) return;
   const allCats = window.applyMenuConfig ? window.applyMenuConfig(menuConfig) : (window.MENU || []);
+  // Cache for the factory manager's fuzzy image borrow
+  window._regularEffectiveMenu = allCats;
   wrap.innerHTML = allCats.map(cat => `
     <div style="margin-bottom:18px">
       <div style="font-weight:700;color:#1652F0;font-size:14px;padding:8px 0;display:flex;justify-content:space-between;align-items:center">
@@ -6459,6 +6461,13 @@ function _renderDeletedItemsPanel(cfg, isFactory) {
 function renderFactoryMenuManager() {
   const wrap = document.getElementById('factoryMenuManager');
   if (!wrap) return;
+  // 🩹 Populate _regularEffectiveMenu BEFORE applyFactoryConfig so the
+  //    fuzzy image borrow can find regular-menu images uploaded by admin.
+  //    Without this, applyFactoryConfig falls back to raw MENU which has
+  //    no images (admin uploads live in menuConfig.overrides[id].image).
+  if (window.applyMenuConfig) {
+    window._regularEffectiveMenu = window.applyMenuConfig(menuConfig);
+  }
   const allCats = window.applyFactoryConfig ? window.applyFactoryConfig(factoryConfig) : (window.FACTORY_MENU || []);
   wrap.innerHTML = allCats.map(cat => `
     <div style="margin-bottom:18px">

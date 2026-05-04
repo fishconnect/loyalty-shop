@@ -1186,9 +1186,15 @@ window.applyFactoryConfig = function(config) {
 
   // Helper: borrow image from regular menu by fuzzy name match. Used when
   //    factory item has no explicit image — saves admin from uploading twice.
+  //    Falls back to the filesystem asset (assets/menu/<id>.jpg) if no admin
+  //    upload exists; the renderer's onerror handler will hide it cleanly
+  //    if the file isn't there.
   const _borrowImage = (factoryName) => {
     const m = window.findRegularMenuByFuzzyName(factoryName);
-    return m && m.image ? m.image : null;
+    if (!m) return null;
+    if (m.image) return m.image;
+    if (m.id) return `assets/menu/${m.id}.jpg`;
+    return null;
   };
 
   let result = (window.FACTORY_MENU || []).map(cat => ({
