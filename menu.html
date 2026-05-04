@@ -1076,6 +1076,12 @@
         <label>👤 ชื่อ (เฉพาะลูกค้าใหม่)</label>
         <input type="text" class="cust-input" id="custFullName" placeholder="คุณ...">
 
+        <!-- 🏪 SHOP MODE — ชื่อ / โต๊ะ ใช้ระบุว่าใครสั่ง (พิมพ์ลงสติกเกอร์ครัว) -->
+        <div id="shopOrderLabelField" style="display:none">
+          <label>👤 ชื่อ / โต๊ะ <span style="color:#9ca3af;font-size:11px;font-weight:500">(พิมพ์ลงสติกเกอร์ครัว)</span></label>
+          <input type="text" class="cust-input" id="shopOrderLabel" placeholder="เช่น โต๊ะ 5 / ลุงป้อง / ขับรถมา">
+        </div>
+
         <!-- 🎂 วันเกิด (สำหรับลูกค้าใหม่ — ใส่ครั้งเดียว แก้ไม่ได้ + รับ 5 แต้มทุกปี) -->
         <div id="birthDateField" style="display:none">
           <label>🎂 วันเดือนเกิด (ใส่ครั้งเดียวเท่านั้น · ทุกวันเกิดรับ +5 แต้ม)</label>
@@ -1201,9 +1207,9 @@
 
 <div class="toast" id="toast"></div>
 
-<script type="module" src="firebase.js?v=20260504b"></script>
-<script src="offline-banner.js?v=20260504b"></script>
-<script src="menu-data.js?v=20260504b"></script>
+<script type="module" src="firebase.js?v=20260504c"></script>
+<script src="offline-banner.js?v=20260504c"></script>
+<script src="menu-data.js?v=20260504c"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 const STORAGE_KEY = 'loyaltyShopV2';
@@ -1463,15 +1469,23 @@ function renderPromoStrip() {
     document.getElementById('promoStrip').style.display = 'none';
     return;
   }
-  const cards = [
-    `<div class="promo-card"><div class="ic">🕒</div><div class="body"><div class="title">เปิด 9.30 - 17.30 น.</div><div class="desc">ทุกวัน · หยุดทุกวันอาทิตย์</div></div></div>`,
-    `<div class="promo-card green"><div class="ic">🎁</div><div class="body"><div class="title">+5 แต้มสมัครใหม่</div><div class="desc">ฟรี · กรอกเบอร์ครั้งแรก</div></div></div>`,
-    `<div class="promo-card"><div class="ic">🥤</div><div class="body"><div class="title">10 แต้ม = ฟรี 1 แก้ว</div><div class="desc">ชานมไข่มุก / เครื่องดื่มแก้วโอ่ง</div></div></div>`,
-    `<div class="promo-card purple"><div class="ic">💰</div><div class="body"><div class="title">15 แต้ม = ลด 50฿</div><div class="desc">แลกส่วนลดได้ทันที</div></div></div>`,
-    `<div class="promo-card green"><div class="ic">✨</div><div class="body"><div class="title">ร้านสะอาด อาหารสะอาด</div><div class="desc">มาตรฐานสุขอนามัย</div></div></div>`,
+  // 🩹 Admin can customize the promo strip via menuConfig.promoCards
+  //    (Settings → "📢 แบนเนอร์โปรโมชัน"). Falls back to defaults if empty.
+  const DEFAULT_CARDS = [
+    { icon: '🕒', title: 'เปิด 9.30 - 17.30 น.',     desc: 'ทุกวัน · หยุดทุกวันอาทิตย์',    color: 'default' },
+    { icon: '🎁', title: '+5 แต้มสมัครใหม่',          desc: 'ฟรี · กรอกเบอร์ครั้งแรก',       color: 'green' },
+    { icon: '🥤', title: '10 แต้ม = ฟรี 1 แก้ว',     desc: 'ชานมไข่มุก / เครื่องดื่มแก้วโอ่ง', color: 'default' },
+    { icon: '💰', title: '15 แต้ม = ลด 50฿',          desc: 'แลกส่วนลดได้ทันที',             color: 'purple' },
+    { icon: '✨', title: 'ร้านสะอาด อาหารสะอาด',     desc: 'มาตรฐานสุขอนามัย',              color: 'green' },
   ];
-  // Duplicate the cards so the CSS marquee can loop seamlessly (translateX -50%
-  // hits the end of the first copy exactly when the second copy is in position).
+  const customCards = (menuConfig && Array.isArray(menuConfig.promoCards) && menuConfig.promoCards.length)
+    ? menuConfig.promoCards : DEFAULT_CARDS;
+  const cards = customCards.map(c => {
+    const colorClass = (c.color && c.color !== 'default') ? ` ${c.color}` : '';
+    return `<div class="promo-card${colorClass}"><div class="ic">${escapeHtml(c.icon || '⭐')}</div><div class="body"><div class="title">${escapeHtml(c.title || '')}</div><div class="desc">${escapeHtml(c.desc || '')}</div></div></div>`;
+  });
+  // Duplicate so the CSS marquee can loop seamlessly (translateX -50% hits
+  // the end of the first copy exactly when the second copy is in position).
   wrap.innerHTML = cards.join('') + cards.join('');
 
   // 🔧 Some in-app browsers (LINE / Instagram / Facebook webview) load the
@@ -1838,15 +1852,49 @@ whenCloudReady(() => {
   } else {
     window.cloud.onMenuConfig(config => {
       menuConfig = config || { overrides: {}, custom: [] };
+      // 🖼️ Re-attach any cached images from local map (loaded by onMenuImages)
+      if (window._menuImagesCache) _mergeMenuImagesIntoConfig(window._menuImagesCache);
       localStorage.setItem('menuConfig', JSON.stringify(menuConfig));
       EFFECTIVE_MENU = window.applyMenuConfig(menuConfig);
       renderMenu();
       updateCartBar();
-      renderHeroChips();        // 🟢/🔴 ร้านเปิด/ปิด อัพเดททันทีจาก admin
+      renderHeroChips();
       checkShopClosedOverlay();
     });
+    // 🖼️ Listen for image updates from menu_images collection
+    if (window.cloud?.onMenuImages) {
+      window.cloud.onMenuImages(images => {
+        window._menuImagesCache = images || {};
+        _mergeMenuImagesIntoConfig(images || {});
+        localStorage.setItem('menuConfig', JSON.stringify(menuConfig));
+        EFFECTIVE_MENU = window.applyMenuConfig(menuConfig);
+        renderMenu();
+      });
+    }
   }
 });
+
+// 🖼️ Merge cloud-stored images into menuConfig.custom + .overrides so the
+//    customer-facing menu sees them as if they were attached locally.
+function _mergeMenuImagesIntoConfig(imagesById) {
+  if (!menuConfig || !imagesById) return;
+  if (Array.isArray(menuConfig.custom)) {
+    menuConfig.custom.forEach(c => {
+      if (c && c.id && imagesById[c.id]) c.image = imagesById[c.id];
+    });
+  }
+  if (menuConfig.overrides) {
+    Object.entries(imagesById).forEach(([id, dataUrl]) => {
+      if (!menuConfig.overrides[id]) menuConfig.overrides[id] = {};
+      menuConfig.overrides[id].image = dataUrl;
+    });
+  } else {
+    menuConfig.overrides = {};
+    Object.entries(imagesById).forEach(([id, dataUrl]) => {
+      menuConfig.overrides[id] = { image: dataUrl };
+    });
+  }
+}
 
 // Closed-shop indicator is the hero chip (🟢 ร้านเปิด / 🔴 ร้านปิด) only.
 // No extra banner — the hero chip + the disabled submit button are enough.
@@ -2220,7 +2268,9 @@ function renderCartLines() {
   if (btnCustom) btnCustom.style.display = isFactoryMode ? 'block' : 'none';
   // 🏪 Walk-in shop mode: hide phone/name fields and delivery fields entirely
   const shopType = new URLSearchParams(location.search).get('type'); // 'walkin' or 'phone'
-  const isWalkin = (new URLSearchParams(location.search).get('mode') === 'shop') && shopType === 'walkin';
+  const isShopMode = new URLSearchParams(location.search).get('mode') === 'shop';
+  const isWalkin = isShopMode && shopType === 'walkin';
+  const isPhoneShop = isShopMode && shopType === 'phone';
   if (isWalkin) {
     // Hide phone, name, rewards, delivery, found indicator
     ['custPhone', 'custFullName', 'custFound', 'rewardsBox', 'deliveryFields'].forEach(id => {
@@ -2239,6 +2289,14 @@ function renderCartLines() {
       info.innerHTML = '🏪 ลูกค้าหน้าร้าน · ไม่ระบุเบอร์/ชื่อ';
       document.getElementById('customerForm').insertBefore(info, document.getElementById('customerForm').firstChild);
     }
+  }
+  // 🏪 SHOP modes (walkin + phone): show "ชื่อ / โต๊ะ" field so kitchen
+  //    knows who the order belongs to. The label inside the field is its
+  //    own div (#shopOrderLabelField) so it shows even when generic labels
+  //    are hidden in walkin mode.
+  const shopLabelField = document.getElementById('shopOrderLabelField');
+  if (shopLabelField) {
+    shopLabelField.style.display = (isWalkin || isPhoneShop) ? 'block' : 'none';
   }
   // Re-render rewards + breakdown when cart changes
   if (typeof renderRewardsBox === 'function') renderRewardsBox();
@@ -3063,6 +3121,9 @@ async function submitOrder() {
   const isShopPhone  = isShopMode && shopType === 'phone';
   const phone = normPhone(document.getElementById('custPhone').value);
   const name = document.getElementById('custFullName').value.trim();
+  // 🏪 Shop label: ชื่อ / โต๊ะ — used as customer name on the kitchen sticker
+  //    when admin takes walk-in or phone orders. Empty for online customers.
+  const shopOrderLabel = (document.getElementById('shopOrderLabel')?.value || '').trim();
   if (!cart.length) return toast('⚠️ ตะกร้าว่าง', true);
 
   // 🩹 Re-validate every cart line against the LIVE menu before submit.
@@ -3139,7 +3200,11 @@ async function submitOrder() {
   }
   let signupBonusGiven = false;
   if (!customer) {
-    const customerName = name || (phone ? 'ลูกค้า ' + phone.slice(-4) : (isFactoryMode ? 'โรงงาน' : (isShopWalkin ? 'ลูกค้าหน้าร้าน' : 'ไม่ระบุชื่อ')));
+    // 🏪 For shop walk-in/phone orders, the "ชื่อ / โต๊ะ" field takes priority
+    //    so the kitchen sticker shows e.g. "โต๊ะ 5" instead of "ลูกค้าหน้าร้าน".
+    const customerName = ((isShopWalkin || isShopPhone) && shopOrderLabel)
+      ? shopOrderLabel
+      : (name || (phone ? 'ลูกค้า ' + phone.slice(-4) : (isFactoryMode ? 'โรงงาน' : (isShopWalkin ? 'ลูกค้าหน้าร้าน' : 'ไม่ระบุชื่อ'))));
     customer = {
       id: customerId, name: customerName, phone: phone || '',
       // Loyalty fields — factory customers don't get signup bonus or earn points
@@ -3375,12 +3440,19 @@ async function submitOrder() {
   // 🩹 Less predictable + collision-resistant: timestamp + 4-char random.
   //    Pure Date.now() collides on rapid double-tap and is easy to enumerate.
   const orderId = 'PO' + Date.now() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
+  // 🏪 In shop modes, the "ชื่อ / โต๊ะ" field overrides customer.name for THIS
+  //    order only — kitchen prints "โต๊ะ 5" / "ลุงป้อง" on the sticker without
+  //    permanently renaming the customer record.
+  const stickerName = ((isShopWalkin || isShopPhone) && shopOrderLabel)
+    ? shopOrderLabel
+    : customer.name;
   const orderRecord = {
     id: orderId,
     date: new Date().toISOString(),
     customer_id: customerId,
-    customer_name: customer.name,
+    customer_name: stickerName,
     customer_phone: phone || '',
+    ...(shopOrderLabel ? { shop_order_label: shopOrderLabel } : {}),
     items,
     total: finalTotal,
     note: '',

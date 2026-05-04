@@ -424,7 +424,7 @@
   <div class="tab" data-page="factory">🏭 โรงงาน</div>
   <div class="tab" data-page="kitchen">👨‍🍳 ครัว <span id="tabBadge" style="display:none;background:#dc2626;color:#fff;border-radius:999px;padding:0 5px;font-size:10px;margin-left:2px"></span></div>
   <div class="tab" data-page="customers">👥 ลูกค้า</div>
-  <div class="tab" data-page="expenses">💰 ค่าใช้จ่าย</div>
+  <div class="tab" data-page="expenses">💰 จ่าย</div>
   <div class="tab" data-page="reports">📊 รายงาน</div>
   <div class="tab" data-page="settings">⚙️</div>
 </div>
@@ -1134,6 +1134,19 @@
     <div id="pdpaPanelOutput" style="margin-top:10px;font-size:13px"></div>
   </div>
 
+  <!-- 📢 Promo strip / banner editor — controls the scrolling cards lูกค้าเห็นบนหน้าเมนู -->
+  <div class="card">
+    <h2>📢 แบนเนอร์โปรโมชัน</h2>
+    <p class="hint">การ์ดที่วิ่งบนหน้าเมนูลูกค้า — แก้ข้อความ / icon / สีได้</p>
+    <div id="promoCardsList" style="margin-top:8px;display:flex;flex-direction:column;gap:8px"></div>
+    <button class="btn-primary" onclick="addPromoCard()" style="width:100%;margin-top:10px;background:linear-gradient(135deg,#7c3aed,#5b21b6)">➕ เพิ่มการ์ดโปรโมชัน</button>
+    <button class="btn-secondary" onclick="resetPromoCards()" style="width:100%;margin-top:6px;background:#fef3c7;color:#92400e;border:1.5px solid #fbbf24">🔄 คืนค่าเริ่มต้น (5 การ์ดมาตรฐาน)</button>
+    <div class="hint" style="font-size:11px;margin-top:8px;line-height:1.5">
+      💡 ลูกค้าเห็นการ์ดเหล่านี้วิ่งซ้ายไปขวาบนหน้าเมนู · ใช้บอกเวลาเปิดร้าน, โปรโมชัน, ของแถม, ฯลฯ<br>
+      🎨 สี: default (น้ำเงิน) · green (เขียว) · purple (ม่วง)
+    </div>
+  </div>
+
   <div class="card">
     <h2>📋 จัดการเมนู</h2>
     <p class="hint">กดที่เมนูเพื่อแก้ — ตั้งราคา ใส่รูป ตั้ง "หมด" ลูกค้าเห็นทันที</p>
@@ -1403,10 +1416,10 @@
 <!-- Print receipt area (hidden until print) -->
 <div id="printArea"></div>
 
-<script type="module" src="firebase.js?v=20260504b"></script>
-<script src="offline-banner.js?v=20260504b"></script>
-<script src="menu-data.js?v=20260504b"></script>
-<script src="notifier.js?v=20260504b"></script>
+<script type="module" src="firebase.js?v=20260504c"></script>
+<script src="offline-banner.js?v=20260504c"></script>
+<script src="menu-data.js?v=20260504c"></script>
+<script src="notifier.js?v=20260504c"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 
@@ -1598,6 +1611,7 @@ document.querySelectorAll('.tab').forEach(t => {
       document.getElementById('settingGoal').value = db.settings.goal;
       document.getElementById('settingPrice').value = db.settings.pricePerBox || 50;
       renderMenuManager();
+      if (typeof renderPromoCardsList === 'function') try { renderPromoCardsList(); } catch (e) {}
       initPrinterToggle();
     }
     // Lazy-load iframes (use dataset flag because empty src resolves to current URL)
@@ -6679,6 +6693,96 @@ function refreshShopOpenStatus() {
   }
 }
 
+// 📢 Promo strip editor — admin manages the cards that scroll on the customer
+//    menu page. Stored in menuConfig.promoCards. Empty/missing = use defaults.
+const DEFAULT_PROMO_CARDS = [
+  { icon: '🕒', title: 'เปิด 9.30 - 17.30 น.',     desc: 'ทุกวัน · หยุดทุกวันอาทิตย์',    color: 'default' },
+  { icon: '🎁', title: '+5 แต้มสมัครใหม่',          desc: 'ฟรี · กรอกเบอร์ครั้งแรก',       color: 'green' },
+  { icon: '🥤', title: '10 แต้ม = ฟรี 1 แก้ว',     desc: 'ชานมไข่มุก / เครื่องดื่มแก้วโอ่ง', color: 'default' },
+  { icon: '💰', title: '15 แต้ม = ลด 50฿',          desc: 'แลกส่วนลดได้ทันที',             color: 'purple' },
+  { icon: '✨', title: 'ร้านสะอาด อาหารสะอาด',     desc: 'มาตรฐานสุขอนามัย',              color: 'green' },
+];
+
+function renderPromoCardsList() {
+  const wrap = document.getElementById('promoCardsList');
+  if (!wrap) return;
+  const cards = (menuConfig && Array.isArray(menuConfig.promoCards) && menuConfig.promoCards.length)
+    ? menuConfig.promoCards : DEFAULT_PROMO_CARDS;
+  // Make sure menuConfig.promoCards is initialized so editing works
+  if (!menuConfig.promoCards) menuConfig.promoCards = JSON.parse(JSON.stringify(DEFAULT_PROMO_CARDS));
+  wrap.innerHTML = menuConfig.promoCards.map((c, i) => {
+    const colorPreview = { default: '#1652F0', green: '#16a34a', purple: '#7c3aed' }[c.color || 'default'] || '#1652F0';
+    return `
+      <div style="background:#fff;border:1.5px solid #e2e7ef;border-left:4px solid ${colorPreview};border-radius:10px;padding:10px;display:flex;gap:8px;align-items:center">
+        <input type="text" value="${(c.icon || '').replace(/"/g,'&quot;')}" maxlength="3" oninput="updatePromoCard(${i}, 'icon', this.value)" style="width:46px;text-align:center;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:18px;font-family:inherit" placeholder="🎁">
+        <div style="flex:1;display:flex;flex-direction:column;gap:4px;min-width:0">
+          <input type="text" value="${(c.title || '').replace(/"/g,'&quot;')}" oninput="updatePromoCard(${i}, 'title', this.value)" style="width:100%;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;font-weight:700;font-family:inherit" placeholder="หัวข้อ">
+          <input type="text" value="${(c.desc || '').replace(/"/g,'&quot;')}" oninput="updatePromoCard(${i}, 'desc', this.value)" style="width:100%;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;color:#5c6982;font-family:inherit" placeholder="รายละเอียด">
+        </div>
+        <select onchange="updatePromoCard(${i}, 'color', this.value)" style="padding:6px;border:1px solid #d1d5db;border-radius:6px;font-size:11px;background:#fff;font-family:inherit">
+          <option value="default" ${(c.color||'default')==='default'?'selected':''}>น้ำเงิน</option>
+          <option value="green" ${c.color==='green'?'selected':''}>เขียว</option>
+          <option value="purple" ${c.color==='purple'?'selected':''}>ม่วง</option>
+        </select>
+        <button onclick="deletePromoCard(${i})" style="background:#fee2e2;color:#dc2626;border:none;width:32px;height:32px;border-radius:6px;font-size:16px;cursor:pointer;font-family:inherit;flex-shrink:0" title="ลบ">✕</button>
+      </div>
+    `;
+  }).join('') || '<div style="text-align:center;color:#9ca3af;font-size:12px;padding:10px">ยังไม่มีการ์ด — กดเพิ่มด้านล่าง</div>';
+}
+
+let _promoSaveTimer = null;
+function _schedulePromoSave() {
+  if (_promoSaveTimer) clearTimeout(_promoSaveTimer);
+  _promoSaveTimer = setTimeout(async () => {
+    try {
+      localStorage.setItem('menuConfig', JSON.stringify(menuConfig));
+      if (window.cloud?.saveMenuConfig) await window.cloud.saveMenuConfig(menuConfig);
+    } catch (e) { console.warn('[promoSave]', e); }
+  }, 600); // debounce: save 600ms after user stops typing
+}
+
+function updatePromoCard(idx, field, value) {
+  if (!menuConfig.promoCards || idx < 0 || idx >= menuConfig.promoCards.length) return;
+  menuConfig.promoCards[idx][field] = value;
+  _schedulePromoSave();
+  // Re-render only the color stripe, NOT the whole list (would steal focus)
+  if (field === 'color') renderPromoCardsList();
+}
+
+async function addPromoCard() {
+  if (!menuConfig.promoCards) menuConfig.promoCards = JSON.parse(JSON.stringify(DEFAULT_PROMO_CARDS));
+  menuConfig.promoCards.push({ icon: '⭐', title: 'การ์ดใหม่', desc: 'แก้ข้อความตรงนี้', color: 'default' });
+  localStorage.setItem('menuConfig', JSON.stringify(menuConfig));
+  if (window.cloud?.saveMenuConfig) try { await window.cloud.saveMenuConfig(menuConfig); } catch(e){}
+  renderPromoCardsList();
+  toast('✅ เพิ่มการ์ดแล้ว');
+}
+
+async function deletePromoCard(idx) {
+  if (!menuConfig.promoCards) return;
+  if (!confirm('ลบการ์ดนี้?')) return;
+  menuConfig.promoCards.splice(idx, 1);
+  localStorage.setItem('menuConfig', JSON.stringify(menuConfig));
+  if (window.cloud?.saveMenuConfig) try { await window.cloud.saveMenuConfig(menuConfig); } catch(e){}
+  renderPromoCardsList();
+  toast('🗑️ ลบแล้ว');
+}
+
+async function resetPromoCards() {
+  if (!confirm('คืนค่าเริ่มต้น 5 การ์ดมาตรฐาน?\n(ของเดิมจะถูกแทนที่)')) return;
+  menuConfig.promoCards = JSON.parse(JSON.stringify(DEFAULT_PROMO_CARDS));
+  localStorage.setItem('menuConfig', JSON.stringify(menuConfig));
+  if (window.cloud?.saveMenuConfig) try { await window.cloud.saveMenuConfig(menuConfig); } catch(e){}
+  renderPromoCardsList();
+  toast('🔄 คืนค่าเริ่มต้นแล้ว');
+}
+
+window.renderPromoCardsList = renderPromoCardsList;
+window.updatePromoCard = updatePromoCard;
+window.addPromoCard = addPromoCard;
+window.deletePromoCard = deletePromoCard;
+window.resetPromoCards = resetPromoCards;
+
 // Save selected Thai codepage
 function saveThaiCodepage() {
   const v = document.getElementById('thaiCodepage').value;
@@ -7377,11 +7481,24 @@ async function saveItemEditor() {
     return;
   }
 
-  // ☁️ Cloud sync — image-stripped (Firestore 1MB doc limit)
+  // ☁️ Cloud sync — image-stripped (Firestore 1MB doc limit on settings/menu)
   let cloudOK = true, cloudErr = null;
   if (window.cloud?.ready) {
     try { await window.cloud.saveMenuConfig(menuConfig); }
     catch (e) { cloudOK = false; cloudErr = e; console.warn('[saveMenu] cloud failed:', e); }
+    // 🖼️ Save image to separate collection so it propagates to customer
+    //    devices (other shops/admin/customer phones). Per-item doc bypasses
+    //    the 1MB limit on the menuConfig doc itself.
+    if (editingItemId && window.cloud?.saveMenuImage) {
+      try {
+        if (editingItemImage) {
+          await window.cloud.saveMenuImage(editingItemId, editingItemImage);
+        } else if (window.cloud?.deleteMenuImage) {
+          // image was removed — clear it from cloud too
+          await window.cloud.deleteMenuImage(editingItemId);
+        }
+      } catch (e) { console.warn('[saveMenu] image cloud sync failed:', e); }
+    }
   }
 
   // ✅ Verify by re-reading what we just wrote
@@ -7452,6 +7569,18 @@ whenCloudReady(() => {
       const localCustom = (localCfg.custom || []).find(lc => lc.id === c.id);
       if (localCustom?.image && !c.image) c.image = localCustom.image;
     });
+    // 🖼️ Also merge in any images from the cloud-side menu_images cache
+    //    (populated by onMenuImages listener below). This is what makes
+    //    images visible on devices other than the one that uploaded them.
+    if (window._menuImagesCache) {
+      (config.custom || []).forEach(c => {
+        if (c && c.id && window._menuImagesCache[c.id]) c.image = window._menuImagesCache[c.id];
+      });
+      Object.entries(window._menuImagesCache).forEach(([id, dataUrl]) => {
+        if (!config.overrides[id]) config.overrides[id] = {};
+        if (!config.overrides[id].image) config.overrides[id].image = dataUrl;
+      });
+    }
 
     menuConfig = config;
     localStorage.setItem('menuConfig', JSON.stringify(menuConfig));
@@ -7459,6 +7588,28 @@ whenCloudReady(() => {
     if (document.querySelector('[data-page=settings]')?.classList.contains('active')) renderMenuManager();
     if (typeof renderRegularItemList === 'function') try { renderRegularItemList(); } catch(e){}
   });
+  // 🖼️ Subscribe to image updates so admin sees images uploaded from other
+  //    devices, and re-renders the menu manager when they arrive.
+  if (window.cloud?.onMenuImages) {
+    window.cloud.onMenuImages(images => {
+      window._menuImagesCache = images || {};
+      // Apply to current menuConfig snapshot
+      if (Array.isArray(menuConfig.custom)) {
+        menuConfig.custom.forEach(c => {
+          if (c && c.id && images[c.id]) c.image = images[c.id];
+        });
+      }
+      Object.entries(images).forEach(([id, dataUrl]) => {
+        if (!menuConfig.overrides) menuConfig.overrides = {};
+        if (!menuConfig.overrides[id]) menuConfig.overrides[id] = {};
+        menuConfig.overrides[id].image = dataUrl;
+      });
+      localStorage.setItem('menuConfig', JSON.stringify(menuConfig));
+      if (document.querySelector('[data-page=settings]')?.classList.contains('active')) {
+        try { renderMenuManager(); } catch (e) {}
+      }
+    });
+  }
 });
 
 // ========== Settings ==========

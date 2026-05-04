@@ -195,6 +195,41 @@ window.cloud = {
     }, err => console.warn('[cloud] onOrder', err));
   },
 
+  // 🖼️ MENU IMAGES — stored in a separate collection to bypass the 1MB
+  //    Firestore doc limit on the menuConfig doc. Each image lives in its
+  //    own doc menu_images/{itemId} = { dataUrl, savedAt }. Compressed
+  //    images are ~50KB so far below the per-doc limit.
+  async saveMenuImage(itemId, dataUrl) {
+    if (!itemId || !dataUrl) return false;
+    try {
+      await setDoc(doc(fdb, 'menu_images', String(itemId)), {
+        dataUrl,
+        savedAt: new Date().toISOString(),
+      });
+      return true;
+    } catch (e) { console.warn('[cloud] saveMenuImage', e); return false; }
+  },
+  async deleteMenuImage(itemId) {
+    if (!itemId) return false;
+    try { await deleteDoc(doc(fdb, 'menu_images', String(itemId))); return true; }
+    catch (e) { console.warn('[cloud] deleteMenuImage', e); return false; }
+  },
+  async getAllMenuImages() {
+    try {
+      const snap = await getDocs(collection(fdb, 'menu_images'));
+      const out = {};
+      snap.forEach(d => { const data = d.data(); if (data?.dataUrl) out[d.id] = data.dataUrl; });
+      return out;
+    } catch (e) { console.warn('[cloud] getAllMenuImages', e); return {}; }
+  },
+  onMenuImages(cb) {
+    return onSnapshot(collection(fdb, 'menu_images'), snap => {
+      const out = {};
+      snap.forEach(d => { const data = d.data(); if (data?.dataUrl) out[d.id] = data.dataUrl; });
+      cb(out);
+    }, err => console.warn('[cloud] onMenuImages', err));
+  },
+
   // Menu config (overrides + custom items)
   // 🔧 Image base64 strings are heavy. Firestore doc limit = 1MB.
   // CRITICAL: setDoc({merge:true}) deep-merges sub-maps which means
