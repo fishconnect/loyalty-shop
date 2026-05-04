@@ -421,9 +421,9 @@
 <div class="tabs">
   <div class="tab active" data-page="order">📝</div>
   <div class="tab" data-page="menu">🍽️ เมนู</div>
-  <div class="tab" data-page="factory">🏭 โรงงาน</div>
+  <div class="tab" data-page="factory" data-feature="factory">🏭 โรงงาน</div>
   <div class="tab" data-page="kitchen">👨‍🍳 ครัว <span id="tabBadge" style="display:none;background:#dc2626;color:#fff;border-radius:999px;padding:0 5px;font-size:10px;margin-left:2px"></span></div>
-  <div class="tab" data-page="customers">👥 ลูกค้า</div>
+  <div class="tab" data-page="customers" data-feature="loyalty">👥 ลูกค้า</div>
   <div class="tab" data-page="expenses">💰 จ่าย</div>
   <div class="tab" data-page="reports">📊 รายงาน</div>
   <div class="tab" data-page="settings">⚙️</div>
@@ -1470,10 +1470,11 @@
 <!-- Print receipt area (hidden until print) -->
 <div id="printArea"></div>
 
-<script type="module" src="firebase.js?v=20260504s"></script>
-<script src="offline-banner.js?v=20260504s"></script>
-<script src="menu-data.js?v=20260504s"></script>
-<script src="notifier.js?v=20260504s"></script>
+<script type="module" src="firebase.js?v=20260504t"></script>
+<script src="sentry-init.js?v=20260504t"></script>
+<script src="offline-banner.js?v=20260504t"></script>
+<script src="menu-data.js?v=20260504t"></script>
+<script src="notifier.js?v=20260504t"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 
@@ -8566,6 +8567,23 @@ whenCloudReady(() => {
       }
       try { renderLoyaltyAdmin?.(); } catch (e) {}
       try { renderCustomerList?.(); } catch (e) {}
+    });
+  }
+  // 🏷️ Shop config — branding + feature flags. Per-shop deployment data.
+  //    Hides tabs whose data-feature flag is false. Default: all enabled.
+  if (window.cloud?.onShopConfig) {
+    window.cloud.onShopConfig(config => {
+      window._shopConfig = config || {};
+      const features = (config && config.features) || {};
+      document.querySelectorAll('[data-feature]').forEach(el => {
+        const flag = el.getAttribute('data-feature');
+        const enabled = features[flag] !== false;  // default = true
+        el.style.display = enabled ? '' : 'none';
+      });
+      // Update document title + visible shop name if config provides one
+      if (config?.name) {
+        document.title = `${config.name} · สะสมแต้ม`;
+      }
     });
   }
 });

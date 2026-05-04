@@ -5,6 +5,9 @@ import {
   onSnapshot, query, orderBy, updateDoc, deleteDoc, where,
   increment
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+import {
+  initializeAppCheck, ReCaptchaV3Provider
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app-check.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDINBiADdxm0aLKD3S7BBOWFr9fiR21oW4",
@@ -17,6 +20,28 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
+
+// 🛡️ App Check — blocks API key abuse from unauthorized origins.
+//    HOW TO ENABLE (one-time, ~5 min):
+//      1. Firebase Console → Build → App Check → Get Started
+//      2. Click "Register" on the web app
+//      3. Pick "reCAPTCHA v3" provider
+//      4. Get a site key from console.cloud.google.com/security/recaptcha
+//         (or click "I don't have one" — Firebase creates it for you)
+//      5. Paste the site key below in place of "PASTE_RECAPTCHA_V3_SITE_KEY_HERE"
+//      6. Bump cache version + push
+//    Until enabled (key still placeholder), App Check is a no-op.
+const APP_CHECK_SITE_KEY = "PASTE_RECAPTCHA_V3_SITE_KEY_HERE";
+if (APP_CHECK_SITE_KEY && APP_CHECK_SITE_KEY !== "PASTE_RECAPTCHA_V3_SITE_KEY_HERE") {
+  try {
+    initializeAppCheck(app, {
+      provider: new ReCaptchaV3Provider(APP_CHECK_SITE_KEY),
+      isTokenAutoRefreshEnabled: true,
+    });
+    console.log('[firebase] App Check enabled');
+  } catch (e) { console.warn('[firebase] App Check failed', e); }
+}
+
 const fdb = getFirestore(app);
 
 // Image base64 strings are too big to sync via Firestore (1MB doc limit).
@@ -214,6 +239,39 @@ window.cloud = {
     return onSnapshot(doc(fdb, 'settings', 'loyalty'), snap => {
       cb(snap.exists() ? snap.data() : null);
     }, err => console.warn('[cloud] onLoyaltyConfig', err));
+  },
+
+  // 🏷️ SHOP CONFIG — per-deployment branding + feature flags. Used when
+  //    selling this codebase as MVP to other shops: each shop has its own
+  //    name, logo, payment QR, hours, and chooses which tabs to enable
+  //    (some shops have no factory orders, no delivery, etc).
+  //    Schema: {
+  //      name: 'ครัวผู้ใหญ่ปอง',
+  //      logo: '<dataUrl>',
+  //      paymentQr: '<dataUrl>',
+  //      address: '...',
+  //      hoursOpen: '09:30',
+  //      hoursClose: '17:30',
+  //      lineId: '@xxx',
+  //      features: {
+  //        factory: true, delivery: true, loyalty: true,
+  //        bluetoothPrinter: true, walkin: true, phoneOrder: true
+  //      }
+  //    }
+  async getShopConfig() {
+    try {
+      const s = await getDoc(doc(fdb, 'settings', 'shop'));
+      return s.exists() ? s.data() : null;
+    } catch (e) { console.warn('[cloud] getShopConfig', e); return null; }
+  },
+  async saveShopConfig(cfg) {
+    try { await setDoc(doc(fdb, 'settings', 'shop'), cfg); return true; }
+    catch (e) { console.warn('[cloud] saveShopConfig', e); return false; }
+  },
+  onShopConfig(cb) {
+    return onSnapshot(doc(fdb, 'settings', 'shop'), snap => {
+      cb(snap.exists() ? snap.data() : null);
+    }, err => console.warn('[cloud] onShopConfig', err));
   },
 
   // 🖼️ MENU IMAGES — stored in a separate collection to bypass the 1MB
