@@ -1214,9 +1214,9 @@
 
 <div class="toast" id="toast"></div>
 
-<script type="module" src="firebase.js?v=20260504h"></script>
-<script src="offline-banner.js?v=20260504h"></script>
-<script src="menu-data.js?v=20260504h"></script>
+<script type="module" src="firebase.js?v=20260504i"></script>
+<script src="offline-banner.js?v=20260504i"></script>
+<script src="menu-data.js?v=20260504i"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 const STORAGE_KEY = 'loyaltyShopV2';
@@ -2003,6 +2003,20 @@ function renderOptionGroups() {
     return;
   }
   wrap.innerHTML = item.optionGroups.map((g, gi) => {
+    // 🩹 Cross-group conditional hide: e.g. factory egg group is skipped when
+    //    customer picked a seafood/premium protein in an earlier group
+    //    (no free fried egg with กุ้ง / หมูกรอบ / ปลาหมึก / รวมมิตร).
+    if (Array.isArray(g.hideIfPrevSelectedAnyOf) && g.hideIfPrevSelectedAnyOf.length) {
+      const earlier = [];
+      for (let i = 0; i < gi; i++) earlier.push(...((custCurrent.options[i]) || []));
+      if (g.hideIfPrevSelectedAnyOf.some(c => earlier.includes(c))) {
+        // Also clear any selection on this group so it doesn't sneak into the cart
+        if (custCurrent.options[gi] && custCurrent.options[gi].length) {
+          custCurrent.options[gi] = [];
+        }
+        return '';
+      }
+    }
     const isRequired = (g.min || 0) > 0;
     const isSingle = g.max === 1;
     const isBoundedMulti = !isSingle && g.max > 1 && g.max < 99;

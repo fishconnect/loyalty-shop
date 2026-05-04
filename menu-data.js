@@ -778,24 +778,34 @@ window.MENU = [
 const _F_EGG = ['ไข่ดาว', 'ไข่เจียว'];
 const _F_NOODLES = ['เส้นเล็ก', 'เส้นใหญ่', 'หมี่ขาว', 'บะหมี่', 'วุ้นเส้น', 'มาม่า'];
 
-// Free egg add-on (ฟรี รวมในราคาแล้ว)
+// 🥚 Seafood / pre-cooked proteins that DON'T pair with a free fried egg
+//    (rule from kitchen — frying ทอด an egg with seafood doesn't work
+//    for the dish; admin staff just want fewer mistakes on the sticker).
+const _F_NO_EGG_PROTEINS = ['หมูกรอบ', 'กุ้ง', 'ปลาหมึก', 'รวมมิตร', 'รวมมิตรทะเล'];
+
+// Free egg add-on (ฟรี รวมในราคาแล้ว). hideIfPrevSelectedAnyOf is honored
+// by renderOptionGroups in menu.html — when any earlier required group has
+// one of these choices selected, the egg group is skipped entirely.
 const F_OPT_FREE_EGG = () => ({
   kind: 'addOn', label: '🥚 ฟรี ไข่ดาว/ไข่เจียว (เลือก 1)',
-  min: 0, max: 1, priceEach: 0, choices: [..._F_EGG]
+  min: 0, max: 1, priceEach: 0, choices: [..._F_EGG],
+  hideIfPrevSelectedAnyOf: [..._F_NO_EGG_PROTEINS],
 });
 
-// Protein presets
+// Protein presets — all three now offer the same expanded list (basic +
+// seafood + premium). The egg group above auto-hides when seafood/premium
+// is picked so kitchen sticker stays correct.
 const F_PROTEIN_BASIC = () => ({
   kind: 'required', label: 'เลือกเนื้อ', min: 1, max: 1, priceEach: 0,
-  choices: ['หมูชิ้น', 'หมูสับ', 'ไก่']
+  choices: ['หมูชิ้น', 'หมูสับ', 'ไก่', 'กุ้ง', 'รวมมิตร (หมู+หมึก+กุ้ง)', 'หมูกรอบ', 'ปลาหมึก'],
 });
 const F_PROTEIN_BASIC_SEA = () => ({
   kind: 'required', label: 'เลือกเนื้อ', min: 1, max: 1, priceEach: 0,
-  choices: ['หมูชิ้น', 'หมูสับ', 'ไก่', 'รวมมิตรทะเล']
+  choices: ['หมูชิ้น', 'หมูสับ', 'ไก่', 'กุ้ง', 'รวมมิตร (หมู+หมึก+กุ้ง)', 'หมูกรอบ', 'ปลาหมึก'],
 });
 const F_PROTEIN_SEA = () => ({
   kind: 'required', label: 'เลือกเนื้อ', min: 1, max: 1, priceEach: 0,
-  choices: ['หมูกรอบ', 'กุ้ง', 'ปลาหมึก', 'รวมมิตร']
+  choices: ['หมูกรอบ', 'กุ้ง', 'ปลาหมึก', 'รวมมิตร (หมู+หมึก+กุ้ง)'],
 });
 const F_NOODLE_CHOICE = () => ({
   kind: 'required', label: 'เลือกเส้น', min: 1, max: 1, priceEach: 0, choices: [..._F_NOODLES]
