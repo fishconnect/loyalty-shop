@@ -1470,10 +1470,10 @@
 <!-- Print receipt area (hidden until print) -->
 <div id="printArea"></div>
 
-<script type="module" src="firebase.js?v=20260504r"></script>
-<script src="offline-banner.js?v=20260504r"></script>
-<script src="menu-data.js?v=20260504r"></script>
-<script src="notifier.js?v=20260504r"></script>
+<script type="module" src="firebase.js?v=20260504s"></script>
+<script src="offline-banner.js?v=20260504s"></script>
+<script src="menu-data.js?v=20260504s"></script>
+<script src="notifier.js?v=20260504s"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 
@@ -5722,6 +5722,34 @@ function closeFactoryOrderEditor() {
 }
 window.closeFactoryOrderEditor = closeFactoryOrderEditor;
 
+// 🍽️ Build the dropdown list for the factory-order item picker — pulls
+//    from BOTH factory menu and regular menu so admin can record any item
+//    sold to the factory without typing.
+function _allMenuChoicesForFactoryOrder() {
+  const groups = [];
+  if (typeof getEffectiveFactoryMenu === 'function') {
+    const fc = getEffectiveFactoryMenu();
+    fc.forEach(cat => {
+      const items = (cat.items || []).filter(it => it && it.id);
+      if (items.length) groups.push({
+        label: '🏭 ' + (cat.cat || 'โรงงาน'),
+        items: items.map(it => ({ id: it.id, name: it.name, price: it.price })),
+      });
+    });
+  }
+  if (window.applyMenuConfig) {
+    const rc = window.applyMenuConfig(menuConfig);
+    rc.forEach(cat => {
+      const items = (cat.items || []).filter(it => it && it.id);
+      if (items.length) groups.push({
+        label: '🍽️ ' + (cat.cat || 'เมนู'),
+        items: items.map(it => ({ id: it.id, name: it.name, price: it.price })),
+      });
+    });
+  }
+  return groups;
+}
+
 function _renderFactoryOrderEditorBody() {
   const o = _editingFactoryOrder;
   if (!o) return;
@@ -5731,16 +5759,46 @@ function _renderFactoryOrderEditorBody() {
   const d = new Date(useDate);
   const pad = n => String(n).padStart(2, '0');
   const dtVal = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  const itemsHtml = (o.items || []).map((it, i) => `
-    <div style="display:flex;gap:6px;align-items:center;background:#f8fafc;border:1px solid #e2e7ef;border-radius:8px;padding:6px 8px;margin-bottom:6px">
-      <input type="number" min="1" data-fo-qty="${i}" value="${it.qty || 1}" style="width:54px;padding:5px;border:1px solid #d1d5db;border-radius:6px;font-size:12.5px;text-align:center;font-weight:700">
-      <span style="color:#9ca3af">×</span>
-      <input type="text" data-fo-name="${i}" value="${(it.mainName || it.name || '').replace(/"/g,'&quot;')}" placeholder="ชื่อรายการ" style="flex:1;min-width:0;padding:5px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:12.5px">
-      <span style="color:#6b7280;font-size:11px">฿</span>
-      <input type="number" min="0" step="1" data-fo-price="${i}" value="${it.price ?? 50}" style="width:62px;padding:5px;border:1px solid #d1d5db;border-radius:6px;font-size:12.5px;text-align:right;font-weight:700;color:#1652F0">
-      <button onclick="_removeFactoryOrderItem(${i})" style="background:#fee2e2;color:#dc2626;border:none;width:28px;height:28px;border-radius:6px;cursor:pointer;flex-shrink:0">×</button>
-    </div>
-  `).join('') || '<div style="text-align:center;color:#9ca3af;font-size:12px;padding:8px">ยังไม่มีรายการ</div>';
+  const groups = _allMenuChoicesForFactoryOrder();
+  // Flatten for fast lookup: name → price (used by edit-load matching)
+  const lookupByName = new Map();
+  groups.forEach(g => g.items.forEach(it => {
+    if (!lookupByName.has(it.name)) lookupByName.set(it.name, { id: it.id, price: it.price });
+  }));
+  const itemsHtml = (o.items || []).map((it, i) => {
+    const currentName = it.mainName || it.name || '';
+    // If existing item matches a known menu name, pre-select it; otherwise
+    // open in "free-text" mode so admin can edit the typed name.
+    const isFreeText = !!currentName && !lookupByName.has(currentName);
+    const optionsHtml = `
+      <option value="" ${!currentName?'selected':''}>— เลือกเมนู —</option>
+      <option value="__custom__" ${isFreeText?'selected':''}>✏️ (พิมพ์เอง)</option>
+      ${groups.map(g => `
+        <optgroup label="${g.label.replace(/"/g,'&quot;')}">
+          ${g.items.map(item => {
+            const v = item.id;
+            const sel = (!isFreeText && currentName === item.name) ? 'selected' : '';
+            return `<option value="${v}" data-name="${(item.name||'').replace(/"/g,'&quot;')}" data-price="${item.price ?? ''}" ${sel}>${escapeHtml(item.name)}${item.price?` · ฿${item.price}`:''}</option>`;
+          }).join('')}
+        </optgroup>
+      `).join('')}
+    `;
+    return `
+      <div style="background:#f8fafc;border:1px solid #e2e7ef;border-radius:8px;padding:6px 8px;margin-bottom:6px">
+        <div style="display:flex;gap:6px;align-items:center">
+          <input type="number" min="1" data-fo-qty="${i}" value="${it.qty || 1}" style="width:54px;padding:5px;border:1px solid #d1d5db;border-radius:6px;font-size:12.5px;text-align:center;font-weight:700">
+          <span style="color:#9ca3af">×</span>
+          <select data-fo-select="${i}" onchange="_onFactoryItemSelect(${i}, this)" style="flex:1;min-width:0;padding:5px 6px;border:1px solid #d1d5db;border-radius:6px;font-size:12.5px;font-family:inherit;background:#fff">
+            ${optionsHtml}
+          </select>
+          <span style="color:#6b7280;font-size:11px">฿</span>
+          <input type="number" min="0" step="1" data-fo-price="${i}" value="${it.price ?? 50}" style="width:62px;padding:5px;border:1px solid #d1d5db;border-radius:6px;font-size:12.5px;text-align:right;font-weight:700;color:#1652F0">
+          <button onclick="_removeFactoryOrderItem(${i})" style="background:#fee2e2;color:#dc2626;border:none;width:28px;height:28px;border-radius:6px;cursor:pointer;flex-shrink:0">×</button>
+        </div>
+        <input type="text" data-fo-name="${i}" value="${currentName.replace(/"/g,'&quot;')}" placeholder="ชื่อรายการ (พิมพ์เอง)" style="width:100%;margin-top:6px;padding:5px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:12.5px;display:${isFreeText?'block':'none'}">
+      </div>
+    `;
+  }).join('') || '<div style="text-align:center;color:#9ca3af;font-size:12px;padding:8px">ยังไม่มีรายการ — กด "+ เพิ่มรายการ"</div>';
 
   body.innerHTML = `
     <label style="display:block;font-size:11.5px;color:#5c6982;margin-bottom:8px">
@@ -5775,16 +5833,51 @@ function _renderFactoryOrderEditorBody() {
 
 function _readFactoryOrderItemsFromDOM() {
   const items = [];
-  document.querySelectorAll('[data-fo-name]').forEach(el => {
-    const i = el.getAttribute('data-fo-name');
-    const name = (el.value || '').trim();
+  document.querySelectorAll('[data-fo-select]').forEach(selectEl => {
+    const i = selectEl.getAttribute('data-fo-select');
+    const sel = selectEl.value;
     const qty = parseInt(document.querySelector(`[data-fo-qty="${i}"]`)?.value) || 1;
     const price = parseFloat(document.querySelector(`[data-fo-price="${i}"]`)?.value) || 0;
+    let name = '';
+    let id = null;
+    if (sel === '__custom__' || sel === '') {
+      // Free-text mode — read the visible text input
+      name = (document.querySelector(`[data-fo-name="${i}"]`)?.value || '').trim();
+    } else {
+      // A menu option was picked — option value is the item id, name in data-name
+      const opt = selectEl.options[selectEl.selectedIndex];
+      name = (opt?.getAttribute('data-name') || '').trim();
+      id = sel;
+    }
     if (!name) return;
-    items.push({ qty, name, mainName: name, price, total: qty * price });
+    items.push({ qty, name, mainName: name, price, total: qty * price, ...(id ? { id } : {}) });
   });
   return items;
 }
+
+// 🍽️ When admin picks a menu item from the dropdown, auto-fill price + hide
+//    the free-text input. When they pick "(พิมพ์เอง)", reveal the text input.
+function _onFactoryItemSelect(idx, selectEl) {
+  const opt = selectEl.options[selectEl.selectedIndex];
+  const val = selectEl.value;
+  const nameInput = document.querySelector(`[data-fo-name="${idx}"]`);
+  const priceInput = document.querySelector(`[data-fo-price="${idx}"]`);
+  if (val === '__custom__' || val === '') {
+    if (nameInput) {
+      nameInput.style.display = 'block';
+      if (val === '') nameInput.value = '';
+      nameInput.focus();
+    }
+  } else {
+    if (nameInput) {
+      nameInput.style.display = 'none';
+      nameInput.value = opt?.getAttribute('data-name') || '';
+    }
+    const p = parseFloat(opt?.getAttribute('data-price'));
+    if (priceInput && Number.isFinite(p) && p > 0) priceInput.value = p;
+  }
+}
+window._onFactoryItemSelect = _onFactoryItemSelect;
 
 function _addFactoryOrderItem() {
   if (!_editingFactoryOrder) return;
