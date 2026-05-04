@@ -810,9 +810,40 @@
       <div id="factoryCreditList"></div>
     </div>
 
+    <!-- 🛠️ จัดการ Order ย้อนหลัง — แก้/ลบ/เพิ่ม order โรงงานที่ลงไม่ทันหรือลงผิด -->
+    <div class="card">
+      <h2>🛠️ จัดการ Order โรงงาน (แก้/ลบ/เพิ่มย้อนหลัง)</h2>
+      <p class="hint">แก้ Order ที่ลงผิด · ลบ Order ที่ไม่ใช่ของจริง · เพิ่ม Order ที่ลงไม่ทัน</p>
+      <button class="btn-primary" onclick="openFactoryOrderEditor()" style="width:100%;margin-bottom:10px;background:linear-gradient(135deg,#7c3aed,#5b21b6)">➕ เพิ่ม Order ย้อนหลัง</button>
+      <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;font-size:11.5px">
+        <select id="factoryAdminOrdersFilter" onchange="renderFactoryAdminOrders()" style="flex:1;min-width:120px;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;font-family:inherit">
+          <option value="all">ทั้งหมด</option>
+          <option value="unpaid">ยังไม่จ่าย</option>
+          <option value="paid">จ่ายแล้ว</option>
+        </select>
+        <input id="factoryAdminOrdersSearch" type="text" oninput="renderFactoryAdminOrders()" placeholder="🔎 ค้นหาชื่อโรงงาน..." style="flex:2;min-width:140px;padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-family:inherit;font-size:12px">
+      </div>
+      <div id="factoryAdminOrdersList" style="max-height:520px;overflow-y:auto"></div>
+    </div>
+
     <div class="card">
       <h2>📅 ยอดขายรายวัน · โรงงาน</h2>
       <div id="factoryTrend"></div>
+    </div>
+  </div>
+
+  <!-- 🛠️ Factory order edit modal -->
+  <div class="modal-bg" id="factoryOrderEditModal" style="display:none">
+    <div class="modal" style="max-width:500px;padding:0">
+      <div style="position:sticky;top:0;background:#fff;border-bottom:1px solid #e2e7ef;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;border-radius:14px 14px 0 0;z-index:10">
+        <h2 id="factoryOrderEditTitle" style="margin:0;color:#0a1530;font-size:17px">🏭 แก้ไข Order</h2>
+        <button onclick="closeFactoryOrderEditor()" style="background:transparent;border:none;font-size:24px;color:#6b7280;cursor:pointer;padding:0">×</button>
+      </div>
+      <div style="padding:14px 18px;max-height:70vh;overflow-y:auto" id="factoryOrderEditBody"></div>
+      <div style="position:sticky;bottom:0;background:#fff;border-top:1px solid #e2e7ef;padding:12px 18px;display:flex;gap:8px;border-radius:0 0 14px 14px">
+        <button class="btn-secondary" onclick="closeFactoryOrderEditor()" style="flex:1">ยกเลิก</button>
+        <button class="btn-primary" onclick="saveFactoryOrderEditor()" style="flex:2;background:linear-gradient(135deg,#16a34a,#15803d)">💾 บันทึก</button>
+      </div>
     </div>
   </div>
 
@@ -1439,10 +1470,10 @@
 <!-- Print receipt area (hidden until print) -->
 <div id="printArea"></div>
 
-<script type="module" src="firebase.js?v=20260504n"></script>
-<script src="offline-banner.js?v=20260504n"></script>
-<script src="menu-data.js?v=20260504n"></script>
-<script src="notifier.js?v=20260504n"></script>
+<script type="module" src="firebase.js?v=20260504o"></script>
+<script src="offline-banner.js?v=20260504o"></script>
+<script src="menu-data.js?v=20260504o"></script>
+<script src="notifier.js?v=20260504o"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 
@@ -5563,6 +5594,8 @@ function renderFactoryReports() {
 
   // Cache for drill-down
   window._factoryReportCache = { allFact, allUnpaid, label };
+  // 🛠️ Refresh the admin order list in the same render tick
+  try { renderFactoryAdminOrders(); } catch (e) {}
 }
 
 async function markFactoryPaid(orderId) {
@@ -5581,6 +5614,266 @@ async function markFactoryPaid(orderId) {
   toast(`✅ เก็บเงินแล้ว · ${order.customer_name || 'โรงงาน'} · ฿${order.total}`);
   renderFactoryReports();
 }
+
+// ============================================
+// 🛠️ Factory Order Admin — edit / delete / backdate factory orders
+// ============================================
+//   Lets the shop owner correct, remove, or add a factory order that was
+//   placed offline (paper / phone) so accounting reflects reality. Customer
+//   point balances are NOT touched — factory orders never accrue points.
+let _editingFactoryOrder = null;        // working copy while modal open
+
+function _allFactoryOrdersFlat() {
+  const seen = new Set();
+  const all = [];
+  [...(db.pendingOrders || []), ...(db.orders || [])].forEach(o => {
+    if (!o || !o.id || !isFactoryOrder(o)) return;
+    if (seen.has(o.id)) return;
+    seen.add(o.id);
+    all.push(o);
+  });
+  return all.sort((a, b) => {
+    const ta = new Date(b.completed_at || b.date || 0).getTime();
+    const tb = new Date(a.completed_at || a.date || 0).getTime();
+    return ta - tb;
+  });
+}
+
+function renderFactoryAdminOrders() {
+  const wrap = document.getElementById('factoryAdminOrdersList');
+  if (!wrap) return;
+  const filterEl = document.getElementById('factoryAdminOrdersFilter');
+  const searchEl = document.getElementById('factoryAdminOrdersSearch');
+  const filter = filterEl ? filterEl.value : 'all';
+  const q = (searchEl?.value || '').toLowerCase().trim();
+  const all = _allFactoryOrdersFlat().filter(o => {
+    if (filter === 'paid' && !o.factory_paid) return false;
+    if (filter === 'unpaid' && o.factory_paid) return false;
+    if (q && !(o.customer_name || '').toLowerCase().includes(q)) return false;
+    return true;
+  });
+  if (!all.length) {
+    wrap.innerHTML = '<div style="text-align:center;color:#9ca3af;padding:18px;font-size:13px">— ไม่มี Order —</div>';
+    return;
+  }
+  wrap.innerHTML = all.map(o => {
+    const d = new Date(o.completed_at || o.date || Date.now());
+    const itemSummary = (o.items || []).map(i => `${i.qty || 1}× ${i.mainName || i.name || ''}`).join(', ').slice(0, 80);
+    const paid = !!o.factory_paid;
+    return `
+      <div style="background:#fff;border:1.5px solid ${paid?'#dcfce7':'#fef3c7'};border-left:4px solid ${paid?'#16a34a':'#f59e0b'};border-radius:10px;padding:10px 12px;margin-bottom:6px">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:start">
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+              <b style="font-size:13.5px;color:#0a1530">${escapeHtml(o.customer_name || 'โรงงาน')}</b>
+              <span style="background:${paid?'#dcfce7;color:#166534':'#fef3c7;color:#92400e'};padding:1px 8px;border-radius:999px;font-size:10.5px;font-weight:700">${paid?'✓ จ่ายแล้ว':'⏳ ยังไม่จ่าย'}</span>
+              <span style="color:#1652F0;font-weight:800;font-size:13px">${fmtBaht(o.total || 0)}</span>
+            </div>
+            <div style="font-size:11.5px;color:#5c6982;margin-top:3px;line-height:1.4">
+              ${d.toLocaleDateString('th-TH')} ${d.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})} · ${(o.items||[]).length} รายการ${itemSummary?` · ${escapeHtml(itemSummary)}`:''}
+            </div>
+            <div style="font-size:10px;color:#9ca3af;margin-top:2px">ID: ${escapeHtml(o.id)}</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
+            <button onclick="openFactoryOrderEditor('${escapeHtml(o.id)}')" style="background:#dbeafe;color:#1652F0;border:none;padding:6px 10px;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit">✏️ แก้</button>
+            <button onclick="deleteFactoryAdminOrder('${escapeHtml(o.id)}')" style="background:#fee2e2;color:#dc2626;border:none;padding:6px 10px;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit">🗑️ ลบ</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+window.renderFactoryAdminOrders = renderFactoryAdminOrders;
+
+function openFactoryOrderEditor(orderId) {
+  // Load existing or initialize a new draft
+  let order;
+  if (orderId) {
+    order = (db.pendingOrders || []).find(o => o.id === orderId)
+         || (db.orders || []).find(o => o.id === orderId);
+    if (!order) return toast('⚠️ ไม่พบ order', true);
+    _editingFactoryOrder = JSON.parse(JSON.stringify(order));
+    document.getElementById('factoryOrderEditTitle').textContent = '🏭 แก้ไข Order';
+  } else {
+    const newId = 'PO' + Date.now() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
+    _editingFactoryOrder = {
+      id: newId,
+      customer_id: 'factory-' + Date.now(),
+      customer_name: '',
+      source: 'factory',
+      status: 'done',
+      date: new Date().toISOString(),
+      completed_at: new Date().toISOString(),
+      items: [],
+      total: 0,
+      factory_paid: false,
+      _isNew: true,
+    };
+    document.getElementById('factoryOrderEditTitle').textContent = '➕ เพิ่ม Order ย้อนหลัง';
+  }
+  _renderFactoryOrderEditorBody();
+  document.getElementById('factoryOrderEditModal').style.display = 'flex';
+}
+window.openFactoryOrderEditor = openFactoryOrderEditor;
+
+function closeFactoryOrderEditor() {
+  document.getElementById('factoryOrderEditModal').style.display = 'none';
+  _editingFactoryOrder = null;
+}
+window.closeFactoryOrderEditor = closeFactoryOrderEditor;
+
+function _renderFactoryOrderEditorBody() {
+  const o = _editingFactoryOrder;
+  if (!o) return;
+  const body = document.getElementById('factoryOrderEditBody');
+  // Convert ISO date → "yyyy-mm-ddThh:mm" for datetime-local input
+  const useDate = o.completed_at || o.date || new Date().toISOString();
+  const d = new Date(useDate);
+  const pad = n => String(n).padStart(2, '0');
+  const dtVal = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const itemsHtml = (o.items || []).map((it, i) => `
+    <div style="display:flex;gap:6px;align-items:center;background:#f8fafc;border:1px solid #e2e7ef;border-radius:8px;padding:6px 8px;margin-bottom:6px">
+      <input type="number" min="1" data-fo-qty="${i}" value="${it.qty || 1}" style="width:54px;padding:5px;border:1px solid #d1d5db;border-radius:6px;font-size:12.5px;text-align:center;font-weight:700">
+      <span style="color:#9ca3af">×</span>
+      <input type="text" data-fo-name="${i}" value="${(it.mainName || it.name || '').replace(/"/g,'&quot;')}" placeholder="ชื่อรายการ" style="flex:1;min-width:0;padding:5px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:12.5px">
+      <span style="color:#6b7280;font-size:11px">฿</span>
+      <input type="number" min="0" step="1" data-fo-price="${i}" value="${it.price ?? 50}" style="width:62px;padding:5px;border:1px solid #d1d5db;border-radius:6px;font-size:12.5px;text-align:right;font-weight:700;color:#1652F0">
+      <button onclick="_removeFactoryOrderItem(${i})" style="background:#fee2e2;color:#dc2626;border:none;width:28px;height:28px;border-radius:6px;cursor:pointer;flex-shrink:0">×</button>
+    </div>
+  `).join('') || '<div style="text-align:center;color:#9ca3af;font-size:12px;padding:8px">ยังไม่มีรายการ</div>';
+
+  body.innerHTML = `
+    <label style="display:block;font-size:11.5px;color:#5c6982;margin-bottom:8px">
+      🏭 ชื่อโรงงาน
+      <input type="text" id="foCustomerName" value="${(o.customer_name||'').replace(/"/g,'&quot;')}" placeholder="เช่น โรงงานพี่อาท" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:7px;font-size:13.5px;margin-top:4px;font-weight:700">
+    </label>
+    <label style="display:block;font-size:11.5px;color:#5c6982;margin-bottom:8px">
+      📅 วันที่ + เวลา
+      <input type="datetime-local" id="foDate" value="${dtVal}" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:7px;font-size:13px;margin-top:4px">
+    </label>
+    <div style="background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;padding:10px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-size:12px;color:#5c6982;font-weight:700">🍽️ รายการ</span>
+        <button onclick="_addFactoryOrderItem()" style="background:#1652F0;color:#fff;border:none;padding:5px 10px;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer">+ เพิ่มรายการ</button>
+      </div>
+      <div id="foItemsList">${itemsHtml}</div>
+    </div>
+    <label style="display:block;font-size:11.5px;color:#5c6982;margin-bottom:8px">
+      💰 ยอดรวม (฿) <span style="color:#9ca3af;font-size:10.5px">— เว้นว่าง = คำนวณจากรายการอัตโนมัติ</span>
+      <input type="number" min="0" step="1" id="foTotal" value="${o.total ?? ''}" placeholder="auto" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:7px;font-size:14px;margin-top:4px;font-weight:800;color:#1652F0">
+    </label>
+    <label style="display:flex;gap:8px;align-items:center;background:#f8fafc;padding:9px 12px;border-radius:8px;cursor:pointer;font-size:13px">
+      <input type="checkbox" id="foPaid" ${o.factory_paid?'checked':''} style="width:16px;height:16px">
+      <span><b>✓ เก็บเงินแล้ว</b> · เคลียร์จากเครดิตค้างชำระ</span>
+    </label>
+    <label style="display:block;font-size:11.5px;color:#5c6982;margin-top:8px">
+      📝 หมายเหตุ
+      <input type="text" id="foNote" value="${(o.note||'').replace(/"/g,'&quot;')}" placeholder="optional" style="width:100%;padding:7px 10px;border:1px solid #d1d5db;border-radius:7px;font-size:12.5px;margin-top:4px">
+    </label>
+  `;
+}
+
+function _readFactoryOrderItemsFromDOM() {
+  const items = [];
+  document.querySelectorAll('[data-fo-name]').forEach(el => {
+    const i = el.getAttribute('data-fo-name');
+    const name = (el.value || '').trim();
+    const qty = parseInt(document.querySelector(`[data-fo-qty="${i}"]`)?.value) || 1;
+    const price = parseFloat(document.querySelector(`[data-fo-price="${i}"]`)?.value) || 0;
+    if (!name) return;
+    items.push({ qty, name, mainName: name, price, total: qty * price });
+  });
+  return items;
+}
+
+function _addFactoryOrderItem() {
+  if (!_editingFactoryOrder) return;
+  // Persist current DOM state before re-rendering
+  _editingFactoryOrder.items = _readFactoryOrderItemsFromDOM();
+  _editingFactoryOrder.items.push({ qty: 1, name: '', mainName: '', price: 50, total: 50 });
+  _renderFactoryOrderEditorBody();
+}
+window._addFactoryOrderItem = _addFactoryOrderItem;
+
+function _removeFactoryOrderItem(idx) {
+  if (!_editingFactoryOrder) return;
+  _editingFactoryOrder.items = _readFactoryOrderItemsFromDOM();
+  _editingFactoryOrder.items.splice(idx, 1);
+  _renderFactoryOrderEditorBody();
+}
+window._removeFactoryOrderItem = _removeFactoryOrderItem;
+
+async function saveFactoryOrderEditor() {
+  const o = _editingFactoryOrder;
+  if (!o) return;
+  const name = (document.getElementById('foCustomerName').value || '').trim();
+  if (!name) return toast('⚠️ กรอกชื่อโรงงาน', true);
+  const dtRaw = document.getElementById('foDate').value;
+  if (!dtRaw) return toast('⚠️ เลือกวันที่', true);
+  const dtIso = new Date(dtRaw).toISOString();
+  const items = _readFactoryOrderItemsFromDOM();
+  if (!items.length) return toast('⚠️ ใส่อย่างน้อย 1 รายการ', true);
+  const totalRaw = document.getElementById('foTotal').value.trim();
+  const computed = items.reduce((s, it) => s + (it.qty * it.price), 0);
+  const total = totalRaw === '' ? computed : (parseFloat(totalRaw) || 0);
+  const paid = document.getElementById('foPaid').checked;
+  const note = (document.getElementById('foNote').value || '').trim();
+
+  o.customer_name = name;
+  o.date = dtIso;
+  o.completed_at = dtIso;
+  o.items = items;
+  o.total = total;
+  o.boxes = window.countMainDishes ? window.countMainDishes(items) : items.length;
+  o.factory_paid = paid;
+  if (paid && !o.factory_paid_at) o.factory_paid_at = new Date().toISOString();
+  if (!paid) delete o.factory_paid_at;
+  o.note = note;
+  o.source = 'factory';
+  o.status = o.status || 'done';
+  delete o._isNew;
+
+  // Persist locally — completed factory orders live in db.orders
+  db.orders = db.orders || [];
+  const idxOrders = db.orders.findIndex(x => x.id === o.id);
+  if (idxOrders >= 0) db.orders[idxOrders] = o;
+  else db.orders.push(o);
+  // Also patch pendingOrders if it was in flight
+  db.pendingOrders = db.pendingOrders || [];
+  const idxPend = db.pendingOrders.findIndex(x => x.id === o.id);
+  if (idxPend >= 0) db.pendingOrders[idxPend] = o;
+  saveDB();
+
+  // Cloud
+  if (window.cloud?.saveOrder && o.id?.startsWith('PO')) {
+    try { await window.cloud.saveOrder(o); }
+    catch (e) { console.warn('[saveFactoryOrderEditor] cloud', e); }
+  }
+
+  toast('✅ บันทึก order แล้ว');
+  closeFactoryOrderEditor();
+  renderFactoryReports();
+  renderFactoryAdminOrders();
+}
+window.saveFactoryOrderEditor = saveFactoryOrderEditor;
+
+async function deleteFactoryAdminOrder(orderId) {
+  const order = (db.pendingOrders || []).find(o => o.id === orderId)
+              || (db.orders || []).find(o => o.id === orderId);
+  if (!order) return toast('⚠️ ไม่พบ order', true);
+  if (!confirm(`ลบ order นี้ถาวร?\n\n${order.customer_name || 'โรงงาน'}\n฿${order.total} · ${new Date(order.completed_at || order.date).toLocaleDateString('th-TH')}\n\n⚠️ ลบแล้วกู้คืนไม่ได้`)) return;
+  db.pendingOrders = (db.pendingOrders || []).filter(o => o.id !== orderId);
+  db.orders = (db.orders || []).filter(o => o.id !== orderId);
+  saveDB();
+  if (window.cloud?.deleteOrder && orderId.startsWith('PO')) {
+    try { await window.cloud.deleteOrder(orderId); }
+    catch (e) { console.warn('[deleteFactoryAdminOrder] cloud', e); }
+  }
+  toast('🗑️ ลบ order แล้ว');
+  renderFactoryReports();
+  renderFactoryAdminOrders();
+}
+window.deleteFactoryAdminOrder = deleteFactoryAdminOrder;
 
 // ============================================
 // 📄 Factory Invoice (ใบวางบิล) — categorize orders into 4 buckets
