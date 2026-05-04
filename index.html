@@ -1439,10 +1439,10 @@
 <!-- Print receipt area (hidden until print) -->
 <div id="printArea"></div>
 
-<script type="module" src="firebase.js?v=20260504m"></script>
-<script src="offline-banner.js?v=20260504m"></script>
-<script src="menu-data.js?v=20260504m"></script>
-<script src="notifier.js?v=20260504m"></script>
+<script type="module" src="firebase.js?v=20260504n"></script>
+<script src="offline-banner.js?v=20260504n"></script>
+<script src="menu-data.js?v=20260504n"></script>
+<script src="notifier.js?v=20260504n"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 
@@ -6110,18 +6110,24 @@ function renderMenuManager() {
         // Cascade: admin upload (it.image / ov.image) → filesystem assets/menu/<id>.jpg → emoji
         const img = it.image || ov.image || `assets/menu/${it.id}.jpg`;
         return `
-        <div onclick="openItemEditor('${it.id}')" style="background:#fff;border:1.5px solid ${it.available!==false?'#e2e7ef':'#fee2e2'};border-radius:12px;padding:10px;cursor:pointer;display:flex;gap:10px;align-items:center;position:relative;transition:border-color .15s">
-          <div style="width:50px;height:50px;flex-shrink:0;border-radius:8px;overflow:hidden;background:linear-gradient(135deg,#ebf0ff,#c5d3ff);display:grid;place-items:center;font-size:24px">
-            <img src="${img}" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none';this.parentElement.innerHTML='${cat.emoji || '🍽️'}'">
-          </div>
-          <div style="flex:1;min-width:0">
-            <div style="font-weight:700;font-size:13px;color:#0a1530;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${it.name}</div>
-            <div style="display:flex;gap:6px;align-items:center;margin-top:4px">
-              <span style="font-size:13px;font-weight:800;color:#1652F0">฿${it.price}</span>
-              ${it.available===false ? '<span style="background:#fee2e2;color:#dc2626;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:700">หมด</span>' : ''}
-              ${isCustom ? '<span style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:700">ใหม่</span>' : ''}
+        <div style="background:#fff;border:1.5px solid ${it.available!==false?'#e2e7ef':'#fee2e2'};border-radius:12px;padding:10px;display:flex;gap:10px;align-items:center;position:relative;transition:border-color .15s">
+          <div onclick="openItemEditor('${it.id}')" style="display:flex;gap:10px;align-items:center;flex:1;min-width:0;cursor:pointer">
+            <div style="width:50px;height:50px;flex-shrink:0;border-radius:8px;overflow:hidden;background:linear-gradient(135deg,#ebf0ff,#c5d3ff);display:grid;place-items:center;font-size:24px">
+              <img src="${img}" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none';this.parentElement.innerHTML='${cat.emoji || '🍽️'}'">
+            </div>
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:700;font-size:13px;color:#0a1530;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${it.name}</div>
+              <div style="display:flex;gap:6px;align-items:center;margin-top:4px">
+                <span style="font-size:13px;font-weight:800;color:#1652F0">฿${it.price}</span>
+                ${it.available===false ? '<span style="background:#fee2e2;color:#dc2626;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:700">หมด</span>' : ''}
+                ${isCustom ? '<span style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:700">ใหม่</span>' : ''}
+              </div>
             </div>
           </div>
+          ${isCustom
+            ? `<button onclick="quickDeleteItem('${it.id}', false, event)" title="ลบเมนูนี้" style="background:#fee2e2;color:#dc2626;border:none;width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:14px;flex-shrink:0">🗑️</button>`
+            : `<button onclick="quickToggleAvailable('${it.id}', false, event)" title="${it.available!==false?'ซ่อน (ตั้งหมด)':'แสดงอีกครั้ง'}" style="background:${it.available!==false?'#fef3c7':'#dcfce7'};color:${it.available!==false?'#92400e':'#166534'};border:none;width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:14px;flex-shrink:0">${it.available!==false?'🚫':'✅'}</button>`
+          }
         </div>`;
       }).join('')}
       </div>
@@ -6147,18 +6153,24 @@ function renderFactoryMenuManager() {
         const ov = factoryConfig.overrides?.[it.id] || {};
         const img = it.image || ov.image || '';   // empty falls back to emoji below
         return `
-        <div onclick="openItemEditor('${it.id}', {factory:true})" style="background:#fff;border:1.5px solid ${it.available!==false?'#e2e7ef':'#fee2e2'};border-radius:12px;padding:10px;cursor:pointer;display:flex;gap:10px;align-items:center;position:relative;transition:border-color .15s">
-          <div style="width:50px;height:50px;flex-shrink:0;border-radius:8px;overflow:hidden;background:linear-gradient(135deg,#ebf0ff,#c5d3ff);display:grid;place-items:center;font-size:24px">
-            ${img ? `<img src="${img}" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none';this.parentElement.innerHTML='${escapeHtml(cat.emoji || '🏭')}'">` : (cat.emoji || '🏭')}
-          </div>
-          <div style="flex:1;min-width:0">
-            <div style="font-weight:700;font-size:13px;color:#0a1530;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(it.name)}</div>
-            <div style="display:flex;gap:6px;align-items:center;margin-top:4px">
-              <span style="font-size:13px;font-weight:800;color:#1652F0">฿${it.price}</span>
-              ${it.available===false ? '<span style="background:#fee2e2;color:#dc2626;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:700">หมด</span>' : ''}
-              ${isCustom ? '<span style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:700">ใหม่</span>' : ''}
+        <div style="background:#fff;border:1.5px solid ${it.available!==false?'#e2e7ef':'#fee2e2'};border-radius:12px;padding:10px;display:flex;gap:10px;align-items:center;position:relative;transition:border-color .15s">
+          <div onclick="openItemEditor('${it.id}', {factory:true})" style="display:flex;gap:10px;align-items:center;flex:1;min-width:0;cursor:pointer">
+            <div style="width:50px;height:50px;flex-shrink:0;border-radius:8px;overflow:hidden;background:linear-gradient(135deg,#ebf0ff,#c5d3ff);display:grid;place-items:center;font-size:24px">
+              ${img ? `<img src="${img}" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none';this.parentElement.innerHTML='${escapeHtml(cat.emoji || '🏭')}'">` : (cat.emoji || '🏭')}
+            </div>
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:700;font-size:13px;color:#0a1530;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(it.name)}</div>
+              <div style="display:flex;gap:6px;align-items:center;margin-top:4px">
+                <span style="font-size:13px;font-weight:800;color:#1652F0">฿${it.price}</span>
+                ${it.available===false ? '<span style="background:#fee2e2;color:#dc2626;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:700">หมด</span>' : ''}
+                ${isCustom ? '<span style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:700">ใหม่</span>' : ''}
+              </div>
             </div>
           </div>
+          ${isCustom
+            ? `<button onclick="quickDeleteItem('${it.id}', true, event)" title="ลบเมนูนี้" style="background:#fee2e2;color:#dc2626;border:none;width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:14px;flex-shrink:0">🗑️</button>`
+            : `<button onclick="quickToggleAvailable('${it.id}', true, event)" title="${it.available!==false?'ซ่อน (ตั้งหมด)':'แสดงอีกครั้ง'}" style="background:${it.available!==false?'#fef3c7':'#dcfce7'};color:${it.available!==false?'#92400e':'#166534'};border:none;width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:14px;flex-shrink:0">${it.available!==false?'🚫':'✅'}</button>`
+          }
         </div>`;
       }).join('')}
       </div>
@@ -6166,6 +6178,51 @@ function renderFactoryMenuManager() {
   `).join('') || '<div style="text-align:center;color:#9ca3af;font-size:13px;padding:14px">ยังไม่มีเมนูโรงงาน — กดปุ่ม "เพิ่มเมนูโรงงาน" ด้านล่าง</div>';
 }
 window.renderFactoryMenuManager = renderFactoryMenuManager;
+
+// 🗑️ Quick-delete a custom menu item (regular or factory) without opening
+//    the editor. Built-in items can't be deleted — admin should use 🚫 to
+//    set them unavailable instead.
+async function quickDeleteItem(itemId, isFactory, ev) {
+  if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
+  const targetConfig = isFactory ? factoryConfig : menuConfig;
+  const storageKey = isFactory ? 'factoryConfig' : 'menuConfig';
+  const item = (targetConfig.custom || []).find(c => c.id === itemId);
+  if (!item) return toast('⚠️ ลบได้เฉพาะเมนูที่เพิ่มเอง — เมนูในระบบใช้ปุ่ม 🚫 เพื่อซ่อน');
+  if (!confirm(`ลบเมนู "${item.name}" ถาวร?`)) return;
+  targetConfig.custom = targetConfig.custom.filter(c => c.id !== itemId);
+  if (targetConfig.overrides) delete targetConfig.overrides[itemId];
+  localStorage.setItem(storageKey, JSON.stringify(targetConfig));
+  if (window.cloud?.ready) {
+    if (isFactory) try { await window.cloud.saveFactoryConfig?.(targetConfig); } catch (e) {}
+    else try { await window.cloud.saveMenuConfig?.(targetConfig); } catch (e) {}
+    if (window.cloud?.deleteMenuImage) try { await window.cloud.deleteMenuImage(itemId); } catch (e) {}
+  }
+  toast('🗑️ ลบเมนูแล้ว');
+  if (isFactory) renderFactoryMenuManager();
+  else renderMenuManager();
+}
+window.quickDeleteItem = quickDeleteItem;
+
+// 🚫 Toggle a built-in item between available and "หมด" without opening the
+//    editor. Customer-facing menu hides "หมด" items behind a disabled badge.
+async function quickToggleAvailable(itemId, isFactory, ev) {
+  if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
+  const targetConfig = isFactory ? factoryConfig : menuConfig;
+  const storageKey = isFactory ? 'factoryConfig' : 'menuConfig';
+  if (!targetConfig.overrides) targetConfig.overrides = {};
+  const cur = targetConfig.overrides[itemId] || {};
+  const newAvail = cur.available === false; // flip
+  targetConfig.overrides[itemId] = { ...cur, available: newAvail };
+  localStorage.setItem(storageKey, JSON.stringify(targetConfig));
+  if (window.cloud?.ready) {
+    if (isFactory) try { await window.cloud.saveFactoryConfig?.(targetConfig); } catch (e) {}
+    else try { await window.cloud.saveMenuConfig?.(targetConfig); } catch (e) {}
+  }
+  toast(newAvail ? '✅ เปิดขายอีกครั้ง' : '🚫 ตั้งหมดแล้ว');
+  if (isFactory) renderFactoryMenuManager();
+  else renderMenuManager();
+}
+window.quickToggleAvailable = quickToggleAvailable;
 
 // ========== Web Bluetooth Printer ==========
 const BT_SERVICES = [
@@ -6888,16 +6945,18 @@ function _getLoyaltyConfig() {
   return window._loyaltyConfig;
 }
 
-// All drink items eligible for the "free drink" reward (id starts with dr-)
+// All items eligible for the "free drink" reward — drinks (dr-*) AND
+// desserts (dst-*) so admin can let "น้ำแข็งใส" be redeemable too.
 function _allDrinkChoices() {
   const cats = window.MENU || [];
-  const drinks = [];
+  const eligible = [];
   cats.forEach(cat => (cat.items || []).forEach(it => {
-    if (it && typeof it.id === 'string' && it.id.startsWith('dr-')) {
-      drinks.push({ id: it.id, name: it.name || it.id, price: it.price });
+    if (!it || typeof it.id !== 'string') return;
+    if (it.id.startsWith('dr-') || it.id.startsWith('dst-')) {
+      eligible.push({ id: it.id, name: it.name || it.id, price: it.price });
     }
   }));
-  return drinks;
+  return eligible;
 }
 
 // Convert ms timestamp or ISO string → "yyyy-mm-dd" for <input type=date>

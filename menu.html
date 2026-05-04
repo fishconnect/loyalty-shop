@@ -1217,9 +1217,9 @@
 
 <div class="toast" id="toast"></div>
 
-<script type="module" src="firebase.js?v=20260504m"></script>
-<script src="offline-banner.js?v=20260504m"></script>
-<script src="menu-data.js?v=20260504m"></script>
+<script type="module" src="firebase.js?v=20260504n"></script>
+<script src="offline-banner.js?v=20260504n"></script>
+<script src="menu-data.js?v=20260504n"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 const STORAGE_KEY = 'loyaltyShopV2';
@@ -1879,8 +1879,18 @@ function renderMenu() {
 }
 
 // Subscribe to menu config changes from cloud (regular OR factory)
-whenCloudReady(() => {
+whenCloudReady(async () => {
   if (isFactoryMode) {
+    // 🩹 Eager prefetch all menu images BEFORE subscribing — Firestore strips
+    //    images from settings/factoryConfig (1MB doc limit) so without the
+    //    cache populated, the first onFactoryConfig fire renders empty images.
+    //    Subsequent onMenuImages snapshots will keep the cache fresh.
+    if (window.cloud?.getAllMenuImages) {
+      try {
+        const initial = await window.cloud.getAllMenuImages();
+        window._menuImagesCache = initial || {};
+      } catch (e) { window._menuImagesCache = window._menuImagesCache || {}; }
+    }
     // 🔍 In factory mode we ALSO subscribe to the regular menu so the
     //    factory can borrow images from regular items via fuzzy name match.
     //    Cache as window._regularEffectiveMenu — applyFactoryConfig reads

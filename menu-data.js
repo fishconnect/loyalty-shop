@@ -733,6 +733,7 @@ window.MENU = [
     emoji: "🥤",
     items: [
       { id: 'dr-001', name: 'ชานมไต้หวั่น', price: 25, optionGroups: OPT_DRINK_TAIWAN() },
+      { id: 'dr-009', name: 'ชานมไต้หวัน',   price: 20, optionGroups: OPT_DRINK_TAIWAN() },
       { id: 'dr-002', name: 'ชาไทย',          price: 25, optionGroups: OPT_DRINK_BLEND() },
       { id: 'dr-003', name: 'ชาเขียว',        price: 25, optionGroups: OPT_DRINK_BLEND() },
       { id: 'dr-004', name: 'กาแฟสด',         price: 35, optionGroups: OPT_DRINK_BLEND() },
