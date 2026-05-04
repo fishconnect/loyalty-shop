@@ -1109,7 +1109,7 @@
         <!-- 🚚 รับที่ร้าน / ส่งถึงที่ -->
         <label style="margin-top:12px;font-weight:800;color:#0a1530">🚀 ต้องการรับอาหารแบบไหน?</label>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;margin-bottom:8px">
-          <div id="orderTypePickup" class="order-type-btn active" onclick="setOrderType('pickup')">
+          <div id="orderTypePickup" class="order-type-btn" onclick="setOrderType('pickup')">
             <div style="font-size:24px">🏪</div>
             <div style="font-weight:800;font-size:14px">รับที่ร้าน</div>
             <div style="font-size:11px;color:#5c6982">มาเอาเอง</div>
@@ -1138,7 +1138,7 @@
           🔴 ร้านปิดอยู่ — เลือก "จองเวลา" เพื่อสั่งล่วงหน้าได้
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;margin-bottom:8px">
-          <div id="schedASAP" class="order-type-btn active" onclick="setSchedule('asap')">
+          <div id="schedASAP" class="order-type-btn" onclick="setSchedule('asap')">
             <div style="font-size:24px">🚀</div>
             <div style="font-weight:800;font-size:14px">เอาเลย</div>
             <div style="font-size:11px;color:#5c6982">รอตามคิวร้าน</div>
@@ -1214,9 +1214,9 @@
 
 <div class="toast" id="toast"></div>
 
-<script type="module" src="firebase.js?v=20260504f"></script>
-<script src="offline-banner.js?v=20260504f"></script>
-<script src="menu-data.js?v=20260504f"></script>
+<script type="module" src="firebase.js?v=20260504g"></script>
+<script src="offline-banner.js?v=20260504g"></script>
+<script src="menu-data.js?v=20260504g"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 const STORAGE_KEY = 'loyaltyShopV2';
@@ -2373,8 +2373,11 @@ let cartRewards = {
   selectedDrinkId: null,
 };
 
-// Order type — pickup (default) or delivery
-let orderType = 'pickup';
+// Order type — null until customer actively picks one (was 'pickup' default,
+// but customers couldn't tell whether the blue highlight meant "I picked
+// this" or "the system pre-selected it for me"). Now both buttons start
+// neutral and customer must tap to choose.
+let orderType = null;
 let deliveryLocation = null; // { lat, lng } from geolocation API
 
 // Feature flags — referral / birthday default OFF (admin can flip in settings)
@@ -2383,10 +2386,12 @@ function getFeatureFlags() {
   catch(e) { return { referral: false, birthday: false }; }
 }
 
-// Schedule mode — 'asap' (default) or 'later' (with scheduled_at ISO string)
+// Schedule mode — null until customer actively picks. Used to be 'asap'
+// default but the pre-highlighted blue button was confusing customers
+// (couldn't tell if they'd actually picked).
 // 🔧 Persisted to localStorage so closing the browser between picking a time
 // and submitting doesn't drop the customer's selection.
-let scheduleMode = 'asap';
+let scheduleMode = null;
 let scheduledAt = null;          // ISO string when scheduleMode === 'later'
 try {
   const _saved = JSON.parse(localStorage.getItem('schedState') || 'null');
@@ -3133,6 +3138,21 @@ async function submitOrder() {
   const shopOrderLabel = (document.getElementById('shopOrderLabel')?.value || '').trim();
   if (!cart.length) return toast('⚠️ ตะกร้าว่าง', true);
 
+  // 🩹 Customers must explicitly pick pickup/delivery + ASAP/scheduled —
+  //    no silent defaults. Skipped for shop walk-in (admin handles it).
+  if (!isShopMode && !isFactoryMode) {
+    if (!orderType) {
+      toast('⚠️ กรุณาเลือก "รับที่ร้าน" หรือ "ให้ไปส่ง"', true);
+      document.getElementById('orderTypePickup')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    if (!scheduleMode) {
+      toast('⚠️ กรุณาเลือก "เอาเลย" หรือ "จองเวลา"', true);
+      document.getElementById('schedASAP')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+  }
+
   // 🩹 Re-validate every cart line against the LIVE menu before submit.
   //    Two cases:
   //    A) Item NOT in this menu at all (orphan from factory mode, deleted item,
@@ -3575,15 +3595,20 @@ async function submitOrder() {
   try { sessionStorage.removeItem(_CART_KEY); } catch (e) {}
   try { localStorage.removeItem(_CART_KEY); } catch (e) {}
   resetCartRewards();
-  // Reset delivery state for next order
-  orderType = 'pickup';
+  // Reset delivery state for next order — null so customer must actively
+  // pick again rather than seeing a pre-highlighted "default"
+  orderType = null;
   deliveryLocation = null;
   const _da = document.getElementById('deliveryAddress'); if (_da) _da.value = '';
   const _dls = document.getElementById('deliveryLocationStatus'); if (_dls) _dls.innerHTML = '';
-  if (typeof setOrderType === 'function') setOrderType('pickup');
+  document.getElementById('orderTypePickup')?.classList.remove('active');
+  document.getElementById('orderTypeDelivery')?.classList.remove('active');
+  document.getElementById('deliveryFields') && (document.getElementById('deliveryFields').style.display = 'none');
   // Reset schedule state
-  scheduleMode = 'asap'; scheduledAt = null;
-  if (typeof setSchedule === 'function') setSchedule('asap');
+  scheduleMode = null; scheduledAt = null;
+  document.getElementById('schedASAP')?.classList.remove('active');
+  document.getElementById('schedLater')?.classList.remove('active');
+  document.getElementById('schedSlotBox') && (document.getElementById('schedSlotBox').style.display = 'none');
 
   if (isShopMode) {
     // Stay on menu, clear form, show toast
