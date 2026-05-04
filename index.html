@@ -1403,10 +1403,10 @@
 <!-- Print receipt area (hidden until print) -->
 <div id="printArea"></div>
 
-<script type="module" src="firebase.js?v=20260503l"></script>
-<script src="offline-banner.js?v=20260503l"></script>
-<script src="menu-data.js?v=20260503l"></script>
-<script src="notifier.js?v=20260503l"></script>
+<script type="module" src="firebase.js?v=20260504a"></script>
+<script src="offline-banner.js?v=20260504a"></script>
+<script src="menu-data.js?v=20260504a"></script>
+<script src="notifier.js?v=20260504a"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 
@@ -6912,6 +6912,9 @@ let editingItemId = null;
 let editingItemImage = null;
 let editingIsCustom = false;
 let editingItemOptionPresetKeys = []; // 🍳 list of OPTION_PRESETS keys for this item
+let editingItemOptionsMode = 'default'; // 'default' = use built-in · 'override' = use preset keys
+let editingItemDefaultOptionLabels = []; // 🍳 labels of built-in groups (for display in default mode)
+
 
 function openItemEditor(itemId) {
   const allCats = window.applyMenuConfig ? window.applyMenuConfig(menuConfig) : (window.MENU || []);
@@ -6925,10 +6928,27 @@ function openItemEditor(itemId) {
   editingItemId = itemId;
   editingItemImage = foundItem.image || (menuConfig.overrides?.[itemId]?.image) || null;
   editingIsCustom = !!menuConfig.custom?.find(c => c.id === itemId);
-  // 🍳 Load option preset keys if this is a custom item
+  // 🍳 Load option preset keys based on item type:
+  //    - Custom item: always uses optionPresetKeys (mode = 'override')
+  //    - Built-in item: check if override has optionPresetKeys
+  //        if yes → mode = 'override', load those keys
+  //        if no  → mode = 'default', editor shows current built-in groups read-only
   const customRecord = menuConfig.custom?.find(c => c.id === itemId);
-  editingItemOptionPresetKeys = (customRecord && Array.isArray(customRecord.optionPresetKeys))
-    ? [...customRecord.optionPresetKeys] : [];
+  const overrideRecord = menuConfig.overrides?.[itemId];
+  if (editingIsCustom) {
+    editingItemOptionsMode = 'override';
+    editingItemOptionPresetKeys = (customRecord && Array.isArray(customRecord.optionPresetKeys))
+      ? [...customRecord.optionPresetKeys] : [];
+  } else if (overrideRecord && Array.isArray(overrideRecord.optionPresetKeys)) {
+    editingItemOptionsMode = 'override';
+    editingItemOptionPresetKeys = [...overrideRecord.optionPresetKeys];
+  } else {
+    editingItemOptionsMode = 'default';
+    editingItemOptionPresetKeys = [];
+  }
+  // Capture the labels of the item's CURRENT option groups so we can show them
+  // in the "default mode" view (read-only preview before admin overrides).
+  editingItemDefaultOptionLabels = (foundItem.optionGroups || []).map(g => g.label || '(no label)');
   const isAddOn = !!foundCat.isAddOn;
 
   // Build category list (exclude add-on category from picker — addOn toggle handles that)
@@ -6972,6 +6992,8 @@ function openNewItemEditor() {
   editingItemImage = null;
   editingIsCustom = true;
   editingItemOptionPresetKeys = [];   // 🍳 empty list for new item
+  editingItemOptionsMode = 'override'; // custom items always in override mode
+  editingItemDefaultOptionLabels = [];
   const cats = (window.MENU || []).filter(c => !c.isAddOn).map(c => c.cat);
   document.getElementById('editorTitle').textContent = '➕ เพิ่มเมนูใหม่';
   document.getElementById('editorName').value = '';
@@ -6992,43 +7014,77 @@ function closeItemEditor() {
   editingItemId = null;
   editingItemImage = null;
   editingItemOptionPresetKeys = [];
+  editingItemOptionsMode = 'default';
+  editingItemDefaultOptionLabels = [];
 }
 
-// 🍳 Render the options section: chip list of selected presets + dropdown
-//    of remaining presets. Hidden for built-in items (only customs get options).
+// 🍳 Render the options section. Two modes:
+//    - 'default' (built-in only): show current built-in groups read-only +
+//      "ปรับเปลี่ยน" button to switch to override mode
+//    - 'override': show chip list + preset dropdown. For built-in items also
+//      shows "↩️ คืนค่าเริ่มต้น" to clear the override.
 function refreshEditorOptionsUI() {
   const section = document.getElementById('editorOptionsSection');
   if (!section) return;
-  // Only show for custom items
-  if (!editingIsCustom) { section.style.display = 'none'; return; }
-  section.style.display = 'block';
+  section.style.display = 'block';   // always show now (built-in + custom)
 
   const presets = window.OPTION_PRESETS || {};
   const list = document.getElementById('editorOptionsList');
   const picker = document.getElementById('editorOptionPicker');
 
-  // Selected chips
+  // Hide picker UI when in default mode (built-in unmodified)
+  const pickerWrap = picker?.parentElement;
+
+  if (editingItemOptionsMode === 'default' && !editingIsCustom) {
+    // Default-mode preview for built-in items: show current option labels
+    // read-only + a button to switch to override mode.
+    if (list) {
+      const labels = editingItemDefaultOptionLabels || [];
+      const labelHtml = labels.length
+        ? labels.map(l => `<div style="font-size:12.5px;color:#0a1530;padding:6px 10px;background:#f3f4f6;border-radius:6px;margin-bottom:4px">• ${escapeHtml(l)}</div>`).join('')
+        : '<div style="font-size:12px;color:#9ca3af;text-align:center;padding:6px">ไม่มีตัวเลือกในเมนูนี้</div>';
+      list.innerHTML = `
+        <div style="background:#dcfce7;border:1.5px solid #16a34a;color:#14532d;padding:8px 10px;border-radius:8px;font-size:12px;font-weight:700;margin-bottom:8px">
+          ✅ ใช้ตัวเลือกเริ่มต้นจากระบบ
+        </div>
+        <div style="margin-bottom:8px">${labelHtml}</div>
+        <button type="button" onclick="enterOverrideMode()" style="width:100%;padding:10px;background:#fff;color:#1652F0;border:1.5px solid #1652F0;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">✏️ ปรับเปลี่ยนตัวเลือก</button>
+      `;
+    }
+    if (pickerWrap) pickerWrap.style.display = 'none';
+    return;
+  }
+
+  // Override mode (custom always, or built-in after admin chose to override)
+  if (pickerWrap) pickerWrap.style.display = 'flex';
+
   if (list) {
+    let chipsHtml = '';
     if (!editingItemOptionPresetKeys.length) {
-      list.innerHTML = '<div style="font-size:12px;color:#9ca3af;text-align:center;padding:6px">ยังไม่มีตัวเลือก — เพิ่มจาก dropdown ด้านล่าง</div>';
+      chipsHtml = '<div style="font-size:12px;color:#9ca3af;text-align:center;padding:6px">ยังไม่มีตัวเลือก — เพิ่มจาก dropdown ด้านล่าง</div>';
     } else {
-      list.innerHTML = editingItemOptionPresetKeys.map((k, i) => {
+      chipsHtml = editingItemOptionPresetKeys.map((k, i) => {
         const p = presets[k];
         if (!p) return '';
         return `
           <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:#fff;border:1.5px solid #c5d3ff;border-radius:8px">
             <div style="flex:1;min-width:0">
-              <div style="font-weight:700;color:#0a1530;font-size:13px">${p.label}</div>
-              <div style="font-size:11px;color:#5c6982">${p.desc || ''}</div>
+              <div style="font-weight:700;color:#0a1530;font-size:13px">${escapeHtml(p.label)}</div>
+              <div style="font-size:11px;color:#5c6982">${escapeHtml(p.desc || '')}</div>
             </div>
             <button type="button" onclick="removeOptionPresetFromEditor(${i})" style="background:#fee2e2;color:#dc2626;border:none;width:30px;height:30px;border-radius:6px;font-size:16px;cursor:pointer;font-family:inherit;flex-shrink:0">✕</button>
           </div>
         `;
       }).join('');
     }
+
+    // For built-in items in override mode, show "revert to default" button
+    const revertBtn = (!editingIsCustom)
+      ? `<button type="button" onclick="exitOverrideMode()" style="width:100%;margin-top:8px;padding:9px;background:#fff;color:#6b7280;border:1.5px dashed #d1d5db;border-radius:8px;font-weight:700;font-size:12px;cursor:pointer;font-family:inherit">↩️ คืนค่าเริ่มต้น (ใช้ตัวเลือกจากระบบ)</button>`
+      : '';
+    list.innerHTML = chipsHtml + revertBtn;
   }
 
-  // Dropdown — only show keys NOT already selected
   if (picker) {
     const remaining = Object.keys(presets).filter(k => !editingItemOptionPresetKeys.includes(k));
     if (!remaining.length) {
@@ -7036,10 +7092,26 @@ function refreshEditorOptionsUI() {
       picker.disabled = true;
     } else {
       picker.innerHTML = '<option value="">— เลือกตัวเลือกที่จะเพิ่ม —</option>'
-        + remaining.map(k => `<option value="${k}">${presets[k].label}</option>`).join('');
+        + remaining.map(k => `<option value="${k}">${escapeHtml(presets[k].label)}</option>`).join('');
       picker.disabled = false;
     }
   }
+}
+
+// 🍳 Switch to override mode (built-in only). Preset list starts empty —
+//    admin builds from scratch. They can use "↩️ คืนค่าเริ่มต้น" to undo.
+function enterOverrideMode() {
+  editingItemOptionsMode = 'override';
+  editingItemOptionPresetKeys = [];
+  refreshEditorOptionsUI();
+}
+
+// 🍳 Revert to default (use built-in groups, drop override on save).
+function exitOverrideMode() {
+  if (editingIsCustom) return; // custom items can't revert (no built-in to fall back to)
+  editingItemOptionsMode = 'default';
+  editingItemOptionPresetKeys = [];
+  refreshEditorOptionsUI();
 }
 
 function addOptionPresetToEditor() {
@@ -7061,6 +7133,8 @@ function removeOptionPresetFromEditor(idx) {
 window.addOptionPresetToEditor = addOptionPresetToEditor;
 window.removeOptionPresetFromEditor = removeOptionPresetFromEditor;
 window.refreshEditorOptionsUI = refreshEditorOptionsUI;
+window.enterOverrideMode = enterOverrideMode;
+window.exitOverrideMode = exitOverrideMode;
 
 function renderEditorImage() {
   const wrap = document.getElementById('editorImageWrap');
@@ -7215,6 +7289,13 @@ async function saveItemEditor() {
     o.isAddOn = !!isAddOn;
     if (editingItemImage) o.image = editingItemImage;
     else delete o.image;
+    // 🍳 Save / clear option override depending on mode
+    if (editingItemOptionsMode === 'override') {
+      o.optionPresetKeys = [...editingItemOptionPresetKeys];
+    } else {
+      // default mode — drop any prior override so item falls back to built-in
+      delete o.optionPresetKeys;
+    }
   } else if (editingItemId && editingIsCustom) {
     menuConfig.custom = menuConfig.custom || [];
     const idx = menuConfig.custom.findIndex(c => c.id === editingItemId);

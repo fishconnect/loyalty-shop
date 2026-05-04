@@ -1077,6 +1077,19 @@ window.applyMenuConfig = function(config) {
         ...(o.image ? { image: o.image } : {}),
         available: o.available !== false
       };
+      // 🩹 Override option groups for built-in items: if admin set
+      //    optionPresetKeys in the override, materialize from presets and
+      //    REPLACE the item's default optionGroups. Empty array = "no options".
+      if (o && Array.isArray(o.optionPresetKeys) && window.OPTION_PRESETS) {
+        const built = o.optionPresetKeys
+          .map(k => {
+            const p = window.OPTION_PRESETS[k];
+            if (!p || typeof p.build !== 'function') return null;
+            try { return p.build(); } catch (e) { console.warn('preset build', k, e); return null; }
+          })
+          .filter(Boolean);
+        item.optionGroups = built;
+      }
       return _filterDisabledChoices(item, disabled);
     })
   }));
