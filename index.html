@@ -1439,10 +1439,10 @@
 <!-- Print receipt area (hidden until print) -->
 <div id="printArea"></div>
 
-<script type="module" src="firebase.js?v=20260504l"></script>
-<script src="offline-banner.js?v=20260504l"></script>
-<script src="menu-data.js?v=20260504l"></script>
-<script src="notifier.js?v=20260504l"></script>
+<script type="module" src="firebase.js?v=20260504m"></script>
+<script src="offline-banner.js?v=20260504m"></script>
+<script src="menu-data.js?v=20260504m"></script>
+<script src="notifier.js?v=20260504m"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 
@@ -2812,14 +2812,37 @@ whenCloudReady(() => {
   if (window.cloud?.onFactoryConfig) {
     window.cloud.onFactoryConfig(config => {
       factoryConfig = config || { overrides: {}, custom: [] };
+      // 🖼️ Re-attach cached images. Cloud strips images from the config doc
+      //    to fit Firestore's 1MB limit; the menu_images collection holds them.
+      if (window._menuImagesCache) _mergeImagesIntoFactoryConfig(window._menuImagesCache);
       localStorage.setItem('factoryConfig', JSON.stringify(factoryConfig));
       // Re-render if currently on factory tab
       if (document.querySelector('[data-page=factory]')?.classList.contains('active')) {
         renderFactoryManager();
       }
+      if (document.querySelector('[data-page=settings]')?.classList.contains('active')) {
+        if (typeof renderFactoryMenuManager === 'function') try { renderFactoryMenuManager(); } catch (e) {}
+      }
     });
   }
 });
+
+// 🏭 Helper: merge images from menu_images cache into factoryConfig.custom +
+//    factoryConfig.overrides so that images uploaded via the editor (and stored
+//    in the separate menu_images collection) make it back onto factory items.
+function _mergeImagesIntoFactoryConfig(imagesById) {
+  if (!factoryConfig || !imagesById) return;
+  if (Array.isArray(factoryConfig.custom)) {
+    factoryConfig.custom.forEach(c => {
+      if (c && c.id && imagesById[c.id]) c.image = imagesById[c.id];
+    });
+  }
+  if (!factoryConfig.overrides) factoryConfig.overrides = {};
+  Object.entries(imagesById).forEach(([id, dataUrl]) => {
+    if (!factoryConfig.overrides[id]) factoryConfig.overrides[id] = {};
+    factoryConfig.overrides[id].image = dataUrl;
+  });
+}
 
 // ========== Order: Autocomplete (legacy — kept for backward compat with old form) ==========
 // The manual-order form was replaced by an iframe; these elements may not exist.
@@ -7980,8 +8003,13 @@ whenCloudReady(() => {
         menuConfig.overrides[id].image = dataUrl;
       });
       localStorage.setItem('menuConfig', JSON.stringify(menuConfig));
+      // 🏭 Same merge into factoryConfig so the factory menu manager picks
+      //    up images uploaded for factory items (or borrowed from regular).
+      _mergeImagesIntoFactoryConfig(images || {});
+      localStorage.setItem('factoryConfig', JSON.stringify(factoryConfig));
       if (document.querySelector('[data-page=settings]')?.classList.contains('active')) {
         try { renderMenuManager(); } catch (e) {}
+        if (typeof renderFactoryMenuManager === 'function') try { renderFactoryMenuManager(); } catch (e) {}
       }
     });
   }

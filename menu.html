@@ -1217,9 +1217,9 @@
 
 <div class="toast" id="toast"></div>
 
-<script type="module" src="firebase.js?v=20260504l"></script>
-<script src="offline-banner.js?v=20260504l"></script>
-<script src="menu-data.js?v=20260504l"></script>
+<script type="module" src="firebase.js?v=20260504m"></script>
+<script src="offline-banner.js?v=20260504m"></script>
+<script src="menu-data.js?v=20260504m"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 const STORAGE_KEY = 'loyaltyShopV2';
@@ -1906,14 +1906,24 @@ whenCloudReady(() => {
     if (window.cloud?.onMenuImages) {
       window.cloud.onMenuImages(images => {
         window._menuImagesCache = images || {};
-        // No menuConfig here, so just trigger a recompute via the existing
-        // cached _regularEffectiveMenu path on the next onMenuConfig fire.
+        // 🩹 Merge new images into BOTH the regular cache (for fuzzy borrow)
+        //    and factoryConfig itself (for explicit factory-item images that
+        //    were stripped from the Firestore doc).
+        if (window._regularEffectiveMenu) {
+          window._regularEffectiveMenu.forEach(cat => (cat.items || []).forEach(it => {
+            if (it && it.id && images[it.id]) it.image = images[it.id];
+          }));
+        }
+        _mergeMenuImagesIntoFactoryConfig(images || {});
         EFFECTIVE_MENU = window.applyFactoryConfig(factoryConfig);
         renderMenu();
       });
     }
     window.cloud.onFactoryConfig?.(config => {
       factoryConfig = config || { overrides: {}, custom: [] };
+      // 🖼️ Re-attach cached images (cloud strips images from the config doc
+      //    to fit Firestore's 1MB limit; the menu_images collection holds them).
+      if (window._menuImagesCache) _mergeMenuImagesIntoFactoryConfig(window._menuImagesCache);
       localStorage.setItem('factoryConfig', JSON.stringify(factoryConfig));
       EFFECTIVE_MENU = window.applyFactoryConfig(factoryConfig);
       renderMenu();
@@ -1965,23 +1975,28 @@ whenCloudReady(() => {
 // 🖼️ Merge cloud-stored images into menuConfig.custom + .overrides so the
 //    customer-facing menu sees them as if they were attached locally.
 function _mergeMenuImagesIntoConfig(imagesById) {
-  if (!menuConfig || !imagesById) return;
-  if (Array.isArray(menuConfig.custom)) {
-    menuConfig.custom.forEach(c => {
+  _mergeImagesInto(menuConfig, imagesById);
+}
+
+// 🏭 Same merge helper but for factoryConfig. Factory items use the same
+//    `menu_images` collection (IDs don't collide), so the cache works for both.
+function _mergeMenuImagesIntoFactoryConfig(imagesById) {
+  if (typeof factoryConfig === 'undefined') return;
+  _mergeImagesInto(factoryConfig, imagesById);
+}
+
+function _mergeImagesInto(cfg, imagesById) {
+  if (!cfg || !imagesById) return;
+  if (Array.isArray(cfg.custom)) {
+    cfg.custom.forEach(c => {
       if (c && c.id && imagesById[c.id]) c.image = imagesById[c.id];
     });
   }
-  if (menuConfig.overrides) {
-    Object.entries(imagesById).forEach(([id, dataUrl]) => {
-      if (!menuConfig.overrides[id]) menuConfig.overrides[id] = {};
-      menuConfig.overrides[id].image = dataUrl;
-    });
-  } else {
-    menuConfig.overrides = {};
-    Object.entries(imagesById).forEach(([id, dataUrl]) => {
-      menuConfig.overrides[id] = { image: dataUrl };
-    });
-  }
+  if (!cfg.overrides) cfg.overrides = {};
+  Object.entries(imagesById).forEach(([id, dataUrl]) => {
+    if (!cfg.overrides[id]) cfg.overrides[id] = {};
+    cfg.overrides[id].image = dataUrl;
+  });
 }
 
 // Closed-shop indicator is the hero chip (🟢 ร้านเปิด / 🔴 ร้านปิด) only.
