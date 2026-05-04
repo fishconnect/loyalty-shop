@@ -8,7 +8,7 @@ window.SHOP_INFO = {
   // 📍 Shop coordinates — used for distance validation on delivery orders.
   lat: 13.667149,
   lng: 100.188090,
-  deliveryRadiusKm: 7, // hard limit — orders beyond this distance are blocked
+  deliveryRadiusKm: 5, // hard limit — orders beyond this distance are blocked
 };
 
 // 🔒 PDPA policy version — bump when privacy.html / tos.html materially change.

@@ -367,6 +367,10 @@
   /* ============ Modals ============ */
   .modal-bg {
     display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6);
+    /* Explicit height — `inset: 0` alone can be flaky in iframe contexts on
+       Mac Safari/Chrome (modal extends past iframe boundary, footer cut off). */
+    height: 100vh;
+    height: 100dvh;
     z-index: 100; align-items: flex-end; justify-content: center;
     backdrop-filter: blur(4px);
   }
@@ -374,7 +378,10 @@
   .modal {
     background: #fff; width: 100%; max-width: 520px;
     border-radius: 24px 24px 0 0;
+    /* dvh handles mobile browser chrome AND iframe contexts more reliably
+       than plain vh. Fallback to vh for older browsers. */
     max-height: 92vh;
+    max-height: 92dvh;
     padding: 0; position: relative;
     animation: slide-up .3s ease;
     /* FLEX column layout — body scrolls, hero+footer stay pinned. Works inside iframes. */
@@ -1207,9 +1214,9 @@
 
 <div class="toast" id="toast"></div>
 
-<script type="module" src="firebase.js?v=20260504c"></script>
-<script src="offline-banner.js?v=20260504c"></script>
-<script src="menu-data.js?v=20260504c"></script>
+<script type="module" src="firebase.js?v=20260504d"></script>
+<script src="offline-banner.js?v=20260504d"></script>
+<script src="menu-data.js?v=20260504d"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 const STORAGE_KEY = 'loyaltyShopV2';
