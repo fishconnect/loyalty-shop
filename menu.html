@@ -846,6 +846,9 @@
   </div>
 </header>
 
+<!-- 🎁 Loyalty active-promo banner — only shown when a time-window promo is active -->
+<div id="loyaltyPromoBanner" style="display:none"></div>
+
 <!-- Promo / loyalty chips -->
 <div class="promo-strip" id="promoStrip">
   <div class="promo-strip-inner" id="promoStripInner">
@@ -1214,9 +1217,9 @@
 
 <div class="toast" id="toast"></div>
 
-<script type="module" src="firebase.js?v=20260504k"></script>
-<script src="offline-banner.js?v=20260504k"></script>
-<script src="menu-data.js?v=20260504k"></script>
+<script type="module" src="firebase.js?v=20260504l"></script>
+<script src="offline-banner.js?v=20260504l"></script>
+<script src="menu-data.js?v=20260504l"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 const STORAGE_KEY = 'loyaltyShopV2';
@@ -1507,6 +1510,35 @@ function renderPromoStrip() {
     wrap.style.animation = '';
     wrap.style.webkitAnimation = '';
   });
+}
+
+// 🎁 Render the active-loyalty-promo banner (only when a promo is in window).
+//    Shows promo name + the redemption rule in plain Thai.
+function renderLoyaltyPromoBanner() {
+  const wrap = document.getElementById('loyaltyPromoBanner');
+  if (!wrap) return;
+  if (isFactoryMode) { wrap.style.display = 'none'; return; }
+  const active = window._activeLoyaltyPromo || null;
+  if (!active) { wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
+  const L = window.LOYALTY || {};
+  const drinkPts = Number(L.REWARD_DRINK_POINTS) || 10;
+  const discPts = Number(L.REWARD_DISCOUNT_POINTS) || 15;
+  const discAmt = Number(L.REWARD_DISCOUNT_AMOUNT) || 50;
+  const name = active.name || 'โปรโมชันพิเศษ';
+  wrap.style.display = 'block';
+  wrap.innerHTML = `
+    <div style="margin:8px 12px 0;padding:10px 14px;border-radius:12px;background:linear-gradient(135deg,#fff7ed,#ffedd5);border:1.5px solid #fb923c;box-shadow:0 2px 8px rgba(251,146,60,0.15);font-family:inherit">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="font-size:20px">🎁</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:800;font-size:13px;color:#9a3412;line-height:1.3">${escapeHtml(name)}</div>
+          <div style="font-size:11.5px;color:#7c2d12;margin-top:2px;line-height:1.4">
+            ${drinkPts} แต้ม = ฟรีเครื่องดื่ม · ${discPts} แต้ม = ลด ${discAmt}฿
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 // 📌 POPULAR_PINS — manual overrides for specific positions in the
@@ -1912,6 +1944,21 @@ whenCloudReady(() => {
         renderMenu();
       });
     }
+  }
+  // 🎁 Loyalty config — admin-edited base + active time-window promotions.
+  //    When this fires we recompute window.LOYALTY (defaults+base+overrides)
+  //    and rerender any UI that reads from it. Customer balances are NOT
+  //    touched — only the redemption rules.
+  if (window.cloud?.onLoyaltyConfig) {
+    window.cloud.onLoyaltyConfig(config => {
+      if (typeof window.applyLoyaltyConfig !== 'function') return;
+      window.applyLoyaltyConfig(config);
+      try { renderLoyaltyPromoBanner?.(); } catch (e) {}
+      try { renderHeroChips?.(); } catch (e) {}
+      try { renderPromoStrip?.(); } catch (e) {}
+      try { renderRewardsBox?.(); } catch (e) {}
+      try { renderMenu?.(); } catch (e) {}
+    });
   }
 });
 
@@ -4259,6 +4306,7 @@ renderMenu();
 updateCartBar();
 renderHeroChips();
 renderPromoStrip();
+renderLoyaltyPromoBanner();
 renderPopularSection();
 renderInfoBanner();
 initReturningCustomer();

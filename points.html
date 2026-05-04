@@ -195,9 +195,9 @@
 
 <main id="main"></main>
 
-<script type="module" src="firebase.js?v=20260504k"></script>
-<script src="offline-banner.js?v=20260504k"></script>
-<script src="menu-data.js?v=20260504k"></script>
+<script type="module" src="firebase.js?v=20260504l"></script>
+<script src="offline-banner.js?v=20260504l"></script>
+<script src="menu-data.js?v=20260504l"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 const STORAGE_KEY = 'loyaltyShopV2';
@@ -1442,6 +1442,18 @@ tryRender();
 
 // Subscribe to real-time updates
 whenCloudReady(() => {
+  // 🎁 Loyalty config — admin-edited base + active promo overrides.
+  //    Re-renders the customer view so reward thresholds update live.
+  if (window.cloud?.onLoyaltyConfig) {
+    window.cloud.onLoyaltyConfig(config => {
+      if (typeof window.applyLoyaltyConfig !== 'function') return;
+      window.applyLoyaltyConfig(config);
+      const db = loadDB();
+      if (phone && db.customers[phone] && !document.getElementById('verifyDeviceGate')) {
+        gateOrRender(db.customers[phone], db.pendingOrders || []);
+      }
+    });
+  }
   if (!phone) return;
   window.cloud.onCustomers(customers => {
     const db = loadDB();

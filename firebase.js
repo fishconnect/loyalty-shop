@@ -195,6 +195,27 @@ window.cloud = {
     }, err => console.warn('[cloud] onOrder', err));
   },
 
+  // 🎁 LOYALTY CONFIG — admin-editable thresholds + drink-reward menu list,
+  //    plus a list of time-windowed promotions that override the base values
+  //    while active. Stored in `settings/loyalty`. Customer points balances
+  //    are NOT touched — only the redemption rules change.
+  //    Schema: { base: {...}, promos: [{id,name,start,end,overrides:{...}}] }
+  async getLoyaltyConfig() {
+    try {
+      const s = await getDoc(doc(fdb, 'settings', 'loyalty'));
+      return s.exists() ? s.data() : null;
+    } catch (e) { console.warn('[cloud] getLoyaltyConfig', e); return null; }
+  },
+  async saveLoyaltyConfig(config) {
+    try { await setDoc(doc(fdb, 'settings', 'loyalty'), config); return true; }
+    catch (e) { console.warn('[cloud] saveLoyaltyConfig', e); return false; }
+  },
+  onLoyaltyConfig(cb) {
+    return onSnapshot(doc(fdb, 'settings', 'loyalty'), snap => {
+      cb(snap.exists() ? snap.data() : null);
+    }, err => console.warn('[cloud] onLoyaltyConfig', err));
+  },
+
   // 🖼️ MENU IMAGES — stored in a separate collection to bypass the 1MB
   //    Firestore doc limit on the menuConfig doc. Each image lives in its
   //    own doc menu_images/{itemId} = { dataUrl, savedAt }. Compressed

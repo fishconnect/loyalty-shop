@@ -934,6 +934,51 @@ window.calcPointsFromAmount = function(amount) {
   return Math.floor((amount || 0) * LOYALTY.POINTS_PER_BAHT);
 };
 
+// 🎁 Loyalty defaults — frozen baseline. window.LOYALTY may be overwritten
+//    at runtime by applyLoyaltyConfig (admin Settings + active promos).
+//    These defaults are what we fall back to when there's no cloud config.
+window._loyaltyDefaults = JSON.parse(JSON.stringify(window.LOYALTY));
+
+// 🎯 Pick the first promo that's currently active (now ≥ start AND ≤ end).
+//    Returns the promo object or null. Both ISO date strings and ms numbers
+//    are accepted in start/end so admin can pass either format.
+window.getActiveLoyaltyPromo = function(config) {
+  if (!config || !Array.isArray(config.promos)) return null;
+  const now = Date.now();
+  for (const p of config.promos) {
+    if (!p) continue;
+    const start = p.start ? new Date(p.start).getTime() : 0;
+    const end = p.end ? new Date(p.end).getTime() : Number.MAX_SAFE_INTEGER;
+    if (Number.isFinite(start) && Number.isFinite(end) && now >= start && now <= end) {
+      return p;
+    }
+  }
+  return null;
+};
+
+// 🎁 Re-apply loyalty config: merge defaults + admin-edited base + active
+//    promo overrides into window.LOYALTY. Customer points balances are NOT
+//    touched — only the redemption rules.
+//    Returns the active promo (or null) so callers can show a banner.
+window.applyLoyaltyConfig = function(config) {
+  const base = (config && config.base) || {};
+  const active = window.getActiveLoyaltyPromo(config);
+  const overrides = (active && active.overrides) || {};
+  const merged = { ...window._loyaltyDefaults, ...base, ...overrides };
+  // Coerce numeric fields so admin string input doesn't break math
+  ['POINTS_PER_BAHT','SIGNUP_BONUS','REWARD_DRINK_POINTS',
+   'REWARD_DISCOUNT_POINTS','REWARD_DISCOUNT_AMOUNT'].forEach(k => {
+    if (merged[k] != null) merged[k] = Number(merged[k]);
+  });
+  // Keep DRINK_REWARD_IDS as array
+  if (merged.DRINK_REWARD_IDS && !Array.isArray(merged.DRINK_REWARD_IDS)) {
+    merged.DRINK_REWARD_IDS = [];
+  }
+  window.LOYALTY = merged;
+  window._activeLoyaltyPromo = active || null;
+  return active || null;
+};
+
 // ============================================
 // Helpers
 // ============================================

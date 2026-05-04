@@ -1134,6 +1134,18 @@
     <div id="pdpaPanelOutput" style="margin-top:10px;font-size:13px"></div>
   </div>
 
+  <!-- 🎁 Loyalty / โปรโมชันแต้ม editor — admin-editable thresholds + time-window promos -->
+  <div class="card">
+    <h2>🎁 Loyalty / โปรโมชันแต้ม</h2>
+    <p class="hint">แก้ค่าฐานของแต้ม + ตั้งโปรโมชันตามช่วงวันที่ · <b>แต้มลูกค้าจะไม่ลด</b> · เปลี่ยนแค่ "x แต้มแลกอะไร"</p>
+    <div id="loyaltyAdminPanel" style="margin-top:8px"></div>
+    <div class="hint" style="font-size:11px;margin-top:8px;line-height:1.5;color:#0d9488">
+      💡 ค่าฐาน = ปกติทุกวัน · โปรโมชัน = ทับค่าฐานเฉพาะช่วงวันที่ระบุ (เช่น ลดวันแม่ 1-30 พ.ค.)<br>
+      ⏰ เริ่ม-สิ้นสุดเป็นวันที่ ค.ศ. (เลือก 2026-05-01 = 1 พ.ค. 2569)<br>
+      ✅ <b>แต้มลูกค้าเดิมยังอยู่</b> — แค่กฎ "x แต้มแลกอะไร" เปลี่ยนตามช่วงโปร
+    </div>
+  </div>
+
   <!-- 📢 Promo strip / banner editor — controls the scrolling cards lูกค้าเห็นบนหน้าเมนู -->
   <div class="card">
     <h2>📢 แบนเนอร์โปรโมชัน</h2>
@@ -1427,10 +1439,10 @@
 <!-- Print receipt area (hidden until print) -->
 <div id="printArea"></div>
 
-<script type="module" src="firebase.js?v=20260504k"></script>
-<script src="offline-banner.js?v=20260504k"></script>
-<script src="menu-data.js?v=20260504k"></script>
-<script src="notifier.js?v=20260504k"></script>
+<script type="module" src="firebase.js?v=20260504l"></script>
+<script src="offline-banner.js?v=20260504l"></script>
+<script src="menu-data.js?v=20260504l"></script>
+<script src="notifier.js?v=20260504l"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 
@@ -1624,6 +1636,7 @@ document.querySelectorAll('.tab').forEach(t => {
       renderMenuManager();
       if (typeof renderFactoryMenuManager === 'function') try { renderFactoryMenuManager(); } catch (e) {}
       if (typeof renderPromoCardsList === 'function') try { renderPromoCardsList(); } catch (e) {}
+      if (typeof renderLoyaltyAdmin === 'function') try { renderLoyaltyAdmin(); } catch (e) {}
       initPrinterToggle();
     }
     // Lazy-load iframes (use dataset flag because empty src resolves to current URL)
@@ -6842,6 +6855,264 @@ window.addPromoCard = addPromoCard;
 window.deletePromoCard = deletePromoCard;
 window.resetPromoCards = resetPromoCards;
 
+// 🎁 LOYALTY ADMIN — base values + time-window promotions.
+//    Stored in `settings/loyalty` via cloud.saveLoyaltyConfig.
+//    Customer points balances are NOT touched — only redemption rules.
+function _getLoyaltyConfig() {
+  if (!window._loyaltyConfig) window._loyaltyConfig = { base: {}, promos: [] };
+  if (!window._loyaltyConfig.base) window._loyaltyConfig.base = {};
+  if (!Array.isArray(window._loyaltyConfig.promos)) window._loyaltyConfig.promos = [];
+  return window._loyaltyConfig;
+}
+
+// All drink items eligible for the "free drink" reward (id starts with dr-)
+function _allDrinkChoices() {
+  const cats = window.MENU || [];
+  const drinks = [];
+  cats.forEach(cat => (cat.items || []).forEach(it => {
+    if (it && typeof it.id === 'string' && it.id.startsWith('dr-')) {
+      drinks.push({ id: it.id, name: it.name || it.id, price: it.price });
+    }
+  }));
+  return drinks;
+}
+
+// Convert ms timestamp or ISO string → "yyyy-mm-dd" for <input type=date>
+function _toDateInputValue(v) {
+  if (!v) return '';
+  const d = new Date(v);
+  if (isNaN(d.getTime())) return '';
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+// Convert "yyyy-mm-dd" from <input type=date> → ISO start-of-day local
+function _fromDateInputValue(s) {
+  if (!s) return '';
+  return s; // store ISO date string — applyLoyaltyConfig parses with new Date()
+}
+
+// 🩹 Effective merged values used for "currently active" preview row
+function _effectiveLoyalty() {
+  const defs = window._loyaltyDefaults || window.LOYALTY || {};
+  const cfg = _getLoyaltyConfig();
+  const base = cfg.base || {};
+  const active = (window.getActiveLoyaltyPromo && window.getActiveLoyaltyPromo(cfg)) || null;
+  const overrides = (active && active.overrides) || {};
+  return { ...defs, ...base, ...overrides };
+}
+
+function renderLoyaltyAdmin() {
+  const wrap = document.getElementById('loyaltyAdminPanel');
+  if (!wrap) return;
+  const cfg = _getLoyaltyConfig();
+  const defs = window._loyaltyDefaults || window.LOYALTY || {};
+  const base = { ...defs, ...(cfg.base || {}) };
+  const drinks = _allDrinkChoices();
+  const selected = new Set(Array.isArray(base.DRINK_REWARD_IDS) ? base.DRINK_REWARD_IDS : (defs.DRINK_REWARD_IDS || []));
+  const active = (window.getActiveLoyaltyPromo && window.getActiveLoyaltyPromo(cfg)) || null;
+  const eff = _effectiveLoyalty();
+
+  // Base values block
+  const baseBlock = `
+    <div style="background:#fff;border:1.5px solid #e2e7ef;border-radius:10px;padding:12px;margin-bottom:10px">
+      <div style="font-weight:700;color:#0a1530;font-size:13px;margin-bottom:8px">⚙️ ค่าฐาน (ปกติทุกวัน)</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <label style="font-size:12px;color:#5c6982">🪙 แลกฟรีเครื่องดื่ม
+          <input type="number" min="1" id="loy_drinkPts" value="${Number(base.REWARD_DRINK_POINTS) || 10}" style="width:100%;padding:7px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;margin-top:3px">
+        </label>
+        <label style="font-size:12px;color:#5c6982">💰 แลกส่วนลด (แต้ม)
+          <input type="number" min="1" id="loy_discPts" value="${Number(base.REWARD_DISCOUNT_POINTS) || 15}" style="width:100%;padding:7px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;margin-top:3px">
+        </label>
+        <label style="font-size:12px;color:#5c6982">💵 ส่วนลด (บาท)
+          <input type="number" min="1" id="loy_discAmt" value="${Number(base.REWARD_DISCOUNT_AMOUNT) || 50}" style="width:100%;padding:7px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;margin-top:3px">
+        </label>
+        <label style="font-size:12px;color:#5c6982">⭐ ทุก [xx] บาท = 1 แต้ม
+          <input type="number" min="1" id="loy_perBaht" value="${base.POINTS_PER_BAHT ? Math.round(1 / Number(base.POINTS_PER_BAHT)) : 50}" style="width:100%;padding:7px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;margin-top:3px">
+        </label>
+        <label style="font-size:12px;color:#5c6982;grid-column:1/-1">🎁 โบนัสสมัครใหม่
+          <input type="number" min="0" id="loy_signup" value="${Number(base.SIGNUP_BONUS) || 5}" style="width:120px;padding:7px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;margin-top:3px">
+        </label>
+      </div>
+      <div style="margin-top:10px">
+        <div style="font-size:12px;color:#5c6982;margin-bottom:6px">🥤 เครื่องดื่มที่แลกฟรีได้</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;max-height:140px;overflow-y:auto;padding:8px;background:#f8fafc;border-radius:8px;border:1px solid #e2e7ef">
+          ${drinks.length === 0 ? '<div style="color:#9ca3af;font-size:12px">ยังไม่มีเครื่องดื่มในเมนู</div>' :
+            drinks.map(d => `
+              <label style="display:inline-flex;align-items:center;gap:4px;background:${selected.has(d.id)?'#dbeafe':'#fff'};border:1px solid ${selected.has(d.id)?'#1652F0':'#d1d5db'};padding:4px 8px;border-radius:14px;font-size:11.5px;cursor:pointer">
+                <input type="checkbox" data-loy-drink="${d.id}" ${selected.has(d.id)?'checked':''} style="margin:0;width:auto">
+                ${escapeHtml(d.name)} ${d.price?`<span style="color:#6b7280">·${d.price}฿</span>`:''}
+              </label>
+            `).join('')}
+        </div>
+      </div>
+      <button class="btn-primary" onclick="saveLoyaltyBase()" style="width:100%;margin-top:10px;background:linear-gradient(135deg,#0d9488,#0f766e)">💾 บันทึกค่าฐาน</button>
+    </div>
+  `;
+
+  // Promo list block
+  const now = Date.now();
+  const promosHtml = (cfg.promos.length === 0)
+    ? '<div style="text-align:center;color:#9ca3af;font-size:12px;padding:10px">ยังไม่มีโปรโมชัน — กดเพิ่มด้านล่าง</div>'
+    : cfg.promos.map((p, i) => {
+        const start = p.start ? new Date(p.start).getTime() : 0;
+        const end = p.end ? new Date(p.end).getTime() : Number.MAX_SAFE_INTEGER;
+        const isActive = now >= start && now <= end;
+        const ov = p.overrides || {};
+        return `
+          <div style="background:#fff;border:1.5px solid ${isActive?'#16a34a':'#e2e7ef'};border-left:4px solid ${isActive?'#16a34a':'#94a3b8'};border-radius:10px;padding:12px;margin-bottom:8px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <div style="font-weight:700;font-size:13px;color:#0a1530">
+                ${isActive?'<span style="color:#16a34a">🟢 กำลังใช้งาน</span> · ':''}โปรโมชัน #${i+1}
+              </div>
+              <button onclick="deleteLoyaltyPromo(${i})" style="background:#fee2e2;color:#dc2626;border:none;width:32px;height:32px;border-radius:6px;cursor:pointer;font-family:inherit" title="ลบ">✕</button>
+            </div>
+            <input type="text" data-loy-promo-name="${i}" value="${(p.name||'').replace(/"/g,'&quot;')}" placeholder="ชื่อโปรโมชัน (เช่น ลดวันแม่ พ.ค. 2569)" style="width:100%;padding:7px 9px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;font-weight:600;margin-bottom:8px">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
+              <label style="font-size:11px;color:#5c6982">เริ่ม
+                <input type="date" data-loy-promo-start="${i}" value="${_toDateInputValue(p.start)}" style="width:100%;padding:6px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;margin-top:2px">
+              </label>
+              <label style="font-size:11px;color:#5c6982">สิ้นสุด
+                <input type="date" data-loy-promo-end="${i}" value="${_toDateInputValue(p.end)}" style="width:100%;padding:6px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;margin-top:2px">
+              </label>
+            </div>
+            <div style="background:#f8fafc;border-radius:8px;padding:8px;border:1px dashed #cbd5e1">
+              <div style="font-size:11px;color:#5c6982;margin-bottom:6px">🎯 ทับค่าฐาน (เว้นว่าง = ใช้ค่าฐาน)</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+                <label style="font-size:11px;color:#5c6982">🪙 แลกฟรี
+                  <input type="number" min="1" data-loy-promo-ov="${i}|REWARD_DRINK_POINTS" value="${ov.REWARD_DRINK_POINTS ?? ''}" placeholder="${base.REWARD_DRINK_POINTS}" style="width:100%;padding:6px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;margin-top:2px">
+                </label>
+                <label style="font-size:11px;color:#5c6982">💰 แลกส่วนลด (แต้ม)
+                  <input type="number" min="1" data-loy-promo-ov="${i}|REWARD_DISCOUNT_POINTS" value="${ov.REWARD_DISCOUNT_POINTS ?? ''}" placeholder="${base.REWARD_DISCOUNT_POINTS}" style="width:100%;padding:6px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;margin-top:2px">
+                </label>
+                <label style="font-size:11px;color:#5c6982">💵 ส่วนลด (บาท)
+                  <input type="number" min="1" data-loy-promo-ov="${i}|REWARD_DISCOUNT_AMOUNT" value="${ov.REWARD_DISCOUNT_AMOUNT ?? ''}" placeholder="${base.REWARD_DISCOUNT_AMOUNT}" style="width:100%;padding:6px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;margin-top:2px">
+                </label>
+                <label style="font-size:11px;color:#5c6982">⭐ ทุก [xx] บาท
+                  <input type="number" min="1" data-loy-promo-perbaht="${i}" value="${ov.POINTS_PER_BAHT ? Math.round(1 / Number(ov.POINTS_PER_BAHT)) : ''}" placeholder="${base.POINTS_PER_BAHT ? Math.round(1 / Number(base.POINTS_PER_BAHT)) : 50}" style="width:100%;padding:6px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;margin-top:2px">
+                </label>
+                <label style="font-size:11px;color:#5c6982;grid-column:1/-1">🎁 โบนัสสมัครใหม่
+                  <input type="number" min="0" data-loy-promo-ov="${i}|SIGNUP_BONUS" value="${ov.SIGNUP_BONUS ?? ''}" placeholder="${base.SIGNUP_BONUS}" style="width:120px;padding:6px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;margin-top:2px">
+                </label>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+  const activeLine = active
+    ? `<div style="background:linear-gradient(135deg,#dcfce7,#bbf7d0);border-left:4px solid #16a34a;padding:8px 12px;border-radius:8px;margin-bottom:10px;font-size:12px;color:#166534">
+         🟢 <b>กำลังใช้งาน:</b> ${escapeHtml(active.name || '(ไม่มีชื่อ)')} · ${eff.REWARD_DRINK_POINTS} แต้มแลกฟรี · ${eff.REWARD_DISCOUNT_POINTS} แต้มลด ${eff.REWARD_DISCOUNT_AMOUNT}฿
+       </div>`
+    : `<div style="background:#f1f5f9;border-left:4px solid #94a3b8;padding:8px 12px;border-radius:8px;margin-bottom:10px;font-size:12px;color:#475569">
+         ⏸️ ไม่มีโปรโมชันที่กำลังใช้งาน · ใช้ค่าฐาน (${eff.REWARD_DRINK_POINTS} แต้มแลกฟรี · ${eff.REWARD_DISCOUNT_POINTS} แต้มลด ${eff.REWARD_DISCOUNT_AMOUNT}฿)
+       </div>`;
+
+  wrap.innerHTML = activeLine + baseBlock + `
+    <div style="font-weight:700;color:#0a1530;font-size:13px;margin:14px 0 8px 0">📅 โปรโมชันตามช่วงวันที่</div>
+    <div id="loyaltyPromosList">${promosHtml}</div>
+    <button class="btn-primary" onclick="addLoyaltyPromo()" style="width:100%;margin-top:8px;background:linear-gradient(135deg,#7c3aed,#5b21b6)">➕ เพิ่มโปรโมชัน</button>
+    <button class="btn-primary" onclick="saveLoyaltyPromos()" style="width:100%;margin-top:6px;background:linear-gradient(135deg,#0d9488,#0f766e)">💾 บันทึกโปรโมชัน</button>
+  `;
+}
+
+async function saveLoyaltyBase() {
+  const cfg = _getLoyaltyConfig();
+  const drinkPts = parseInt(document.getElementById('loy_drinkPts').value) || 10;
+  const discPts = parseInt(document.getElementById('loy_discPts').value) || 15;
+  const discAmt = parseInt(document.getElementById('loy_discAmt').value) || 50;
+  const perBahtN = parseInt(document.getElementById('loy_perBaht').value) || 50;
+  const signup = parseInt(document.getElementById('loy_signup').value) || 0;
+  const drinkIds = Array.from(document.querySelectorAll('[data-loy-drink]'))
+    .filter(el => el.checked).map(el => el.getAttribute('data-loy-drink'));
+  cfg.base = {
+    REWARD_DRINK_POINTS: drinkPts,
+    REWARD_DISCOUNT_POINTS: discPts,
+    REWARD_DISCOUNT_AMOUNT: discAmt,
+    POINTS_PER_BAHT: 1 / perBahtN,
+    SIGNUP_BONUS: signup,
+    DRINK_REWARD_IDS: drinkIds,
+  };
+  window._loyaltyConfig = cfg;
+  if (window.applyLoyaltyConfig) window.applyLoyaltyConfig(cfg);
+  if (window.cloud?.saveLoyaltyConfig) {
+    const ok = await window.cloud.saveLoyaltyConfig(cfg);
+    if (!ok) return toast('⚠️ บันทึก cloud ไม่สำเร็จ', true);
+  }
+  renderLoyaltyAdmin();
+  toast('✅ บันทึกค่าฐานแล้ว');
+}
+
+async function addLoyaltyPromo() {
+  const cfg = _getLoyaltyConfig();
+  const today = new Date();
+  const start = _toDateInputValue(today);
+  const end = new Date(today.getTime() + 30 * 86400 * 1000);
+  cfg.promos.push({
+    id: 'p-' + Date.now(),
+    name: 'โปรโมชันใหม่',
+    start: start,
+    end: _toDateInputValue(end),
+    overrides: {},
+  });
+  window._loyaltyConfig = cfg;
+  renderLoyaltyAdmin();
+}
+
+async function deleteLoyaltyPromo(idx) {
+  const cfg = _getLoyaltyConfig();
+  if (!cfg.promos[idx]) return;
+  if (!confirm(`ลบโปรโมชัน "${cfg.promos[idx].name || ''}"?`)) return;
+  cfg.promos.splice(idx, 1);
+  window._loyaltyConfig = cfg;
+  if (window.applyLoyaltyConfig) window.applyLoyaltyConfig(cfg);
+  if (window.cloud?.saveLoyaltyConfig) await window.cloud.saveLoyaltyConfig(cfg);
+  renderLoyaltyAdmin();
+  toast('🗑️ ลบโปรโมชันแล้ว');
+}
+
+async function saveLoyaltyPromos() {
+  const cfg = _getLoyaltyConfig();
+  // Read each promo's inputs from DOM
+  cfg.promos.forEach((p, i) => {
+    const nameEl = document.querySelector(`[data-loy-promo-name="${i}"]`);
+    const startEl = document.querySelector(`[data-loy-promo-start="${i}"]`);
+    const endEl = document.querySelector(`[data-loy-promo-end="${i}"]`);
+    if (nameEl) p.name = nameEl.value || '';
+    if (startEl) p.start = _fromDateInputValue(startEl.value);
+    if (endEl) p.end = _fromDateInputValue(endEl.value);
+    if (!p.overrides) p.overrides = {};
+    document.querySelectorAll(`[data-loy-promo-ov^="${i}|"]`).forEach(el => {
+      const key = el.getAttribute('data-loy-promo-ov').split('|')[1];
+      const v = el.value.trim();
+      if (v === '') delete p.overrides[key];
+      else p.overrides[key] = Number(v);
+    });
+    const perBahtEl = document.querySelector(`[data-loy-promo-perbaht="${i}"]`);
+    if (perBahtEl) {
+      const v = perBahtEl.value.trim();
+      if (v === '') delete p.overrides.POINTS_PER_BAHT;
+      else p.overrides.POINTS_PER_BAHT = 1 / Number(v);
+    }
+  });
+  window._loyaltyConfig = cfg;
+  if (window.applyLoyaltyConfig) window.applyLoyaltyConfig(cfg);
+  if (window.cloud?.saveLoyaltyConfig) {
+    const ok = await window.cloud.saveLoyaltyConfig(cfg);
+    if (!ok) return toast('⚠️ บันทึก cloud ไม่สำเร็จ', true);
+  }
+  renderLoyaltyAdmin();
+  toast('✅ บันทึกโปรโมชันแล้ว');
+}
+
+window.renderLoyaltyAdmin = renderLoyaltyAdmin;
+window.saveLoyaltyBase = saveLoyaltyBase;
+window.addLoyaltyPromo = addLoyaltyPromo;
+window.deleteLoyaltyPromo = deleteLoyaltyPromo;
+window.saveLoyaltyPromos = saveLoyaltyPromos;
+
 // Save selected Thai codepage
 function saveThaiCodepage() {
   const v = document.getElementById('thaiCodepage').value;
@@ -7712,6 +7983,19 @@ whenCloudReady(() => {
       if (document.querySelector('[data-page=settings]')?.classList.contains('active')) {
         try { renderMenuManager(); } catch (e) {}
       }
+    });
+  }
+  // 🎁 Loyalty config — admin-edited base + active promo overrides.
+  //    Stash for admin form rendering, re-apply to window.LOYALTY, and
+  //    re-render any UI in admin that reads loyalty values.
+  if (window.cloud?.onLoyaltyConfig) {
+    window.cloud.onLoyaltyConfig(config => {
+      window._loyaltyConfig = config || { base: {}, promos: [] };
+      if (typeof window.applyLoyaltyConfig === 'function') {
+        window.applyLoyaltyConfig(window._loyaltyConfig);
+      }
+      try { renderLoyaltyAdmin?.(); } catch (e) {}
+      try { renderCustomerList?.(); } catch (e) {}
     });
   }
 });
