@@ -1217,10 +1217,10 @@
 
 <div class="toast" id="toast"></div>
 
-<script type="module" src="firebase.js?v=20260504u"></script>
-<script src="sentry-init.js?v=20260504u"></script>
-<script src="offline-banner.js?v=20260504u"></script>
-<script src="menu-data.js?v=20260504u"></script>
+<script type="module" src="firebase.js?v=20260504v"></script>
+<script src="sentry-init.js?v=20260504v"></script>
+<script src="offline-banner.js?v=20260504v"></script>
+<script src="menu-data.js?v=20260504v"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 const STORAGE_KEY = 'loyaltyShopV2';
@@ -1633,7 +1633,7 @@ function renderPopularSection() {
           <div class="popular-card ${qtyInCart>0?'has-qty':''}" onclick="openCustomize('${it.id}')">
             <div class="img-wrap">
               <img src="${imgSrc(it)}" alt="" onerror="${_imgFallback}">
-              <div class="pop-badge">Popular #${i+1}</div>
+              <div class="pop-badge">⭐ แนะนำ #${i+1}</div>
               ${qtyInCart > 0 ? `<div class="qty-badge-pop">${qtyInCart}</div>` : ''}
             </div>
             <div class="info">
