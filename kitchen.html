@@ -316,11 +316,11 @@
   <source src="data:audio/wav;base64,UklGRkIBAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YR4BAAAAAACA/n/8f/p/+H/2f/N/8H/sf+h/5H/gf9p/1n/Rf8t/xX/Af7p/tH+vf6l/o3+ef5h/k3+Of4N/fn94f3J/bX9o/2N/Xn9Yf1N/Tn9Jf0R/QH86fzZ/Mn8tfyl/JX8gfxx/GH8VfxJ/Dn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8Ifwd/Bn8I" type="audio/wav">
 </audio>
 
-<script type="module" src="firebase.js?v=20260504t"></script>
-<script src="sentry-init.js?v=20260504t"></script>
-<script src="offline-banner.js?v=20260504t"></script>
-<script src="menu-data.js?v=20260504t"></script>
-<script src="notifier.js?v=20260504t"></script>
+<script type="module" src="firebase.js?v=20260504u"></script>
+<script src="sentry-init.js?v=20260504u"></script>
+<script src="offline-banner.js?v=20260504u"></script>
+<script src="menu-data.js?v=20260504u"></script>
+<script src="notifier.js?v=20260504u"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 const STORAGE_KEY = 'loyaltyShopV2';
@@ -1366,6 +1366,30 @@ function buildReceiptHTML(order) {
     <div class="rc-row"><span>เวลา</span><span>${fmtReceiptDate(order.date)}</span></div>
     <div class="rc-row"><span>ลูกค้า</span><span><b>${escapeHtml(order.customer_name)}</b></span></div>
     ${order.customer_phone ? `<div class="rc-row"><span>เบอร์</span><span>${maskPhone(order.customer_phone)}</span></div>` : ''}
+    ${(() => {
+      // 🚚 Order type — delivery / pickup / walk-in (dine-in)
+      let typeLabel = '';
+      if (order.order_type === 'delivery') typeLabel = '🚚 จัดส่ง';
+      else if (order.source === 'walk-in' || order.source === 'phone') typeLabel = '🏪 กินที่ร้าน';
+      else if (order.order_type === 'pickup') typeLabel = '🛍️ รับที่ร้าน';
+      const typeRow = typeLabel ? `<div class="rc-row"><span>ประเภท</span><span><b>${typeLabel}</b></span></div>` : '';
+      // 📍 Delivery address
+      const addrRow = (order.order_type === 'delivery' && order.delivery_address)
+        ? `<div class="rc-row" style="font-size:10pt"><span>📍 ที่อยู่</span><span style="text-align:right;max-width:55mm;word-break:break-word">${escapeHtml(order.delivery_address)}</span></div>`
+        : '';
+      // ⏰ Scheduled time — null = ASAP, ISO date = scheduled
+      let schedRow = '';
+      if (order.scheduled_at) {
+        const d = new Date(order.scheduled_at);
+        if (!isNaN(d.getTime())) {
+          const t = d.toLocaleString('th-TH', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+          schedRow = `<div class="rc-row"><span>⏰ ${order.order_type==='delivery'?'จัดส่งเวลา':'รับเวลา'}</span><span><b>${t}</b></span></div>`;
+        }
+      } else if (order.order_type === 'delivery' || order.order_type === 'pickup') {
+        schedRow = `<div class="rc-row"><span>⏰ เวลา</span><span><b>ASAP (เร็วที่สุด)</b></span></div>`;
+      }
+      return typeRow + addrRow + schedRow;
+    })()}
     <hr class="rc-divider">
     ${itemsHTML}
     ${order.note ? `<hr class="rc-divider"><div style="font-size:11pt"><b>หมายเหตุ:</b> ${order.note}</div>` : ''}
@@ -2051,15 +2075,29 @@ async function renderReceiptCanvas(order) {
   row('Time:', fmtReceiptDate(order.date), 22, true);
   row('Cust:', order.customer_name || '-', 22, true);
   if (order.customer_phone) row('Phone:', maskPhone(order.customer_phone), 22, true);
-  // Order type — pickup or delivery (with address if delivery)
+  // Order type — pickup or delivery or dine-in (with address if delivery)
   if (order.order_type === 'delivery') {
     row('Type:', '🚚 จัดส่ง', 22, true);
     if (order.delivery_address) {
       leftLine('Addr: ' + order.delivery_address.slice(0, 50), 18, true);
       if (order.delivery_address.length > 50) leftLine('   ' + order.delivery_address.slice(50, 100), 18, true);
     }
+  } else if (order.source === 'walk-in' || order.source === 'phone') {
+    row('Type:', '🏪 กินที่ร้าน', 22, true);
   } else {
-    row('Type:', '🏪 รับที่ร้าน', 22, true);
+    row('Type:', '🛍️ รับที่ร้าน', 22, true);
+  }
+  // ⏰ Scheduled delivery / pickup time (null = ASAP)
+  if (order.scheduled_at) {
+    try {
+      const d = new Date(order.scheduled_at);
+      if (!isNaN(d.getTime())) {
+        const t = d.toLocaleString('th-TH', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+        row(order.order_type === 'delivery' ? 'Deliver:' : 'Pickup:', t, 22, true);
+      }
+    } catch (e) {}
+  } else if (order.order_type === 'delivery' || order.order_type === 'pickup') {
+    row('Time:', 'ASAP', 22, true);
   }
   divider();
 

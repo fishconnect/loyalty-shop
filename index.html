@@ -1470,11 +1470,11 @@
 <!-- Print receipt area (hidden until print) -->
 <div id="printArea"></div>
 
-<script type="module" src="firebase.js?v=20260504t"></script>
-<script src="sentry-init.js?v=20260504t"></script>
-<script src="offline-banner.js?v=20260504t"></script>
-<script src="menu-data.js?v=20260504t"></script>
-<script src="notifier.js?v=20260504t"></script>
+<script type="module" src="firebase.js?v=20260504u"></script>
+<script src="sentry-init.js?v=20260504u"></script>
+<script src="offline-banner.js?v=20260504u"></script>
+<script src="menu-data.js?v=20260504u"></script>
+<script src="notifier.js?v=20260504u"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 
@@ -6514,6 +6514,10 @@ function renderMenuManager() {
             </div>
           </div>
           <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
+            ${(() => {
+              const isFeatured = Array.isArray(menuConfig.featuredIds) && menuConfig.featuredIds.includes(it.id);
+              return `<button onclick="quickToggleFeatured('${it.id}', event)" title="${isFeatured?'เอาออกจากเมนูแนะนำ':'เพิ่มในเมนูแนะนำ'}" style="background:${isFeatured?'#fef9c3':'#dcfce7'};color:${isFeatured?'#854d0e':'#166534'};border:none;width:32px;height:28px;border-radius:6px;cursor:pointer;font-size:12.5px;flex-shrink:0">${isFeatured?'⭐':'☆'}</button>`;
+            })()}
             ${!isCustom ? `<button onclick="quickToggleAvailable('${it.id}', false, event)" title="${it.available!==false?'ซ่อน (ตั้งหมด)':'แสดงอีกครั้ง'}" style="background:${it.available!==false?'#fef3c7':'#dcfce7'};color:${it.available!==false?'#92400e':'#166534'};border:none;width:32px;height:28px;border-radius:6px;cursor:pointer;font-size:12.5px;flex-shrink:0">${it.available!==false?'🚫':'✅'}</button>` : ''}
             <button onclick="quickDeleteItem('${it.id}', false, event)" title="ลบเมนูนี้ถาวร" style="background:#fee2e2;color:#dc2626;border:none;width:32px;height:28px;border-radius:6px;cursor:pointer;font-size:12.5px;flex-shrink:0">🗑️</button>
           </div>
@@ -6683,6 +6687,31 @@ async function quickToggleAvailable(itemId, isFactory, ev) {
   else renderMenuManager();
 }
 window.quickToggleAvailable = quickToggleAvailable;
+
+// ⭐ Toggle featured status — controls which items appear in the "เมนูแนะนำ"
+//    grid on the customer menu page. Stored in menuConfig.featuredIds (array
+//    of ids). Order in the array = display order on customer page.
+async function quickToggleFeatured(itemId, ev) {
+  if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
+  if (!Array.isArray(menuConfig.featuredIds)) menuConfig.featuredIds = [];
+  const idx = menuConfig.featuredIds.indexOf(itemId);
+  if (idx >= 0) {
+    menuConfig.featuredIds.splice(idx, 1);
+    toast('☆ เอาออกจากเมนูแนะนำแล้ว');
+  } else {
+    if (menuConfig.featuredIds.length >= 8) {
+      return toast('⚠️ เมนูแนะนำเต็ม (สูงสุด 8 รายการ) — เอาบางอันออกก่อน', true);
+    }
+    menuConfig.featuredIds.push(itemId);
+    toast('⭐ เพิ่มในเมนูแนะนำแล้ว');
+  }
+  localStorage.setItem('menuConfig', JSON.stringify(menuConfig));
+  if (window.cloud?.saveMenuConfig) {
+    try { await window.cloud.saveMenuConfig(menuConfig); } catch (e) {}
+  }
+  renderMenuManager();
+}
+window.quickToggleFeatured = quickToggleFeatured;
 
 // ========== Web Bluetooth Printer ==========
 const BT_SERVICES = [
@@ -7299,7 +7328,7 @@ function refreshShopOpenStatus() {
 // 📢 Promo strip editor — admin manages the cards that scroll on the customer
 //    menu page. Stored in menuConfig.promoCards. Empty/missing = use defaults.
 const DEFAULT_PROMO_CARDS = [
-  { icon: '🕒', title: 'เปิด 9.30 - 17.30 น.',     desc: 'ทุกวัน · หยุดทุกวันอาทิตย์',    color: 'default' },
+  { icon: '🕒', title: 'เปิด 8.00 - 17.30 น.',     desc: 'ทุกวัน · หยุดทุกวันอาทิตย์',    color: 'default' },
   { icon: '🎁', title: '+5 แต้มสมัครใหม่',          desc: 'ฟรี · กรอกเบอร์ครั้งแรก',       color: 'green' },
   { icon: '🥤', title: '10 แต้ม = ฟรี 1 แก้ว',     desc: 'ชานมไข่มุก / เครื่องดื่มแก้วโอ่ง', color: 'default' },
   { icon: '💰', title: '15 แต้ม = ลด 50฿',          desc: 'แลกส่วนลดได้ทันที',             color: 'purple' },

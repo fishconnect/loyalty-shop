@@ -1217,10 +1217,10 @@
 
 <div class="toast" id="toast"></div>
 
-<script type="module" src="firebase.js?v=20260504t"></script>
-<script src="sentry-init.js?v=20260504t"></script>
-<script src="offline-banner.js?v=20260504t"></script>
-<script src="menu-data.js?v=20260504t"></script>
+<script type="module" src="firebase.js?v=20260504u"></script>
+<script src="sentry-init.js?v=20260504u"></script>
+<script src="offline-banner.js?v=20260504u"></script>
+<script src="menu-data.js?v=20260504u"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 const STORAGE_KEY = 'loyaltyShopV2';
@@ -1483,7 +1483,7 @@ function renderPromoStrip() {
   // 🩹 Admin can customize the promo strip via menuConfig.promoCards
   //    (Settings → "📢 แบนเนอร์โปรโมชัน"). Falls back to defaults if empty.
   const DEFAULT_CARDS = [
-    { icon: '🕒', title: 'เปิด 9.30 - 17.30 น.',     desc: 'ทุกวัน · หยุดทุกวันอาทิตย์',    color: 'default' },
+    { icon: '🕒', title: 'เปิด 8.00 - 17.30 น.',     desc: 'ทุกวัน · หยุดทุกวันอาทิตย์',    color: 'default' },
     { icon: '🎁', title: '+5 แต้มสมัครใหม่',          desc: 'ฟรี · กรอกเบอร์ครั้งแรก',       color: 'green' },
     { icon: '🥤', title: '10 แต้ม = ฟรี 1 แก้ว',     desc: 'ชานมไข่มุก / เครื่องดื่มแก้วโอ่ง', color: 'default' },
     { icon: '💰', title: '15 แต้ม = ลด 50฿',          desc: 'แลกส่วนลดได้ทันที',             color: 'purple' },
@@ -1542,17 +1542,29 @@ function renderLoyaltyPromoBanner() {
   `;
 }
 
-// 📌 POPULAR_PINS — manual overrides for specific positions in the
-// "เมนูยอดนิยม" grid. null = let auto-compute pick. String = item ID
-// pinned to that exact slot. Pinned IDs are removed from the auto-pool
-// so they don't double-appear.
-//   Slot order: [#1, #2, #3, #4]
-const POPULAR_PINS = [
+// 📌 FEATURED ITEMS — shown in the "เมนูแนะนำ" grid at the top of the
+//    customer menu page. Admin controls this from the menu manager via
+//    the ⭐ button on each item row → writes to menuConfig.featuredIds.
+//    Falls back to POPULAR_PINS_FALLBACK if cloud config is empty.
+//    Order in featuredIds = display order. Auto-fills empty slots with
+//    best-sellers from order history.
+const POPULAR_PINS_FALLBACK = [
   null,        // #1 — auto (best-seller from order history)
-  'rd-003',    // #2 — ผัดพริกแกงราดข้าว (pinned by admin)
-  'sp-002',    // #3 — ผัดเผ็ดหมูป่าราดข้าว (pinned by admin)
-  'sk-002',    // #4 — สุกี้แห้ง (pinned by admin)
+  'rd-003',    // #2 — ผัดพริกแกงราดข้าว
+  'sp-002',    // #3 — ผัดเผ็ดหมูป่าราดข้าว
+  'sk-002',    // #4 — สุกี้แห้ง
 ];
+
+// Read featured ids from cloud menuConfig (admin-edited), fall back to
+// hardcoded pins if not configured. Returns array with length = maxN,
+// nulls in unfilled slots so auto-pool can fill them.
+function _getFeaturedPins(maxN) {
+  const fromCfg = (typeof menuConfig === 'object' && menuConfig && Array.isArray(menuConfig.featuredIds))
+    ? menuConfig.featuredIds : null;
+  const pins = (fromCfg && fromCfg.length) ? fromCfg.slice(0, maxN) : POPULAR_PINS_FALLBACK.slice(0, maxN);
+  while (pins.length < maxN) pins.push(null);
+  return pins;
+}
 
 // Compute top N popular items from cloud orders + local pending,
 // then merge with POPULAR_PINS so pinned IDs land in their exact slot.
@@ -1582,11 +1594,9 @@ function computePopularItems(maxN) {
     const f = findItem(id);
     return f && f.item.available !== false && !f.cat?.isAddOn;
   };
-  const pinnedIds = new Set(POPULAR_PINS.filter(Boolean));
+  const slots = _getFeaturedPins(maxN);
+  const pinnedIds = new Set(slots.filter(Boolean));
   const autoPool = ranked.filter(id => isValid(id) && !pinnedIds.has(id));
-  const slots = POPULAR_PINS.slice(0, maxN);
-  // If POPULAR_PINS is shorter than maxN, pad with nulls so auto-pool fills the rest
-  while (slots.length < maxN) slots.push(null);
   // Fill in: pinned slots use their pin (if valid), null slots draw from autoPool
   let autoCursor = 0;
   const result = slots.map(slot => {
@@ -1611,7 +1621,7 @@ function renderPopularSection() {
   wrap.style.display = 'block';
   wrap.innerHTML = `
     <section class="popular-section">
-      <div class="sec-title">⭐ เมนูยอดนิยม คนสั่งเยอะ</div>
+      <div class="sec-title">⭐ เมนูแนะนำ</div>
       <div class="popular-grid">
         ${ids.map((id, i) => {
           const f = findItem(id);
@@ -2531,7 +2541,7 @@ function persistSchedState() {
 }
 
 // SHOP HOURS — used to validate schedule slots
-const SHOP_HOURS = { openH: 9, openM: 30, closeH: 17, closeM: 30 };
+const SHOP_HOURS = { openH: 8, openM: 0, closeH: 17, closeM: 30 };
 const SHOP_CLOSED_DAYS = [0]; // 0 = Sunday
 
 function setSchedule(mode) {
