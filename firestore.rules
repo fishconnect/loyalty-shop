@@ -81,6 +81,44 @@ service cloud.firestore {
     }
 
     // -----------------------------------------------------------------
+    // 🆔 DEVICE TRUST REQUESTS — customer's verify gate writes a short-
+    //    lived doc with a 4-char code; admin reads + deletes after pairing.
+    //    Auto-cleaned after 30 min by client.
+    // -----------------------------------------------------------------
+    match /device_trust_requests/{requestId} {
+      allow read: if true;
+      // Required shape: device_id, phone, code, requested_at
+      allow create, update: if request.resource.data.code is string
+                            && request.resource.data.phone is string
+                            && request.resource.data.device_id is string
+                            && request.resource.data.code.size() < 20
+                            && request.resource.data.phone.size() < 20;
+      allow delete: if true;
+    }
+
+    // -----------------------------------------------------------------
+    // 📜 CONSENT LOGS — PDPA audit trail (consent given/revoked, admin
+    //    actions like trust-by-code). Append-only; never delete from client.
+    // -----------------------------------------------------------------
+    match /consent_logs/{logId} {
+      allow read: if true;
+      allow create: if request.resource.data.type is string;
+      // Audit logs are immutable
+      allow update, delete: if false;
+    }
+
+    // -----------------------------------------------------------------
+    // 💰 EXPENSES — admin-side accounting entries.
+    // -----------------------------------------------------------------
+    match /expenses/{expenseId} {
+      allow read: if true;
+      allow create, update: if request.resource.data.amount is number
+                            && request.resource.data.amount >= 0
+                            && request.resource.data.amount < 1000000;
+      allow delete: if true;
+    }
+
+    // -----------------------------------------------------------------
     // 🚫 CATCH-ALL — block anything not matched above. Keeps unknown
     //    collections (typos, future docs) safe by default.
     // -----------------------------------------------------------------
