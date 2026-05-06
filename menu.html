@@ -1217,10 +1217,10 @@
 
 <div class="toast" id="toast"></div>
 
-<script type="module" src="firebase.js?v=20260504w"></script>
-<script src="sentry-init.js?v=20260504w"></script>
-<script src="offline-banner.js?v=20260504w"></script>
-<script src="menu-data.js?v=20260504w"></script>
+<script type="module" src="firebase.js?v=20260504x"></script>
+<script src="sentry-init.js?v=20260504x"></script>
+<script src="offline-banner.js?v=20260504x"></script>
+<script src="menu-data.js?v=20260504x"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 const STORAGE_KEY = 'loyaltyShopV2';
@@ -1467,6 +1467,7 @@ function renderHeroChips() {
       : `<span class="info-chip closed">🔴 ร้านปิด</span>`,
     `<span class="info-chip">🛵 จัดส่งใน 30 นาที - 1 ชม.</span>`,
     `<span class="info-chip">💎 50฿ = 1 แต้ม</span>`,
+    `<a class="info-chip" href="https://line.me/ti/p/~tangkwa-mali" target="_blank" rel="noopener" style="text-decoration:none;background:linear-gradient(135deg,#06c755,#04a648);color:#fff;border-color:#04a648">💬 LINE: tangkwa-mali</a>`,
   ];
   wrap.innerHTML = chips.join('');
 }
