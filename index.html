@@ -1470,11 +1470,11 @@
 <!-- Print receipt area (hidden until print) -->
 <div id="printArea"></div>
 
-<script type="module" src="firebase.js?v=20260504v"></script>
-<script src="sentry-init.js?v=20260504v"></script>
-<script src="offline-banner.js?v=20260504v"></script>
-<script src="menu-data.js?v=20260504v"></script>
-<script src="notifier.js?v=20260504v"></script>
+<script type="module" src="firebase.js?v=20260504w"></script>
+<script src="sentry-init.js?v=20260504w"></script>
+<script src="offline-banner.js?v=20260504w"></script>
+<script src="menu-data.js?v=20260504w"></script>
+<script src="notifier.js?v=20260504w"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 
@@ -3350,6 +3350,9 @@ function renderCustomerDetail() {
       }).join('');
 
   // 🎂 Birthday display + days-until counter (helps staff plan outreach)
+  //    On birthday: show a button "ให้แต้มวันเกิด" so admin can manually
+  //    grant the bonus AFTER seeing the customer's ID card. Auto-award
+  //    was disabled because some customers entered fake birthdays.
   let bdayLine = '';
   if (c.birth_day && c.birth_month) {
     const monthsTH = ['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
@@ -3358,7 +3361,14 @@ function renderCustomerDetail() {
     if (next < today) next.setFullYear(today.getFullYear() + 1);
     const daysToBday = Math.ceil((next - today) / 86400000);
     const isToday = (today.getDate() === c.birth_day && (today.getMonth() + 1) === c.birth_month);
-    bdayLine = `<div style="opacity:.85;font-size:12px;margin-top:2px">🎂 ${c.birth_day} ${monthsTH[c.birth_month]}${isToday?' <span style="background:#fbbf24;color:#78350f;padding:1px 8px;border-radius:999px;font-weight:800;margin-left:4px">วันนี้!</span>':daysToBday<=14?` <span style="opacity:.85">(อีก ${daysToBday} วัน)</span>`:''}</div>`;
+    const yearKey = today.getFullYear();
+    const alreadyGivenThisYear = c.last_birthday_bonus_year === yearKey;
+    const bonusBtn = (isToday && !alreadyGivenThisYear)
+      ? ` <button onclick="event.stopPropagation();grantBirthdayBonus('${c.id}')" style="background:#fbbf24;color:#78350f;border:none;padding:3px 10px;border-radius:999px;font-weight:800;font-size:11px;cursor:pointer;margin-left:4px;font-family:inherit">🎂 ให้แต้มวันเกิด (ดูบัตรประชาชน)</button>`
+      : (isToday && alreadyGivenThisYear)
+        ? ` <span style="background:#dcfce7;color:#166534;padding:1px 8px;border-radius:999px;font-size:10.5px;font-weight:700;margin-left:4px">✅ ให้แต้มแล้วปีนี้</span>`
+        : '';
+    bdayLine = `<div style="opacity:.85;font-size:12px;margin-top:2px">🎂 ${c.birth_day} ${monthsTH[c.birth_month]}${isToday?' <span style="background:#fbbf24;color:#78350f;padding:1px 8px;border-radius:999px;font-weight:800;margin-left:4px">วันนี้!</span>':daysToBday<=14?` <span style="opacity:.85">(อีก ${daysToBday} วัน)</span>`:''}${bonusBtn}</div>`;
   }
 
   // 📷 Avatar — photo if uploaded, else first-letter chip
@@ -3917,6 +3927,60 @@ async function deleteCustomerHistory(id) {
   if (checkSelectedId === id) renderCustomerDetail();
   renderCustomers();
   if (typeof renderReports === 'function') try { renderReports(); } catch(e) {}
+}
+
+// 🎂 Admin manually grants birthday bonus AFTER seeing the customer's ID.
+//    Auto-grant was removed because customers were faking birthdays.
+//    Once-per-year per customer (tracked by last_birthday_bonus_year).
+async function grantBirthdayBonus(customerId) {
+  const c = db.customers[customerId];
+  if (!c) return toast('⚠️ ไม่พบลูกค้า', true);
+  const today = new Date();
+  const isToday = c.birth_day === today.getDate() && c.birth_month === (today.getMonth() + 1);
+  if (!isToday) return toast('⚠️ ไม่ใช่วันเกิดของลูกค้าวันนี้', true);
+  const yearKey = today.getFullYear();
+  if (c.last_birthday_bonus_year === yearKey) {
+    return toast('⚠️ ให้แต้มวันเกิดไปแล้วปีนี้', true);
+  }
+  // Use loyalty config bonus (defaults to SIGNUP_BONUS — same as before)
+  const bonus = Number((window.LOYALTY && window.LOYALTY.SIGNUP_BONUS) || 5);
+  if (!confirm(`✅ ตรวจดูบัตรประชาชนแล้ววันเกิดตรงกับ ${c.birth_day}/${c.birth_month}\n\nให้แต้มวันเกิด ${bonus} แต้ม กับลูกค้า "${c.name}"?`)) return;
+  c.points = (c.points || 0) + bonus;
+  c.lifetime_points = (c.lifetime_points || 0) + bonus;
+  c.last_birthday_bonus_year = yearKey;
+  c.last_birthday_bonus_at = new Date().toISOString();
+  c.last_birthday_bonus_by = 'admin_manual';
+  db.customers[customerId] = c;
+  saveDB();
+  // Cloud sync
+  try {
+    if (window.cloud?.incrementCustomerPoints) {
+      await window.cloud.incrementCustomerPoints(customerId, bonus, bonus, {
+        last_birthday_bonus_year: yearKey,
+        last_birthday_bonus_at: c.last_birthday_bonus_at,
+        last_birthday_bonus_by: 'admin_manual',
+      });
+    } else {
+      await window.cloud.saveCustomer(c);
+    }
+  } catch (e) { console.warn('[grantBirthdayBonus] cloud', e); }
+  // Audit log
+  try {
+    if (window.cloud?.saveConsentLog) {
+      await window.cloud.saveConsentLog({
+        type: 'admin_birthday_bonus_grant',
+        customer_id: String(customerId),
+        customer_phone: String(customerId),
+        version: '1.0',
+        accepted: true,
+        details: { bonus_points: bonus, year: yearKey },
+      });
+    }
+  } catch (e) {}
+  toast(`🎂 ให้แต้มวันเกิด +${bonus} แต้ม สำหรับ ${c.name} แล้ว`);
+  renderCustomers();
+}
+window.grantBirthdayBonus = grantBirthdayBonus;
 }
 
 // ========== Customers List (with filter, sort, KPI bar) ==========

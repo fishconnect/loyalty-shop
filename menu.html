@@ -876,8 +876,8 @@
 <!-- ⭐ Popular section (auto-computed from orders) -->
 <div id="popularSection" style="display:none"></div>
 
-<!-- 💬 Floating chat button (URL set dynamically from settings/contact) -->
-<a id="chatFloat" href="tel:0619623696" target="_blank" rel="noopener" style="position:fixed;bottom:90px;right:14px;z-index:80;background:linear-gradient(135deg,#06c755,#04a648);color:#fff;width:54px;height:54px;border-radius:50%;display:grid;place-items:center;font-size:26px;box-shadow:0 6px 18px rgba(6,199,85,.45);text-decoration:none">💬</a>
+<!-- 💬 Floating LINE button — quick contact via LINE ID @tangkwa-mali / 0619623696 -->
+<a id="chatFloat" href="https://line.me/ti/p/~tangkwa-mali" target="_blank" rel="noopener" title="LINE: tangkwa-mali · 0619623696" style="position:fixed;bottom:90px;right:14px;z-index:80;background:linear-gradient(135deg,#06c755,#04a648);color:#fff;width:54px;height:54px;border-radius:50%;display:grid;place-items:center;font-size:26px;box-shadow:0 6px 18px rgba(6,199,85,.45);text-decoration:none">💬</a>
 
 <script>
   // Embed/shop mode adjustments
@@ -1217,10 +1217,10 @@
 
 <div class="toast" id="toast"></div>
 
-<script type="module" src="firebase.js?v=20260504v"></script>
-<script src="sentry-init.js?v=20260504v"></script>
-<script src="offline-banner.js?v=20260504v"></script>
-<script src="menu-data.js?v=20260504v"></script>
+<script type="module" src="firebase.js?v=20260504w"></script>
+<script src="sentry-init.js?v=20260504w"></script>
+<script src="offline-banner.js?v=20260504w"></script>
+<script src="menu-data.js?v=20260504w"></script>
 <script>
 function whenCloudReady(cb) { if (window.cloud?.ready) cb(); else window.addEventListener('cloud-ready', cb, { once: true }); }
 const STORAGE_KEY = 'loyaltyShopV2';
@@ -3601,9 +3601,13 @@ async function submitOrder() {
       db.customers[customerId] = customer;
     }
   }
-  // Birthday bonus award (every year, max once per year) — also gated by flag
+  // 🎂 Birthday bonus — DISABLED auto-award. Admin must manually grant
+  //    after seeing ID card (some customers were entering fake birthdays
+  //    to game the bonus). Logic kept for backward compat — set
+  //    featFlags.birthdayAuto=true to re-enable auto, or use the
+  //    "🎂 ให้แต้มวันเกิด" button in admin (renderCustomers) for manual.
   let birthdayBonusGiven = false;
-  if (featFlags.birthday && customer.birth_day && customer.birth_month) {
+  if (featFlags.birthdayAuto && featFlags.birthday && customer.birth_day && customer.birth_month) {
     const today = new Date();
     if (today.getDate() === customer.birth_day && (today.getMonth() + 1) === customer.birth_month) {
       const yearKey = today.getFullYear();
