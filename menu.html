@@ -342,6 +342,21 @@
     box-shadow: 0 3px 8px rgba(22,163,74,.3);
   }
 
+  /* 🏖️ Holiday mode — hide every entry into the order flow + the
+     floating LINE button so the overlay is the only thing the customer
+     can interact with. The overlay itself sits at z-index:9999 so taps
+     can't escape anyway, but hiding these prevents the brief flash
+     before checkShopClosedOverlay() repaints on a slow connection. */
+  body.on-holiday .cart-bar,
+  body.on-holiday #chatFloat,
+  body.on-holiday .add-line,
+  body.on-holiday .add-btn,
+  body.on-holiday .qty-controls,
+  body.on-holiday #addToCartBtn,
+  body.on-holiday #submitOrderBtn,
+  body.on-holiday .call-btn,
+  body.on-holiday .floating-add { display: none !important; }
+
   /* ============ Floating Cart Bar ============ */
   .cart-bar {
     position: fixed; bottom: 0; left: 0; right: 0; z-index: 30;
@@ -1272,6 +1287,14 @@ if (isFactoryMode) {
   });
 }
 
+// 🏖️ Boot-time holiday check — if a prior session cached shopHoliday=true,
+// drop the overlay immediately so the customer never glimpses the menu.
+// Cloud onMenuConfig will re-run the same check seconds later when fresh
+// config arrives (handles "owner just turned holiday ON" race).
+document.addEventListener('DOMContentLoaded', () => {
+  try { checkShopClosedOverlay(); } catch (e) {}
+});
+
 function loadDB() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -2021,13 +2044,74 @@ function _mergeImagesInto(cfg, imagesById) {
   });
 }
 
-// Closed-shop indicator is the hero chip (🟢 ร้านเปิด / 🔴 ร้านปิด) only.
-// No extra banner — the hero chip + the disabled submit button are enough.
-// Kept as a no-op so existing call sites don't have to be touched and any
-// stale banner from a previous session is cleared.
+// 🏖️ Holiday-mode guard — used by addToCart / openCart / submitOrder to
+// short-circuit the moment the shop owner flips the "วันนี้ร้านหยุด" switch.
+// Separate from regular `shopOpen=false` (which still allows pre-order).
+// Holiday mode = NOTHING goes through. Reads the cloud-synced menuConfig.
+function isShopOnHoliday() {
+  try {
+    const cfg = (typeof menuConfig === 'object' && menuConfig)
+              ? menuConfig
+              : JSON.parse(localStorage.getItem('menuConfig') || '{}');
+    return cfg.shopHoliday === true;
+  } catch (e) { return false; }
+}
+
+// 🏖️ Full-screen holiday overlay. When `menuConfig.shopHoliday === true`
+// AND a `holidayImageUrl` is set, render the shop's holiday card over
+// everything else. Fixed position + high z-index so taps on the menu
+// beneath do nothing. Falls back to a clean text card when no image URL
+// is configured yet (so admin can flip the switch first, add image after).
+//
+// Called every time menuConfig changes (cloud → onMenuConfig listener)
+// and once on DOMContentLoaded so a cached shopHoliday=true blocks the
+// page before the first cloud snapshot arrives.
 function checkShopClosedOverlay() {
   document.getElementById('shopClosedBanner')?.remove();
   document.getElementById('shopClosedOverlay')?.remove();
+  document.getElementById('shopHolidayOverlay')?.remove();
+
+  if (!isShopOnHoliday()) {
+    document.body.classList.remove('on-holiday');
+    if (document.body.style.overflow === 'hidden') document.body.style.overflow = '';
+    return;
+  }
+  document.body.classList.add('on-holiday');
+
+  const cfg = (typeof menuConfig === 'object' && menuConfig)
+            ? menuConfig
+            : JSON.parse(localStorage.getItem('menuConfig') || '{}');
+  const url = (cfg.holidayImageUrl || '').trim();
+
+  const imageBlock = url
+    ? `<img src="${escAttr(url)}" alt="วันนี้ร้านหยุด" onerror="this.style.display='none'" style="display:block;max-width:min(92vw,520px);max-height:65vh;width:auto;height:auto;border-radius:18px;box-shadow:0 12px 40px rgba(0,0,0,.18);background:#fff">`
+    : `<div style="background:#fff;border:2px solid #1F6F3F;border-radius:18px;padding:36px 28px;text-align:center;max-width:420px;width:90vw;box-shadow:0 12px 40px rgba(0,0,0,.18)">
+         <div style="font-size:56px;line-height:1;margin-bottom:14px">🏖️</div>
+         <div style="font-size:28px;font-weight:900;color:#1F6F3F;letter-spacing:.5px;margin-bottom:6px">วันนี้ร้านหยุด</div>
+         <div style="font-size:15px;color:#475569;line-height:1.55">ขออภัยในความไม่สะดวก<br>ขอบคุณลูกค้าทุกท่านที่มาอุดหนุนครับ</div>
+       </div>`;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'shopHolidayOverlay';
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-label', 'ร้านหยุดวันนี้');
+  overlay.style.cssText = [
+    'position:fixed', 'inset:0', 'z-index:9999',
+    'background:rgba(15,42,30,.78)', 'backdrop-filter:blur(6px)',
+    '-webkit-backdrop-filter:blur(6px)',
+    'display:flex', 'flex-direction:column', 'align-items:center',
+    'justify-content:center', 'gap:18px', 'padding:24px 16px',
+    'overflow-y:auto', 'overscroll-behavior:contain',
+  ].join(';');
+  overlay.innerHTML = `
+    ${imageBlock}
+    <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:4px">
+      <a href="tel:0619623696" style="display:inline-flex;align-items:center;gap:8px;background:#1F6F3F;color:#fff;text-decoration:none;border-radius:999px;padding:11px 22px;font-weight:800;font-size:15px;font-family:inherit;box-shadow:0 4px 12px rgba(31,111,63,.30)">📞 โทร 061-962-3696</a>
+      <a href="https://line.me/ti/p/~tangkwa-mali" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:8px;background:#06c755;color:#fff;text-decoration:none;border-radius:999px;padding:11px 22px;font-weight:800;font-size:15px;font-family:inherit;box-shadow:0 4px 12px rgba(6,199,85,.30)">💬 LINE</a>
+    </div>
+    <div style="color:rgba(255,255,255,.85);font-size:12px;font-weight:600;letter-spacing:.3px">ร้านจะกลับมาเปิดเร็วๆ นี้</div>`;
+  document.body.appendChild(overlay);
+  document.body.style.overflow = 'hidden';
 }
 // Periodic refresh so the chip + submit button cross 17:30 / midnight without
 // a page refresh.
@@ -2253,6 +2337,12 @@ function validateRequiredOptions(item, options) {
 }
 
 function addToCart() {
+  // 🏖️ Holiday guard — flat reject even if the modal slipped past CSS hide.
+  if (isShopOnHoliday()) {
+    if (typeof toast === 'function') toast('🏖️ วันนี้ร้านหยุด — ยังสั่งไม่ได้ครับ');
+    try { checkShopClosedOverlay(); } catch (e) {}
+    return;
+  }
   custCurrent.note = document.getElementById('custItemNote').value.trim();
   const item = findItem(custCurrent.mainId)?.item;
   if (!item) return;
@@ -2308,6 +2398,12 @@ function updateCartBar() {
 
 // ============ Cart Modal ============
 function openCart() {
+  // 🏖️ Holiday guard — short-circuit so the cart modal never opens.
+  if (isShopOnHoliday()) {
+    if (typeof toast === 'function') toast('🏖️ วันนี้ร้านหยุด — ยังสั่งไม่ได้ครับ');
+    try { checkShopClosedOverlay(); } catch (e) {}
+    return;
+  }
   renderCartLines();
   document.getElementById('modalCart').classList.add('show');
   // Re-check customer + render rewards/breakdown when cart opens
@@ -3259,6 +3355,13 @@ function renderOrderBreakdown() {
 
 // ============ Submit Order ============
 async function submitOrder() {
+  // 🏖️ Holiday guard — final backstop. If the listener flipped shopHoliday
+  // ON between page load and tap, refuse to commit the order.
+  if (isShopOnHoliday()) {
+    if (typeof toast === 'function') toast('🏖️ วันนี้ร้านหยุด — ยังสั่งไม่ได้ครับ');
+    try { checkShopClosedOverlay(); } catch (e) {}
+    return;
+  }
   const isShopMode = new URLSearchParams(location.search).get('mode') === 'shop';
   const shopType = new URLSearchParams(location.search).get('type'); // 'walkin' or 'phone' (only set in shop mode)
   const isShopWalkin = isShopMode && shopType === 'walkin';
