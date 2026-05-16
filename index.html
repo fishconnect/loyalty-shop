@@ -1403,14 +1403,18 @@
         <label for="shopHolidayToggle" style="margin:0;font-weight:800;font-size:15px">🏖️ วันนี้ร้านหยุด (โหมดวันหยุด)</label>
       </div>
       <div id="shopHolidayStatus" style="font-size:12px;color:#64748B;font-weight:600;margin-bottom:8px">ปิดอยู่ — ร้านทำงานปกติ</div>
-      <label style="font-size:12px;font-weight:700;color:#475569;display:block;margin-bottom:4px">รูปข้อความวันหยุด (URL)</label>
+      <label style="font-size:12px;font-weight:700;color:#475569;display:block;margin-bottom:4px">รูปข้อความวันหยุด (URL) <span style="color:#94A3B8;font-weight:500">— ใส่หรือเว้นว่างก็ได้</span></label>
       <input type="text" id="holidayImageUrlInput" placeholder="/assets/closed.jpg" oninput="saveHolidayImageUrl()" style="width:100%;padding:8px 10px;border:1px solid #E2E8F0;border-radius:8px;font-size:13px;font-family:inherit;margin-bottom:6px">
       <div id="holidayImagePreview" style="display:none;margin-top:8px;text-align:center">
         <img id="holidayImagePreviewImg" alt="ตัวอย่างรูปวันหยุด" style="max-width:100%;max-height:220px;border-radius:10px;border:1px solid #E2E8F0;background:#F8FAFC">
       </div>
-      <div class="hint" style="font-size:11.5px;margin-top:6px;line-height:1.55">
-        เมื่อเปิด: ลูกค้าจะเห็น<b>รูปนี้เต็มจอ</b> ทับหน้าเมนู และ<b>กดสั่งไม่ได้เลย</b> แม้แต่สั่งล่วงหน้า<br>
-        💡 เริ่มต้น <code>/assets/closed.jpg</code> หรือใส่ URL รูปอื่นได้
+
+      <label style="font-size:12px;font-weight:700;color:#475569;display:block;margin:10px 0 4px">ข้อความแจ้งลูกค้า <span style="color:#94A3B8;font-weight:500">— ใส่หรือเว้นว่างก็ได้</span></label>
+      <textarea id="holidayMessageInput" rows="3" placeholder="ตัวอย่าง: ปิดร้าน 25-27 ธ.ค. กลับมาเปิด 28 ธ.ค. 8:00 น." oninput="saveHolidayMessage()" style="width:100%;padding:8px 10px;border:1px solid #E2E8F0;border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;line-height:1.5"></textarea>
+
+      <div class="hint" style="font-size:11.5px;margin-top:8px;line-height:1.55">
+        เมื่อเปิด: ลูกค้าจะเห็น<b>รูป + ข้อความ</b>ทับหน้าเมนู (มีอันใดอันหนึ่งหรือทั้งสองก็ได้) และ<b>กดสั่งไม่ได้เลย</b> แม้แต่สั่งล่วงหน้า<br>
+        💡 รูป: ลองใช้ <code>/assets/closed.jpg</code> ของร้าน · ข้อความ: ระบุวันที่หรือเหตุผลตามต้องการ
       </div>
     </div>
   </div>
@@ -7417,9 +7421,10 @@ async function saveShopHoliday() {
   const checked = document.getElementById('shopHolidayToggle').checked;
   const cfg = JSON.parse(localStorage.getItem('menuConfig') || '{"overrides":{},"custom":[]}');
   cfg.shopHoliday = !!checked;
-  // If owner flips holiday ON but hasn't typed a URL yet, default to the
-  // shop's bundled asset so the overlay never renders empty.
-  if (checked && !cfg.holidayImageUrl) {
+  // If owner flips holiday ON with NEITHER image NOR message set, default
+  // the image to the bundled asset so the overlay still has something
+  // visual to show. They can clear it after if they prefer message-only.
+  if (checked && !cfg.holidayImageUrl && !cfg.holidayMessage) {
     cfg.holidayImageUrl = '/assets/closed.jpg';
     const inp = document.getElementById('holidayImageUrlInput');
     if (inp) inp.value = cfg.holidayImageUrl;
@@ -7430,7 +7435,7 @@ async function saveShopHoliday() {
   }
   refreshShopHolidayStatus();
   if (typeof toast === 'function') {
-    toast(checked ? '🏖️ โหมดวันหยุดเปิด — ลูกค้าจะเห็นรูปและสั่งไม่ได้' : '✅ ปิดโหมดวันหยุดแล้ว');
+    toast(checked ? '🏖️ โหมดวันหยุดเปิด — ลูกค้าจะเห็นรูป/ข้อความและสั่งไม่ได้' : '✅ ปิดโหมดวันหยุดแล้ว');
   }
 }
 
@@ -7449,23 +7454,45 @@ async function saveHolidayImageUrl() {
   }, 400);
 }
 
+// 🏖️ Custom holiday message — free-text the owner types (e.g. "ปิด 25-27
+// ธ.ค.") that the customer overlay shows alongside (or instead of) the
+// image. Debounced so we don't spam saveMenuConfig on every keystroke.
+let _holidayMsgSaveT = 0;
+async function saveHolidayMessage() {
+  clearTimeout(_holidayMsgSaveT);
+  _holidayMsgSaveT = setTimeout(async () => {
+    const msg = (document.getElementById('holidayMessageInput')?.value || '').slice(0, 500);
+    const cfg = JSON.parse(localStorage.getItem('menuConfig') || '{"overrides":{},"custom":[]}');
+    cfg.holidayMessage = msg;
+    localStorage.setItem('menuConfig', JSON.stringify(cfg));
+    if (window.cloud?.saveMenuConfig) {
+      try { await window.cloud.saveMenuConfig(cfg); } catch (e) {}
+    }
+    refreshShopHolidayStatus();
+  }, 500);
+}
+
 function refreshShopHolidayStatus() {
-  const t   = document.getElementById('shopHolidayToggle');
-  const s   = document.getElementById('shopHolidayStatus');
-  const inp = document.getElementById('holidayImageUrlInput');
-  const pv  = document.getElementById('holidayImagePreview');
-  const img = document.getElementById('holidayImagePreviewImg');
+  const t    = document.getElementById('shopHolidayToggle');
+  const s    = document.getElementById('shopHolidayStatus');
+  const inpU = document.getElementById('holidayImageUrlInput');
+  const inpM = document.getElementById('holidayMessageInput');
+  const pv   = document.getElementById('holidayImagePreview');
+  const img  = document.getElementById('holidayImagePreviewImg');
   if (!t || !s) return;
   const cfg = JSON.parse(localStorage.getItem('menuConfig') || '{}');
   const on  = cfg.shopHoliday === true;
   const url = (cfg.holidayImageUrl || '').trim();
+  const msg = (cfg.holidayMessage  || '').trim();
   t.checked = on;
-  if (inp && document.activeElement !== inp) inp.value = url;
+  if (inpU && document.activeElement !== inpU) inpU.value = url;
+  if (inpM && document.activeElement !== inpM) inpM.value = msg;
   if (on) {
-    s.innerHTML = url
-      ? '🏖️ เปิดอยู่ · ลูกค้าเห็นรูปวันหยุด สั่งไม่ได้'
-      : '⚠️ เปิดอยู่แต่ยังไม่มีรูป — ใส่ URL ด้านล่างก่อน';
-    s.style.color = url ? '#B45309' : '#dc2626';
+    if (url && msg)      s.innerHTML = '🏖️ เปิดอยู่ · ลูกค้าเห็นรูป + ข้อความ สั่งไม่ได้';
+    else if (url)         s.innerHTML = '🏖️ เปิดอยู่ · ลูกค้าเห็นรูปวันหยุด สั่งไม่ได้';
+    else if (msg)         s.innerHTML = '🏖️ เปิดอยู่ · ลูกค้าเห็นข้อความวันหยุด สั่งไม่ได้';
+    else                  s.innerHTML = 'ℹ️ เปิดอยู่แต่ยังไม่มีรูปและข้อความ — จะใช้ข้อความตั้งต้น "วันนี้ร้านหยุด"';
+    s.style.color = (url || msg) ? '#B45309' : '#0891B2';
   } else {
     s.innerHTML = 'ปิดอยู่ — ร้านทำงานปกติ';
     s.style.color = '#64748B';
