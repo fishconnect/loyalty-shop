@@ -3267,6 +3267,27 @@ function buildLedger(customerId) {
   const events = [];
   getCompletedOrdersForCustomer(customerId).forEach(o => {
     events.push({ kind:'order', date:o.date, boxes:o.boxes, id:o.id, note:o.note, total:o.total, items:o.items, points_earned:o.points_earned, points_used:o.points_used, reward_type:o.reward_type, free_drink_used:o.free_drink_used });
+    // 🛡️ HOTFIX 2026-05-27 — also surface each redemption stamped on the
+    //   order (customer-side or kitchen-side reward apply). Previously the
+    //   ledger only showed "ซื้อ" rows + standalone db.redemptions[] entries,
+    //   so the "แลก" column read -0 even when the customer had clearly
+    //   used points (e.g. "ใช้แต้ม: ลด ฿50" visible on the order itself).
+    //   The running balance now also subtracts these so "คงเหลือ" matches
+    //   reality, regardless of the stale customer.points field.
+    (o.redemptions || []).forEach((r, ri) => {
+      const pts = Number(r.points_used) || 0;
+      if (pts <= 0) return;
+      events.push({
+        kind:    'redeem_pts',
+        date:    r.at || o.date,
+        pts,
+        rtype:   r.type,            // 'drink' | 'discount'
+        label:   r.label || '',
+        value:   r.value,            // baht discount or drink price
+        order_id: o.id,
+        id:      `${o.id}#r${ri}`,
+      });
+    });
   });
   (db.redemptions || []).filter(r => r.customer_id === customerId).forEach(r => {
     events.push({ kind:'redeem', date:r.date, boxes:r.boxes_used || db.settings.goal, id:r.id });
@@ -3274,8 +3295,9 @@ function buildLedger(customerId) {
   events.sort((a,b) => new Date(a.date) - new Date(b.date));
   let bal = 0;
   events.forEach(e => {
-    if (e.kind === 'order') bal += e.boxes;
-    else bal -= e.boxes;
+    if (e.kind === 'order')           bal += e.boxes;
+    else if (e.kind === 'redeem_pts') bal -= e.pts;
+    else                              bal -= e.boxes;
     e.balance = bal;
   });
   return events;
@@ -3328,8 +3350,13 @@ function renderCustomerDetail() {
   // Points
   const points = c.points || 0;
   const lifetime = c.lifetime_points || 0;
-  const drinkRedeemed = c.drink_redeemed_count || 0;
-  const dishRedeemed = c.dish_redeemed_count || 0;
+  // 🛡️ HOTFIX 2026-05-27 — derive redemption counts from order.redemptions[]
+  //   (source of truth), NOT from the customer counter fields. The counters
+  //   went stale during the saveCustomer-overwrite bug era and may still be
+  //   wrong on legacy docs. Reading from orders is always self-consistent.
+  const _allRedeems = orders.flatMap(o => Array.isArray(o.redemptions) ? o.redemptions : []);
+  const drinkRedeemed = _allRedeems.filter(r => r.type === 'drink').length;
+  const dishRedeemed  = _allRedeems.filter(r => r.type === 'discount').length;
   const drinkReady = points >= (window.LOYALTY?.REWARD_DRINK_POINTS || 10);
   const discountReady = points >= (window.LOYALTY?.REWARD_DISCOUNT_POINTS || 15);
 
@@ -3362,6 +3389,22 @@ function renderCustomerDetail() {
                 <button class="btn-ghost" style="font-size:11px;padding:4px 10px;width:auto" onclick="event.stopPropagation();editOrder('${e.id}')">✏️ แก้ไข</button>
               </div>
             </td></tr>`;
+        } else if (e.kind === 'redeem_pts') {
+          // 🛡️ HOTFIX 2026-05-27 — points used inside an order
+          //   (customer applied "ใช้แต้ม" at checkout, OR kitchen pressed
+          //   the redeem button before cooking). The visual is a light-amber
+          //   row so it's distinguishable from box-stamp redemptions above.
+          totalOut += e.pts;
+          const icon  = e.rtype === 'drink' ? '🥤' : '🎁';
+          const desc  = e.label || (e.rtype === 'drink' ? 'แลกเครื่องดื่มฟรี' : `ใช้แต้มลด ฿${e.value || ''}`);
+          const baht  = e.value ? `−${e.value}` : '—';
+          return `<tr style="border-bottom:1px solid #f3f4f6;background:#fef3c7">
+            <td style="padding:8px 4px">${shortDate(e.date)} <span style="color:#92400e">${icon} ${desc}</span><div style="font-size:10.5px;color:#9ca3af">order #${String(e.order_id).slice(-6)}</div></td>
+            <td style="padding:8px 4px;text-align:right;color:#d1d5db">—</td>
+            <td style="padding:8px 4px;text-align:right;color:#dc2626;font-weight:700">−${e.pts}</td>
+            <td style="padding:8px 4px;text-align:right;color:${e.value?'#dc2626':'#d1d5db'};font-weight:${e.value?'600':'400'}">${baht}</td>
+            <td style="padding:8px 4px;text-align:right;font-weight:700">${e.balance}</td>
+          </tr>`;
         } else {
           totalOut += e.boxes;
           return `<tr style="border-bottom:1px solid #f3f4f6;background:#ebf0ff;cursor:pointer" onclick="confirmDeleteRedemption('${e.id}')">

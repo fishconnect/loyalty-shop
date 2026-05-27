@@ -1,3 +1,12 @@
 .DS_Store
 *.bak
 node_modules/
+
+# 🔐 NEVER commit Firebase service account credentials — anyone with this
+# file has full admin access to the project. Generated via Firebase Console
+# → Project Settings → Service accounts → Generate new private key.
+service-account.json
+*-firebase-adminsdk-*.json
+
+# Audit script output — may contain customer PII (phone, names)
+missed-redemptions.csv

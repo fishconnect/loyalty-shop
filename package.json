@@ -1,0 +1,12 @@
+{
+  "name": "loyalty-shop-admin-scripts",
+  "private": true,
+  "description": "Server-side admin scripts (firebase-admin SDK). Not deployed to the public site — these run locally with a service account to reconcile / audit Firestore data.",
+  "scripts": {
+    "audit": "node audit-missed-redemptions.js",
+    "audit:apply": "node audit-missed-redemptions.js --apply"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.0.0"
+  }
+}
