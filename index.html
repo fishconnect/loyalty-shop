@@ -3313,6 +3313,37 @@ function getCompletedOrdersForCustomer(customerId) {
 
 function buildLedger(customerId) {
   const events = [];
+  // 🛡️ HOTFIX 2026-05-27 — surface non-order point events that the previous
+  //   ledger ignored, so the "คงเหลือ" column actually matches
+  //   `customer.points` in Firestore:
+  //     • Signup bonus +5 — credited when the customer first registered,
+  //       stored in customer.lifetime_points but not on any order.
+  //     • Write-off adjustment +N — when cumulative redemptions exceeded
+  //       cumulative earnings, the system clamped balance at 0 and stamped
+  //       `points_writeoff_amount`. From the customer's POV the shop
+  //       absorbed those points, so show them as a positive ledger entry.
+  //   Joined date is the customer's signup; writeoff is dated "today" since
+  //   we don't track when each clamp happened individually.
+  const c = (db.customers && db.customers[customerId]) || {};
+  if (c.signup_bonus_received) {
+    const bonus = Number(window.LOYALTY?.SIGNUP_BONUS || 5);
+    if (bonus > 0) {
+      events.push({
+        kind: 'signup_bonus',
+        date: c.joined || c.created_at || new Date('2000-01-01').toISOString(),
+        pts: bonus,
+        id: `signup-${customerId}`,
+      });
+    }
+  }
+  if (Number(c.points_writeoff_amount || 0) > 0) {
+    events.push({
+      kind: 'writeoff',
+      date: c.points_writeoff_at || new Date().toISOString(),
+      pts: Number(c.points_writeoff_amount),
+      id: `writeoff-${customerId}`,
+    });
+  }
   getCompletedOrdersForCustomer(customerId).forEach(o => {
     events.push({ kind:'order', date:o.date, boxes:o.boxes, id:o.id, note:o.note, total:o.total, items:o.items, points_earned:o.points_earned, points_used:o.points_used, reward_type:o.reward_type, free_drink_used:o.free_drink_used });
     // 🛡️ HOTFIX 2026-05-27 — also surface each redemption stamped on the
@@ -3347,9 +3378,11 @@ function buildLedger(customerId) {
     //   Previously this added e.boxes (main-dish count) and subtracted
     //   e.pts (points) — mixing two units in the same balance, so the
     //   "คงเหลือ" column didn't match customer.points at all.
-    if (e.kind === 'order')           bal += (e.points_earned || 0);
-    else if (e.kind === 'redeem_pts') bal -= e.pts;
-    else                              bal -= e.boxes;  // legacy stamp-card redemption
+    if (e.kind === 'order')              bal += (e.points_earned || 0);
+    else if (e.kind === 'redeem_pts')    bal -= e.pts;
+    else if (e.kind === 'signup_bonus')  bal += e.pts;
+    else if (e.kind === 'writeoff')      bal += e.pts;  // shop absorbed → +ve adjustment
+    else                                 bal -= e.boxes;  // legacy stamp-card redemption
     e.balance = bal;
   });
   return events;
@@ -3460,6 +3493,31 @@ function renderCustomerDetail() {
             <td style="padding:8px 4px;text-align:right;color:#d1d5db">—</td>
             <td style="padding:8px 4px;text-align:right;color:#dc2626;font-weight:700">−${e.pts}</td>
             <td style="padding:8px 4px;text-align:right;color:${e.value?'#dc2626':'#d1d5db'};font-weight:${e.value?'600':'400'}">${baht}</td>
+            <td style="padding:8px 4px;text-align:right;font-weight:700">${e.balance}</td>
+          </tr>`;
+        } else if (e.kind === 'signup_bonus') {
+          // 🛡️ HOTFIX 2026-05-27 — signup bonus row at the top of the
+          //   ledger so the +5 that's already credited to lifetime_points
+          //   is visible (it isn't on any order).
+          totalIn += e.pts;
+          return `<tr style="border-bottom:1px solid #f3f4f6;background:#ecfdf5">
+            <td style="padding:8px 4px"><span style="color:#065f46">🎁 โบนัสสมัครสมาชิก</span></td>
+            <td style="padding:8px 4px;text-align:right;color:#16a34a;font-weight:700">+${e.pts}</td>
+            <td style="padding:8px 4px;text-align:right;color:#d1d5db">—</td>
+            <td style="padding:8px 4px;text-align:right;color:#d1d5db">—</td>
+            <td style="padding:8px 4px;text-align:right;font-weight:700">${e.balance}</td>
+          </tr>`;
+        } else if (e.kind === 'writeoff') {
+          // 🛡️ HOTFIX 2026-05-27 — write-off row: the shop absorbed `pts`
+          //   when cumulative redemptions exceeded cumulative earnings.
+          //   Shown as a positive ledger entry from the customer's POV
+          //   so the running balance ends up matching customer.points.
+          totalIn += e.pts;  // counts as 'in' for the customer (shop covers)
+          return `<tr style="border-bottom:1px solid #f3f4f6;background:#fef3f2">
+            <td style="padding:8px 4px"><span style="color:#9a3412">📝 ทางร้านรับขาดทุน (write-off)</span><div style="font-size:10.5px;color:#9ca3af">ลูกค้าใช้แต้มเกินที่สะสม — ระบบกันยอดติดลบ</div></td>
+            <td style="padding:8px 4px;text-align:right;color:#16a34a;font-weight:700">+${e.pts}</td>
+            <td style="padding:8px 4px;text-align:right;color:#d1d5db">—</td>
+            <td style="padding:8px 4px;text-align:right;color:#d1d5db">—</td>
             <td style="padding:8px 4px;text-align:right;font-weight:700">${e.balance}</td>
           </tr>`;
         } else {
