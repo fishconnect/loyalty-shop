@@ -973,10 +973,15 @@ async function applyDrinkReward(orderId, drinkId) {
 
   if (window.cloud) {
     await window.cloud.updateOrder(orderId, updates);
-    // 🔒 Atomic decrement — prevents lost updates from concurrent edits
+    // 🔒 Atomic decrement — prevents lost updates from concurrent edits.
+    // 🛡️ HOTFIX 2026-05-27 — use FieldValue.increment(1) instead of the
+    //   local literal value. If local was stale (kitchen hadn't received the
+    //   latest customer doc yet), the literal would overwrite cloud's higher
+    //   count BACKWARDS and silently fail on monotonic rules.
     if (window.cloud.incrementCustomerPoints) {
+      const _inc = window.cloud.increment;
       await window.cloud.incrementCustomerPoints(customer.id, -LOYALTY.REWARD_DRINK_POINTS, 0, {
-        drink_redeemed_count: customer.drink_redeemed_count
+        drink_redeemed_count: _inc ? _inc(1) : customer.drink_redeemed_count
       });
     } else {
       await window.cloud.saveCustomer(customer);
@@ -1089,10 +1094,14 @@ async function applyDiscountReward(orderId) {
 
   if (window.cloud) {
     await window.cloud.updateOrder(orderId, updates);
-    // 🔒 Atomic decrement
+    // 🔒 Atomic decrement.
+    // 🛡️ HOTFIX 2026-05-27 — use FieldValue.increment(1) instead of the
+    //   local literal value. A stale local snapshot would otherwise overwrite
+    //   cloud's higher count backwards (lost-update / monotonic-rule reject).
     if (window.cloud.incrementCustomerPoints) {
+      const _inc = window.cloud.increment;
       await window.cloud.incrementCustomerPoints(customer.id, -LOYALTY.REWARD_DISCOUNT_POINTS, 0, {
-        dish_redeemed_count: customer.dish_redeemed_count
+        dish_redeemed_count: _inc ? _inc(1) : customer.dish_redeemed_count
       });
     } else {
       await window.cloud.saveCustomer(customer);
@@ -1141,17 +1150,18 @@ async function removeRedemption(orderId, idx) {
   const customer = getCustomerForOrder(order);
   if (customer) {
     customer.points = (customer.points || 0) + removed.points_used;
-    if (removed.type === 'drink') customer.drink_redeemed_count = Math.max(0, (customer.drink_redeemed_count || 0) - 1);
-    else customer.dish_redeemed_count = Math.max(0, (customer.dish_redeemed_count || 0) - 1);
+    // 🛡️ HOTFIX 2026-05-27 — DO NOT touch drink_/dish_redeemed_count on
+    //   refund. Counters represent lifetime redemption history (IFRS-15-style
+    //   liability marker); deploying stricter Firestore rules later would
+    //   pin them to monotonic-increasing and silently reject any decrement.
+    //   The audit trail "this redemption was reversed" lives on the order
+    //   doc (redemptions[] no longer contains the entry).
     db.customers[customer.id] = customer;
     saveDB(db);
     if (window.cloud) {
-      // 🔒 Atomic refund — increment back the points_used
+      // 🔒 Atomic refund — increment points back; counters stay put.
       if (window.cloud.incrementCustomerPoints) {
-        const extra = {};
-        if (removed.type === 'drink') extra.drink_redeemed_count = customer.drink_redeemed_count;
-        else extra.dish_redeemed_count = customer.dish_redeemed_count;
-        await window.cloud.incrementCustomerPoints(customer.id, removed.points_used, 0, extra);
+        await window.cloud.incrementCustomerPoints(customer.id, removed.points_used, 0);
       } else {
         await window.cloud.saveCustomer(customer);
       }

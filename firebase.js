@@ -73,6 +73,15 @@ function _stripImagesFromMenuConfig(config) {
 window.cloud = {
   ready: true,
 
+  // 🛡️ HOTFIX 2026-05-27 — surface FieldValue.increment so loyalty / counter
+  //   writes from menu.html and kitchen.html can pass atomic increments via
+  //   the `extra` arg of incrementCustomerPoints (e.g.
+  //   `dish_redeemed_count: cloud.increment(1)`). Without this, the previous
+  //   code passed the local literal counter value — when local was stale,
+  //   the cloud value got overwritten BACKWARDS, losing real redemption
+  //   history. Atomic increment never loses, regardless of local snapshot.
+  increment,
+
   // Customers
   async saveCustomer(c) {
     if (!c?.id) return;
@@ -150,15 +159,22 @@ window.cloud = {
     try {
       await updateDoc(doc(fdb, 'customers', String(id)), updates);
     } catch (e) {
-      // Doc might not exist yet — fall back to setDoc with merge (won't be atomic but works)
+      // Doc might not exist yet — fall back to setDoc with merge. Keep the
+      // FieldValue.increment(...) sentinels intact so the write stays atomic
+      // (Firestore treats `increment(n)` on a missing field as `0 + n`, so
+      // the result equals `n`, matching the create case).
+      //
+      // 🛡️ HOTFIX 2026-05-27 — previously this fallback wrote literal deltas
+      //   (e.g. `points: -15`), which on a missing doc would set NEGATIVE
+      //   balances; and on an existing doc would overwrite (not increment),
+      //   losing concurrent updates.
       console.warn('[cloud] incrementCustomerPoints fallback', e);
       try {
-        const flat = {};
-        if (typeof deltaPoints === 'number') flat.points = deltaPoints;
-        if (typeof deltaLifetime === 'number') flat.lifetime_points = deltaLifetime;
-        if (extra) Object.assign(flat, extra);
-        await setDoc(doc(fdb, 'customers', String(id)), flat, { merge: true });
-      } catch (e2) { console.warn('[cloud] incrementCustomerPoints fatal', e2); }
+        await setDoc(doc(fdb, 'customers', String(id)), updates, { merge: true });
+      } catch (e2) {
+        console.warn('[cloud] incrementCustomerPoints fatal', e2);
+        throw e2;  // let outbox retry loop see the failure
+      }
     }
   },
   async getAllCustomers() {

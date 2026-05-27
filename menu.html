@@ -3832,17 +3832,52 @@ async function submitOrder() {
                   + (referrerCustomer ? LOYALTY.SIGNUP_BONUS : 0);
   customer._bonusDelta_points = _bonusPts;
   customer._bonusDelta_lifetime = _bonusLife;
+  // 🛡️ HOTFIX 2026-05-27 — record which redemption counters this order should
+  //   atomically bump. flushOutbox reads this list on retry so a replay sends
+  //   the same `dish_redeemed_count: increment(1)` as the live path.
+  customer._redeemCounters = [];
+  if (cartRewards.useDrink)    customer._redeemCounters.push('drink_redeemed_count');
+  if (cartRewards.useDiscount) customer._redeemCounters.push('dish_redeemed_count');
   if (referrerCustomer) {
     referrerCustomer._bonusDelta_points = LOYALTY.SIGNUP_BONUS;
     referrerCustomer._bonusDelta_lifetime = LOYALTY.SIGNUP_BONUS;
+    referrerCustomer._referralCounter = true;
   }
   pushOrderToOutbox({ order: orderObj, customer, referrer: referrerCustomer });
   let cloudOk = false;
   await new Promise(resolve => {
     whenCloudReady(async () => {
       try {
-        await window.cloud.saveCustomer(customer);
-        if (referrerCustomer) await window.cloud.saveCustomer(referrerCustomer);
+        // 🛡️ HOTFIX 2026-05-27 — split the customer write:
+        //   (a) profile-only merge (no loyalty/counter fields) — safe against
+        //       stale local snapshots overwriting cloud earnings backwards.
+        //   (b) atomic loyalty increment via FieldValue.increment — never
+        //       loses, regardless of how stale local is. Survives the same
+        //       monotonic firestore rules deployed on sister projects.
+        //   Previously a single saveCustomer({merge:true}) would silently
+        //   overwrite recent cloud earnings with the stale local value, and
+        //   on stricter rule sets get rejected outright (silently — the
+        //   catch in saveCustomer eats the error). Result: kitchen saw the
+        //   order with `-15 แต้ม` stamped but customer's points never moved.
+        await window.cloud.saveCustomer(stripLoyaltyForMerge(customer));
+        await applyLoyaltyDelta(customerId, customer, {
+          ptsDelta:  _bonusPts,
+          lifeDelta: _bonusLife,
+          ptsUsedTotal: _ptsUsedTotal,
+          orderId: orderObj.id,
+          pureRedeem: _ptsUsedTotal > 0 && !signupBonusGiven && !birthdayBonusGiven && !referrerCustomer,
+          redemptions,
+        });
+        if (referrerCustomer) {
+          await window.cloud.saveCustomer(stripLoyaltyForMerge(referrerCustomer));
+          if (window.cloud.incrementCustomerPoints) {
+            const _inc = window.cloud.increment;
+            await window.cloud.incrementCustomerPoints(
+              referrerCustomer.id, LOYALTY.SIGNUP_BONUS, LOYALTY.SIGNUP_BONUS,
+              { total_referrals: _inc ? _inc(1) : 1 }
+            );
+          }
+        }
         await window.cloud.saveOrder(orderObj);
         cloudOk = true;
       } catch (e) { console.warn('cloud sync failed', e); }
@@ -4414,6 +4449,63 @@ function pushOrderToOutbox(payload) {
 function removeOrderFromOutbox(orderId) {
   saveOutbox(getOutbox().filter(p => p?.order?.id !== orderId));
 }
+
+// 🛡️ HOTFIX 2026-05-27 — Loyalty / counter fields must NEVER be sent via a
+//   full-doc {merge:true} write. A stale local snapshot (different device,
+//   cleared cache, two tabs) would overwrite the cloud value backwards —
+//   losing recent earnings — and on stricter Firestore rules get the whole
+//   write rejected (the saveCustomer catch silently eats it). Either way:
+//   redemption stamped on order, but customer points don't reflect it. Shop
+//   loses money.
+//
+//   This helper strips every field that's risky to send via merge so the
+//   profile-only write only carries safe data (name, phone, birthday).
+//   Loyalty changes go through applyLoyaltyDelta below, atomic.
+const _LOYALTY_BLOCKED_FOR_MERGE = new Set([
+  'points', 'lifetime_points',
+  'drink_redeemed_count', 'dish_redeemed_count', 'redeemed_count',
+  'total_referrals',
+  '_bonusDelta_points', '_bonusDelta_lifetime',
+  '_redeemCounters', '_referralCounter',
+]);
+function stripLoyaltyForMerge(c) {
+  if (!c || typeof c !== 'object') return c;
+  const out = {};
+  for (const k of Object.keys(c)) {
+    if (_LOYALTY_BLOCKED_FOR_MERGE.has(k)) continue;
+    if (c[k] === undefined) continue;
+    out[k] = c[k];
+  }
+  return out;
+}
+
+// Apply all loyalty side-effects of an order to the customer doc atomically.
+//   - points/lifetime via FieldValue.increment so concurrent writes never lose
+//   - dish_redeemed_count / drink_redeemed_count via increment(1)
+//   - signup_bonus_received / last_birthday_bonus_year are idempotent flags
+async function applyLoyaltyDelta(customerId, customer, opts) {
+  if (!window.cloud?.incrementCustomerPoints) return;
+  const ptsDelta  = Number(opts?.ptsDelta || 0);
+  const lifeDelta = Number(opts?.lifeDelta || 0);
+  const counters  = Array.isArray(customer?._redeemCounters) ? customer._redeemCounters : [];
+  const _inc = window.cloud.increment;
+  const extra = {};
+  for (const k of counters) {
+    if (k === 'drink_redeemed_count' || k === 'dish_redeemed_count') {
+      extra[k] = _inc ? _inc(1) : 1;
+    }
+  }
+  if (customer?.signup_bonus_received) extra.signup_bonus_received = true;
+  if (customer?.last_birthday_bonus_year) extra.last_birthday_bonus_year = customer.last_birthday_bonus_year;
+  if (customer?.referred_by) extra.referred_by = customer.referred_by;
+  if (customer?.referral_code) extra.referral_code = customer.referral_code;
+  if (customer?.birth_day) extra.birth_day = customer.birth_day;
+  if (customer?.birth_month) extra.birth_month = customer.birth_month;
+  if (customer?.birth_locked) extra.birth_locked = true;
+  if (ptsDelta === 0 && lifeDelta === 0 && !Object.keys(extra).length) return;
+  await window.cloud.incrementCustomerPoints(customerId, ptsDelta, lifeDelta, extra);
+}
+
 async function flushOutbox() {
   if (!navigator.onLine || !window.cloud?.ready) return;
   const list = getOutbox();
@@ -4436,9 +4528,22 @@ async function flushOutbox() {
         // points are added later by the kitchen flow, NOT here.
         const bonusDelta = (c._bonusDelta_points || 0);
         const bonusLifetime = (c._bonusDelta_lifetime || 0);
-        if (bonusDelta || bonusLifetime) {
+        // 🛡️ HOTFIX 2026-05-27 — replay must also bump the redemption-counter
+        //   recorded by submitOrder. Without this a retry would decrement
+        //   `points` but leave `dish_redeemed_count` untouched, and the
+        //   counter would drift below the actual number of redemptions.
+        const counters = Array.isArray(c._redeemCounters) ? c._redeemCounters : [];
+        const _inc = window.cloud.increment;
+        const counterExtra = {};
+        for (const k of counters) {
+          if (k === 'drink_redeemed_count' || k === 'dish_redeemed_count') {
+            counterExtra[k] = _inc ? _inc(1) : 1;
+          }
+        }
+        if (bonusDelta || bonusLifetime || Object.keys(counterExtra).length) {
           try {
             await window.cloud.incrementCustomerPoints(c.id, bonusDelta, bonusLifetime, {
+              ...counterExtra,
               ...(c.signup_bonus_received ? { signup_bonus_received: true } : {}),
               ...(c.last_birthday_bonus_year ? { last_birthday_bonus_year: c.last_birthday_bonus_year } : {}),
             });
