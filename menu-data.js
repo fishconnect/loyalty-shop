@@ -937,6 +937,36 @@ window.calcPointsFromAmount = function(amount) {
   return Math.floor((amount || 0) * LOYALTY.POINTS_PER_BAHT);
 };
 
+// 🛡️ POLICY 2026-05-27 — single source of truth for "which amount on an
+//   order do we earn points from?" Returns the post-discount amount actually
+//   paid by the customer (no double-dip with redemption rewards).
+//
+//   Examples:
+//     order {total: 154}                          → 154   (no redemption)
+//     order {total: 104, original_total: 154,
+//            redemptions: [{points_used:15, value:50}]}  → 104
+//
+//   `original_total` is preserved on the order doc for display / audit but
+//   no longer drives earnings — using it would mean a customer who spends
+//   points still gets the full pre-discount points back, inflating
+//   balances faster than the loyalty budget can sustain.
+//
+//   Use everywhere we compute "points to award for this order" so the policy
+//   lives in ONE place. Forward-only: orders that finalized BEFORE this
+//   change keep their stored `points_awarded` field as-is (see points.html
+//   and dashboard recompute, which now prefer `o.points_awarded` over a
+//   re-derived value).
+window.getOrderEarningBase = function(order) {
+  if (!order) return 0;
+  // Post-discount paid amount — never the pre-discount subtotal.
+  return Number(order.total || 0);
+};
+
+// Convenience wrapper — combines the policy + the per-baht rate.
+window.calcOrderEarningPoints = function(order) {
+  return window.calcPointsFromAmount(window.getOrderEarningBase(order));
+};
+
 // 🎁 Loyalty defaults — frozen baseline. window.LOYALTY may be overwritten
 //    at runtime by applyLoyaltyConfig (admin Settings + active promos).
 //    These defaults are what we fall back to when there's no cloud config.

@@ -2394,8 +2394,16 @@ async function loadCustomerInspector() {
     const doneOrders = orders.filter(o => ['done','delivered'].includes(o.status));
     let earned = 0, used = 0;
     doneOrders.forEach(o => {
-      const base = o.original_total || o.total || 0;
-      earned += Math.floor(base / 50);
+      // 🛡️ POLICY 2026-05-27 — trust the stamped `points_awarded` on the
+      //   order. Past orders were stamped under the old "pre-discount"
+      //   policy; new orders use post-discount. Either way, what the
+      //   customer was credited is authoritative.
+      if (typeof o.points_awarded === 'number') {
+        earned += o.points_awarded;
+      } else {
+        const base = Number(o.total || 0);
+        earned += Math.floor(base / 50);
+      }
       (o.redemptions || []).forEach(r => { used += (r.points_used || 0); });
     });
     const signup = cust.signup_bonus_received ? 5 : 0;
@@ -2561,8 +2569,13 @@ async function runAtRiskScan() {
       const doneOrders = myOrders.filter(o => ['done','delivered'].includes(o.status));
       let earned = 0, used = 0;
       doneOrders.forEach(o => {
-        const base = o.original_total || o.total || 0;
-        earned += Math.floor(base / 50);
+        // 🛡️ POLICY 2026-05-27 — trust stamped points_awarded.
+        if (typeof o.points_awarded === 'number') {
+          earned += o.points_awarded;
+        } else {
+          const base = Number(o.total || 0);
+          earned += Math.floor(base / 50);
+        }
         (o.redemptions || []).forEach(r => { used += (r.points_used || 0); });
       });
       const signup = c.signup_bonus_received ? 5 : 0;
@@ -3664,11 +3677,20 @@ async function recomputePoints(customerId, opts) {
   let earned = 0;
   let recountedAwarded = []; // orders whose points_awarded we'll repair if drifted
   doneOrders.forEach(o => {
-    const base = o.original_total || o.total || 0;
-    const correctPts = Math.floor(base / 50);
-    earned += correctPts;
-    // Repair denormalized field on the order itself if missing/wrong
-    if ((o.points_awarded || 0) !== correctPts) {
+    // 🛡️ POLICY 2026-05-27 — earning formula changed from pre-discount to
+    //   post-discount. The recompute button must NOT retroactively rewrite
+    //   `points_awarded` on orders that already have a stamped value, or
+    //   pressing it would silently strip points from past customers (the
+    //   stamped value was correct under the policy in effect at that time).
+    //
+    //   Only fill in `points_awarded` for legacy orders that never had it
+    //   stamped (e.g. db.orders rows from before that field was tracked).
+    if (typeof o.points_awarded === 'number') {
+      earned += o.points_awarded;  // trust what was stamped
+    } else {
+      const base = Number(o.total || 0);  // new policy: post-discount
+      const correctPts = Math.floor(base / 50);
+      earned += correctPts;
       o.points_awarded = correctPts;
       recountedAwarded.push(o);
     }

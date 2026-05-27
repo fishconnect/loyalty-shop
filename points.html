@@ -495,7 +495,15 @@ function renderCustomer(customer, allOrders) {
                            : o.status === 'ready'      ? { color: '#16a34a', icon: '📦', label: 'พร้อมส่ง' }
                            : o.status === 'delivering' ? { color: '#06b6d4', icon: '🚚', label: 'กำลังจัดส่ง' }
                            : { color: '#6b7280', icon: '•', label: o.status };
-          const ptsEarned = isDone ? Math.floor((o.original_total || o.total) / 50) : 0;
+          // 🛡️ POLICY 2026-05-27 — prefer the stamped `points_awarded` field
+          //   on past orders (what the customer actually got credited) and
+          //   only fall back to a fresh compute for legacy orders missing
+          //   the field. Fresh compute uses the new policy (post-discount).
+          const ptsEarned = isDone
+            ? (typeof o.points_awarded === 'number'
+                ? o.points_awarded
+                : (window.calcOrderEarningPoints ? window.calcOrderEarningPoints(o) : Math.floor((o.total || 0) / 50)))
+            : 0;
           return `
             <div class="order-row" onclick="openReorderModal('${o.id}')" style="cursor:pointer;transition:background .15s" onmouseenter="this.style.background='#f7f8fb'" onmouseleave="this.style.background=''">
               <div class="left">

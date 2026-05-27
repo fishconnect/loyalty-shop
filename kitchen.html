@@ -592,7 +592,7 @@ function render() {
           ` : ''}
         </div>
         <div class="order-foot">
-          <span style="color:#6b7280;font-size:13px">ยอด ฿${o.original_total || o.total} = ${window.calcPointsFromAmount(o.original_total || o.total)} แต้ม</span>
+          <span style="color:#6b7280;font-size:13px">ยอด ฿${o.total} = ${window.calcOrderEarningPoints ? window.calcOrderEarningPoints(o) : window.calcPointsFromAmount(o.total)} แต้ม</span>
           <span class="total">฿${o.total} <span class="small">${o.discount?'ลูกค้าจ่าย':'รวม'}</span></span>
         </div>
         ${isActive ? `
@@ -1201,10 +1201,16 @@ async function finalizeOrder(orderId, paymentMethod) {
   if (customer.points == null) customer.points = 0;
   if (customer.lifetime_points == null) customer.lifetime_points = 0;
 
-  // Award points based on ORIGINAL total (before redemption discount)
-  // Skip for factory orders (no loyalty)
+  // 🛡️ POLICY 2026-05-27 — earn from POST-DISCOUNT paid amount (not the
+  //   pre-redemption subtotal). Avoids double-dip where a customer who
+  //   spent 15 pts to get -฿50 off would still earn points on the full
+  //   ฿154 — inflating loyalty liability beyond the discount budget.
+  //   See window.getOrderEarningBase in menu-data.js for the rule.
+  // Skip for factory orders (no loyalty).
   const isFactoryOrder = order.source === 'factory';
-  const baseAmount = order.original_total || order.total;
+  const baseAmount = window.getOrderEarningBase
+    ? window.getOrderEarningBase(order)
+    : (order.total || 0);
   let pointsToAward = 0;
   if (!isFactoryOrder && !order.points_awarded) {
     pointsToAward = window.calcPointsFromAmount(baseAmount);

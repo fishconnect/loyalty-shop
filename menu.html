@@ -3360,8 +3360,11 @@ function renderOrderBreakdown() {
   // Subtotal (cart only) + drink (free) - discount
   const finalTotal = Math.max(0, cartSubtotal - discountValue);
 
-  // Points to earn (only on cart subtotal — discount doesn't reduce points)
-  const ptsEarn = (typeof window.calcPointsFromAmount === 'function') ? window.calcPointsFromAmount(cartSubtotal) : Math.floor(cartSubtotal / 50);
+  // 🛡️ POLICY 2026-05-27 — points are earned on the FINAL paid amount (after
+  //   any redemption discount). Previously this used cartSubtotal, which gave
+  //   the customer points on money they didn't actually spend (double-dip).
+  //   See window.getOrderEarningBase in menu-data.js.
+  const ptsEarn = (typeof window.calcPointsFromAmount === 'function') ? window.calcPointsFromAmount(finalTotal) : Math.floor(finalTotal / 50);
   // Scheduled time line
   const schedLine = (scheduleMode === 'later' && scheduledAt)
     ? `<div class="breakdown-row" style="color:#1652F0;font-weight:700"><span>📅 จองเวลา</span><span>${new Date(scheduledAt).toLocaleString('th-TH', { hour:'2-digit', minute:'2-digit' })} น.</span></div>`
