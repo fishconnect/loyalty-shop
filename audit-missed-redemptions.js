@@ -110,7 +110,15 @@ async function main() {
     const actual = reds.reduce((s, r) => s + (Number(r.points_used) || 0), 0);
     const points   = Number(c.points || 0);
     const lifetime = Number(c.lifetime_points || 0);
-    const implied  = Math.max(0, lifetime - points);
+    // 🛡️ Account for write-offs (clamp-negative-points run). The
+    //   `points_writeoff_amount` field records points the shop absorbed
+    //   when the audit+repolicy chain pushed balance below zero — those
+    //   points are NOT "missed deductions" we still need to make; they
+    //   are gone-but-accounted-for. Without this adjustment a re-run of
+    //   the audit would try to deduct them AGAIN, pushing the customer
+    //   negative once more and looping forever.
+    const writeoff = Number(c.points_writeoff_amount || 0);
+    const implied  = Math.max(0, lifetime - points) + writeoff;
     const missed   = actual - implied;
 
     // 🛡️ HOTFIX 2026-05-27 — also reconcile the per-type counters that the
@@ -127,7 +135,11 @@ async function main() {
 
     let action = 'OK';
     const updates = {};
-    if (missed > 0) updates.points = admin.firestore.FieldValue.increment(-missed);
+    // 🛡️ Clamp the points deduction so we never push the customer below
+    //   zero. If actual_redeemed exceeds the points they have plus what was
+    //   already accounted for, the gap becomes a write-off (separate run).
+    const safeDeduct = Math.min(missed, Math.max(0, points));
+    if (safeDeduct > 0) updates.points = admin.firestore.FieldValue.increment(-safeDeduct);
     // Use increment so this never decreases monotonic counters even if cloud
     // already moved ahead (e.g. a new redemption landed since we snapshotted).
     if (drinkGap > 0) updates.drink_redeemed_count = admin.firestore.FieldValue.increment(drinkGap);
