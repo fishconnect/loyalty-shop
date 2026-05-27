@@ -3242,6 +3242,15 @@ function getCompletedOrdersForCustomer(customerId) {
       reward_type: o.reward_type || null,
       free_drink_used: !!o.free_drink_used,
       delivery_type: o.delivery_type || null,
+      // 🛡️ HOTFIX 2026-05-27 — pass through redemption events stamped on the
+      //   order so the customer-detail ledger can show -15pt rows. The
+      //   previous projection silently stripped this field, which was the
+      //   ROOT CAUSE of the dashboard always rendering "แลก -0" even after
+      //   the per-customer counter was correctly backfilled. Also carry
+      //   discount / original_total for accurate baht display.
+      redemptions: Array.isArray(o.redemptions) ? o.redemptions : [],
+      discount: o.discount || 0,
+      original_total: o.original_total || null,
       note: o.note || ''
     });
     seen.add(o.completed_at || o.date);
@@ -3257,6 +3266,10 @@ function getCompletedOrdersForCustomer(customerId) {
       total: o.total != null ? o.total : (o.boxes || 0) * (o.price_per_box || db.settings.pricePerBox || 50),
       items: o.items || [],
       points_earned: 0, points_used: 0,
+      // 🛡️ Same hotfix — preserve redemptions[] on legacy-shape orders too.
+      redemptions: Array.isArray(o.redemptions) ? o.redemptions : [],
+      discount: o.discount || 0,
+      original_total: o.original_total || null,
       note: o.note || ''
     });
   });
