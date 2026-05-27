@@ -3250,7 +3250,19 @@ function getCompletedOrdersForCustomer(customerId) {
       boxes: o.boxes || (window.countMainDishes ? window.countMainDishes(o.items || []) : (o.items?.length || 0)),
       total: o.total || 0,
       items: o.items || [],
-      points_earned: o.points_earned || 0,
+      // 🛡️ HOTFIX 2026-05-27 — kitchen stamps `points_awarded` on the order
+      //   when finalizing; the legacy field `points_earned` is unused. Read
+      //   whichever exists, then fall back to a fresh compute under the
+      //   current policy (post-discount paid amount). This is what powers
+      //   the "ซื้อ" column on the stamp-card view — previously it showed
+      //   stamp count (main-dish count) which the user misread as points.
+      points_earned: (typeof o.points_awarded === 'number')
+                       ? o.points_awarded
+                       : (typeof o.points_earned === 'number')
+                           ? o.points_earned
+                           : (window.calcOrderEarningPoints
+                               ? window.calcOrderEarningPoints(o)
+                               : Math.floor((o.total || 0) / 50)),
       points_used: o.points_used || 0,
       reward_type: o.reward_type || null,
       free_drink_used: !!o.free_drink_used,
@@ -3272,13 +3284,23 @@ function getCompletedOrdersForCustomer(customerId) {
   (db.orders || []).filter(o => o.customer_id === customerId).forEach(o => {
     const dateKey = o.completed_at || o.date;
     if (seen.has(dateKey)) return;
+    const _legacyTotal = o.total != null ? o.total : (o.boxes || 0) * (o.price_per_box || db.settings.pricePerBox || 50);
     out.push({
       _src: 'legacy', id: o.id,
       date: dateKey,
       boxes: o.boxes || 0,
-      total: o.total != null ? o.total : (o.boxes || 0) * (o.price_per_box || db.settings.pricePerBox || 50),
+      total: _legacyTotal,
       items: o.items || [],
-      points_earned: 0, points_used: 0,
+      // 🛡️ Same hotfix — surface stamped points_awarded; fall back to
+      //   current-policy compute for very old legacy rows missing the field.
+      points_earned: (typeof o.points_awarded === 'number')
+                       ? o.points_awarded
+                       : (typeof o.points_earned === 'number')
+                           ? o.points_earned
+                           : (window.calcPointsFromAmount
+                               ? window.calcPointsFromAmount(_legacyTotal)
+                               : Math.floor(_legacyTotal / 50)),
+      points_used: 0,
       // 🛡️ Same hotfix — preserve redemptions[] on legacy-shape orders too.
       redemptions: Array.isArray(o.redemptions) ? o.redemptions : [],
       discount: o.discount || 0,
@@ -3321,9 +3343,13 @@ function buildLedger(customerId) {
   events.sort((a,b) => new Date(a.date) - new Date(b.date));
   let bal = 0;
   events.forEach(e => {
-    if (e.kind === 'order')           bal += e.boxes;
+    // 🛡️ HOTFIX 2026-05-27 — running balance is in POINTS now, not stamps.
+    //   Previously this added e.boxes (main-dish count) and subtracted
+    //   e.pts (points) — mixing two units in the same balance, so the
+    //   "คงเหลือ" column didn't match customer.points at all.
+    if (e.kind === 'order')           bal += (e.points_earned || 0);
     else if (e.kind === 'redeem_pts') bal -= e.pts;
-    else                              bal -= e.boxes;
+    else                              bal -= e.boxes;  // legacy stamp-card redemption
     e.balance = bal;
   });
   return events;
@@ -3393,17 +3419,22 @@ function renderCustomerDetail() {
     ? `<tr><td colspan="5" style="text-align:center;color:#9ca3af;padding:20px">— ยังไม่มีรายการ —</td></tr>`
     : events.map((e, idx) => {
         if (e.kind === 'order') {
-          totalIn += e.boxes;
+          // 🛡️ HOTFIX 2026-05-27 — show POINTS earned in the "ซื้อ" column,
+          //   not the stamp-card box count. Mixing units (stamps in "ซื้อ",
+          //   points in "แลก") made the column read as "+3 pts for ฿104"
+          //   when the order only really credited 2 pts under the new
+          //   post-discount earn policy.
+          const pts = (typeof e.points_earned === 'number') ? e.points_earned : 0;
+          totalIn += pts;
           const itemsList = (e.items || []).map(it => {
             const opts = (it.options || []).filter(o => o.choice).map(o => o.choice).join(', ');
             return `<div style="font-size:11.5px;color:#5c6982;padding:2px 0">• ${it.qty || 1}× <b>${it.mainName || it.name}</b>${opts?` <span style="color:#9ca3af">(${opts})</span>`:''}${it.price?` <span style="color:#1652F0">฿${it.price * (it.qty||1)}</span>`:''}${it.note?` <span style="color:#dc2626">📝${it.note}</span>`:''}</div>`;
           }).join('');
-          const ptsBadge = e.points_earned ? ` <span style="color:#16a34a;font-weight:700;font-size:11px">+${e.points_earned}pt</span>` : '';
           const usedBadge = e.points_used ? ` <span style="color:#dc2626;font-weight:700;font-size:11px">-${e.points_used}pt</span>` : '';
           const rewardBadge = e.reward_type === 'drink' ? ' 🥤' : e.reward_type === 'discount' ? ' 🎁' : '';
           return `<tr style="border-bottom:1px solid #f3f4f6;cursor:pointer" onclick="toggleOrderDetail('${idx}')">
-              <td style="padding:8px 4px">${shortDate(e.date)}${ptsBadge}${usedBadge}${rewardBadge}${e.note?`<div style="font-size:11px;color:#9ca3af">${e.note}</div>`:''}</td>
-              <td style="padding:8px 4px;text-align:right;color:#1652F0;font-weight:600">+${e.boxes}</td>
+              <td style="padding:8px 4px">${shortDate(e.date)}${usedBadge}${rewardBadge}${e.note?`<div style="font-size:11px;color:#9ca3af">${e.note}</div>`:''}</td>
+              <td style="padding:8px 4px;text-align:right;color:#1652F0;font-weight:600">+${pts}</td>
               <td style="padding:8px 4px;text-align:right;color:#d1d5db">—</td>
               <td style="padding:8px 4px;text-align:right;color:#0a1530;font-weight:700">${fmtBaht(e.total||0).replace('฿','')}</td>
               <td style="padding:8px 4px;text-align:right;font-weight:700">${e.balance}</td>
