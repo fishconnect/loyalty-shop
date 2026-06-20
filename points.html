@@ -275,14 +275,21 @@ function renderCustomer(customer, allOrders) {
 
   const points = customer.points || 0;
   const lifetime = customer.lifetime_points || 0;
-  // Two-tier rewards: 10 = drink, 15 = discount 50
+  // Reward tiers: drink / discount / food set (food optional, promo-driven)
   const DRINK_PT = (window.LOYALTY?.REWARD_DRINK_POINTS) || 10;
   const DISCOUNT_PT = (window.LOYALTY?.REWARD_DISCOUNT_POINTS) || 15;
+  const DISCOUNT_AMT = (window.LOYALTY?.REWARD_DISCOUNT_AMOUNT) || 50;
+  const DISCOUNT_MIN = Number(window.LOYALTY?.REWARD_DISCOUNT_MIN_ORDER) || 0;
+  const FOOD_PT = Number(window.LOYALTY?.REWARD_FOOD_POINTS) || 0;
+  const FOOD_ON = FOOD_PT > 0;
+  const discLabel = `ลด ${DISCOUNT_AMT}฿${DISCOUNT_MIN > 0 ? ` (สั่งครบ ${DISCOUNT_MIN}฿)` : ''}`;
   const canDrink = points >= DRINK_PT;
   const canDiscount = points >= DISCOUNT_PT;
+  const canFood = FOOD_ON && points >= FOOD_PT;
 
-  // Progress bar shows path to next available reward
-  const nextGoal = canDiscount ? DISCOUNT_PT : (canDrink ? DISCOUNT_PT : DRINK_PT);
+  // Progress bar shows path to next-higher reward tier
+  const tiers = [DRINK_PT, DISCOUNT_PT, FOOD_ON ? FOOD_PT : null].filter(n => n != null).sort((a, b) => a - b);
+  const nextGoal = tiers.find(t => points < t) || tiers[tiers.length - 1];
   const pct = Math.min(100, (points / nextGoal) * 100);
 
   // Filter customer's orders
@@ -296,13 +303,23 @@ function renderCustomer(customer, allOrders) {
     .reduce((s, o) => s + (o.total || 0), 0);
 
   let rewardBanner = '';
-  if (canDiscount) {
+  if (canFood) {
+    rewardBanner = `
+      <div class="reward-banner">
+        <div class="icon">🍟</div>
+        <div class="text">
+          <div class="big">ใช้ ${FOOD_PT} แต้ม → ฟรีชุดเฟรนฟรายไก่ป๊อป!</div>
+          <div class="sub">หรือ ${DISCOUNT_PT} แต้ม → ${discLabel} · ${DRINK_PT} แต้ม → ฟรีเครื่องดื่ม</div>
+        </div>
+      </div>
+    `;
+  } else if (canDiscount) {
     rewardBanner = `
       <div class="reward-banner">
         <div class="icon">🎁</div>
         <div class="text">
-          <div class="big">ใช้ 15 แต้ม → ลด 50฿ ได้!</div>
-          <div class="sub">หรือใช้ 10 แต้ม → ฟรีเครื่องดื่ม · แจ้งร้านตอนสั่งอาหาร</div>
+          <div class="big">ใช้ ${DISCOUNT_PT} แต้ม → ${discLabel} ได้!</div>
+          <div class="sub">หรือใช้ ${DRINK_PT} แต้ม → ฟรีเครื่องดื่ม · แจ้งร้านตอนสั่งอาหาร</div>
         </div>
       </div>
     `;
@@ -311,7 +328,7 @@ function renderCustomer(customer, allOrders) {
       <div class="reward-banner">
         <div class="icon">🥤</div>
         <div class="text">
-          <div class="big">ใช้ 10 แต้ม → ฟรีเครื่องดื่ม 1 แก้ว!</div>
+          <div class="big">ใช้ ${DRINK_PT} แต้ม → ฟรีเครื่องดื่ม 1 แก้ว!</div>
           <div class="sub">ชานมไข่มุก / น้ำอัดลม · แจ้งร้านตอนสั่งอาหาร</div>
         </div>
       </div>
@@ -321,9 +338,10 @@ function renderCustomer(customer, allOrders) {
   const greetingTime = new Date().getHours();
   const greeting = greetingTime < 12 ? 'อรุณสวัสดิ์' : greetingTime < 18 ? 'สวัสดี' : 'สวัสดีตอนเย็น';
 
-  const nextLabel = canDiscount ? '🎉 ใช้ลด 50฿ ได้แล้ว!'
-                  : canDrink    ? `อีก ${DISCOUNT_PT - points} แต้ม → ลด 50฿`
-                                : `อีก ${DRINK_PT - points} แต้ม → ฟรีเครื่องดื่ม`;
+  const nextLabel = canFood       ? '🎉 แลกของรางวัลสูงสุดได้แล้ว!'
+                  : canDiscount   ? (FOOD_ON ? `อีก ${FOOD_PT - points} แต้ม → ฟรีชุดอาหาร` : '🎉 ใช้ส่วนลดได้แล้ว!')
+                  : canDrink      ? `อีก ${DISCOUNT_PT - points} แต้ม → ${discLabel}`
+                                  : `อีก ${DRINK_PT - points} แต้ม → ฟรีเครื่องดื่ม`;
 
   // 🗑️ PDPA — show pending deletion banner if customer has requested deletion
   const deletionBanner = customer.deletion_requested ? `
@@ -381,7 +399,7 @@ function renderCustomer(customer, allOrders) {
         <div class="lbl">แต้มที่ได้รวม</div>
       </div>
       <div class="stat-box">
-        <div class="num">${(customer.drink_redeemed_count || 0) + (customer.dish_redeemed_count || 0)}</div>
+        <div class="num">${(customer.drink_redeemed_count || 0) + (customer.dish_redeemed_count || 0) + (customer.food_redeemed_count || 0)}</div>
         <div class="lbl">ใช้แลกไปแล้ว</div>
       </div>
     </div>
@@ -398,11 +416,19 @@ function renderCustomer(customer, allOrders) {
         </div>
         <div style="background:${canDiscount?'#dcfce7':'#f3f4f6'};padding:14px;border-radius:12px;display:flex;justify-content:space-between;align-items:center">
           <div>
-            <div style="font-weight:800;color:${canDiscount?'#166534':'#6b7280'}">💰 ส่วนลด 50 บาท</div>
-            <div style="font-size:12px;color:#5c6982">ใช้กับเมนูใดก็ได้</div>
+            <div style="font-weight:800;color:${canDiscount?'#166534':'#6b7280'}">💰 ส่วนลด ${DISCOUNT_AMT} บาท</div>
+            <div style="font-size:12px;color:#5c6982">${DISCOUNT_MIN > 0 ? `เมื่อสั่งครบ ${DISCOUNT_MIN}฿` : 'ใช้กับเมนูใดก็ได้'}</div>
           </div>
           <div style="font-weight:800;color:${canDiscount?'#166534':'#9ca3af'};font-size:13px">${DISCOUNT_PT} แต้ม</div>
         </div>
+        ${FOOD_ON ? `
+        <div style="background:${canFood?'#dcfce7':'#f3f4f6'};padding:14px;border-radius:12px;display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-weight:800;color:${canFood?'#166534':'#6b7280'}">🍟 ฟรีชุดเฟรนฟรายไก่ป๊อป</div>
+            <div style="font-size:12px;color:#5c6982">เฟรนฟราย + ไก่ป๊อบ 1 ชุด</div>
+          </div>
+          <div style="font-weight:800;color:${canFood?'#166534':'#9ca3af'};font-size:13px">${FOOD_PT} แต้ม</div>
+        </div>` : ''}
       </div>
     </div>
 

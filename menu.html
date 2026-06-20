@@ -1510,7 +1510,8 @@ function renderPromoStrip() {
     { icon: '🕒', title: 'เปิด 8.00 - 17.30 น.',     desc: 'ทุกวัน · หยุดทุกวันอาทิตย์',    color: 'default' },
     { icon: '🎁', title: '+5 แต้มสมัครใหม่',          desc: 'ฟรี · กรอกเบอร์ครั้งแรก',       color: 'green' },
     { icon: '🥤', title: '10 แต้ม = ฟรี 1 แก้ว',     desc: 'ชานมไข่มุก / เครื่องดื่มแก้วโอ่ง', color: 'default' },
-    { icon: '💰', title: '15 แต้ม = ลด 50฿',          desc: 'แลกส่วนลดได้ทันที',             color: 'purple' },
+    { icon: '💰', title: '15 แต้ม = ลด 30฿',          desc: 'เมื่อสั่งครบ 100฿',             color: 'purple' },
+    { icon: '🍟', title: '25 แต้ม = ฟรีชุดไก่ป๊อป',   desc: 'เฟรนฟราย + ไก่ป๊อบ 1 ชุด',     color: 'green' },
     { icon: '✨', title: 'ร้านสะอาด อาหารสะอาด',     desc: 'มาตรฐานสุขอนามัย',              color: 'green' },
   ];
   const customCards = (menuConfig && Array.isArray(menuConfig.promoCards) && menuConfig.promoCards.length)
@@ -1549,7 +1550,11 @@ function renderLoyaltyPromoBanner() {
   const drinkPts = Number(L.REWARD_DRINK_POINTS) || 10;
   const discPts = Number(L.REWARD_DISCOUNT_POINTS) || 15;
   const discAmt = Number(L.REWARD_DISCOUNT_AMOUNT) || 50;
+  const discMin = Number(L.REWARD_DISCOUNT_MIN_ORDER) || 0;
+  const foodPts = Number(L.REWARD_FOOD_POINTS) || 0;
   const name = active.name || 'โปรโมชันพิเศษ';
+  const discLine = `${discPts} แต้ม = ลด ${discAmt}฿${discMin > 0 ? ` (สั่งครบ ${discMin}฿)` : ''}`;
+  const foodLine = foodPts > 0 ? ` · ${foodPts} แต้ม = ฟรีชุดเฟรนฟรายไก่ป๊อป` : '';
   wrap.style.display = 'block';
   wrap.innerHTML = `
     <div style="margin:8px 12px 0;padding:10px 14px;border-radius:12px;background:linear-gradient(135deg,#fff7ed,#ffedd5);border:1.5px solid #fb923c;box-shadow:0 2px 8px rgba(251,146,60,0.15);font-family:inherit">
@@ -1558,7 +1563,7 @@ function renderLoyaltyPromoBanner() {
         <div style="flex:1;min-width:0">
           <div style="font-weight:800;font-size:13px;color:#9a3412;line-height:1.3">${escapeHtml(name)}</div>
           <div style="font-size:11.5px;color:#7c2d12;margin-top:2px;line-height:1.4">
-            ${drinkPts} แต้ม = ฟรีเครื่องดื่ม · ${discPts} แต้ม = ลด ${discAmt}฿
+            ${drinkPts} แต้ม = ฟรีเครื่องดื่ม · ${discLine}${foodLine}
           </div>
         </div>
       </div>
@@ -1804,6 +1809,7 @@ async function submitSignup() {
     is_factory: false,
     drink_redeemed_count: 0,
     dish_redeemed_count: 0,
+    food_redeemed_count: 0,
     total_boxes: 0, redeemed_count: 0,
     joined: new Date().toISOString(),
     referral_code: phone.slice(-6).toUpperCase(),
@@ -2624,6 +2630,8 @@ let cartRewards = {
   useDiscount: false,
   useDrink: false,
   selectedDrinkId: null,
+  useFood: false,
+  selectedFoodId: null,
 };
 
 // Order type — null until customer actively picks one (was 'pickup' default,
@@ -2910,7 +2918,7 @@ async function getMyLocation() {
   );
 }
 function resetCartRewards() {
-  cartRewards = { useDiscount: false, useDrink: false, selectedDrinkId: null };
+  cartRewards = { useDiscount: false, useDrink: false, selectedDrinkId: null, useFood: false, selectedFoodId: null };
 }
 
 // 🔒 PII masking — show only first/last char of name + middle of phone
@@ -3121,6 +3129,46 @@ function onVerifyDeviceClick(phone) {
 }
 window.onVerifyDeviceClick = onVerifyDeviceClick;
 
+// 🔄 Pull the authoritative cloud balance the moment a known customer is
+//    recognized, so the rewards box never advertises a reward their real
+//    balance can't cover (the local cache can lag behind counter-side
+//    redemptions). Guarded per-phone so typing the number doesn't spam reads.
+async function refreshBalanceFromCloud(phone) {
+  if (!phone || !window.cloud?.getCustomer) return;
+  if (refreshBalanceFromCloud._done === phone) return;
+  refreshBalanceFromCloud._done = phone;
+  try {
+    const cloudCust = await window.cloud.getCustomer(phone);
+    if (!cloudCust || typeof cloudCust.points !== 'number') return;
+    const db = loadDB();
+    const c = db.customers[phone];
+    if (!c) return;
+    const before = c.points || 0;
+    c.points = cloudCust.points;
+    if (typeof cloudCust.lifetime_points === 'number') c.lifetime_points = cloudCust.lifetime_points;
+    ['drink_redeemed_count', 'dish_redeemed_count', 'food_redeemed_count'].forEach(k => {
+      if (typeof cloudCust[k] === 'number') c[k] = cloudCust[k];
+    });
+    if (cloudCust.signup_bonus_received) c.signup_bonus_received = true;
+    db.customers[phone] = c;
+    saveDB(db);
+    if (c.points !== before) {
+      // balance moved — drop any now-unaffordable reward selection, then redraw
+      const need =
+          (cartRewards.useDrink    ? (Number(LOYALTY.REWARD_DRINK_POINTS) || 0)    : 0)
+        + (cartRewards.useDiscount ? (Number(LOYALTY.REWARD_DISCOUNT_POINTS) || 0) : 0)
+        + (cartRewards.useFood     ? (Number(LOYALTY.REWARD_FOOD_POINTS) || 0)     : 0);
+      if (need > c.points) resetCartRewards();
+      checkCustomer();
+      renderRewardsBox();
+      renderOrderBreakdown();
+    }
+  } catch (e) {
+    console.warn('[refreshBalanceFromCloud]', e);
+    if (refreshBalanceFromCloud._done === phone) refreshBalanceFromCloud._done = null; // allow retry
+  }
+}
+
 function checkCustomer() {
   const phone = normPhone(document.getElementById('custPhone').value);
   const found = document.getElementById('custFound');
@@ -3141,6 +3189,9 @@ function checkCustomer() {
   if (c) {
     const pts = c.points || 0;
     const trusted = window.isDeviceTrusted ? window.isDeviceTrusted(c) : false;
+    // 🔄 Sync the real balance from cloud once (only for the verified owner) so
+    //    the rewards box reflects what they can actually redeem.
+    if (trusted) refreshBalanceFromCloud(phone);
     let extras = '';
     if (c.birth_day && c.birth_month) {
       const monthNames = ['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
@@ -3210,14 +3261,21 @@ function renderRewardsBox() {
   const drinkPt = LOYALTY.REWARD_DRINK_POINTS;
   const discountPt = LOYALTY.REWARD_DISCOUNT_POINTS;
   const discountAmt = LOYALTY.REWARD_DISCOUNT_AMOUNT;
+  const foodPt = Number(LOYALTY.REWARD_FOOD_POINTS) || 0;
+  const minOrder = Number(LOYALTY.REWARD_DISCOUNT_MIN_ORDER) || 0;
+  const foodEnabled = foodPt > 0 && Array.isArray(LOYALTY.FOOD_REWARD_IDS) && LOYALTY.FOOD_REWARD_IDS.length > 0;
+  const foodItem = foodEnabled ? findItem(LOYALTY.FOOD_REWARD_IDS[0])?.item : null;
+  const foodName = foodItem?.name || 'ชุดเฟรนฟราย + ไก่ป๊อบ';
 
   // Used/Remaining points
-  const usedPts = (cartRewards.useDiscount ? discountPt : 0) + (cartRewards.useDrink ? drinkPt : 0);
+  const usedPts = (cartRewards.useDiscount ? discountPt : 0) + (cartRewards.useDrink ? drinkPt : 0) + (cartRewards.useFood ? foodPt : 0);
   const remainingPts = pts - usedPts;
 
-  // Eligibility (after current selections)
-  const canStillDiscount = (pts - (cartRewards.useDrink ? drinkPt : 0)) >= discountPt && cartSubtotal > 0;
-  const canStillDrink    = (pts - (cartRewards.useDiscount ? discountPt : 0)) >= drinkPt;
+  // Eligibility (after current selections — each reward subtracts the others)
+  const meetsMinOrder = cartSubtotal >= (minOrder > 0 ? minOrder : 1);
+  const canStillDiscount = (pts - (cartRewards.useDrink ? drinkPt : 0) - (cartRewards.useFood ? foodPt : 0)) >= discountPt && meetsMinOrder;
+  const canStillDrink    = (pts - (cartRewards.useDiscount ? discountPt : 0) - (cartRewards.useFood ? foodPt : 0)) >= drinkPt;
+  const canStillFood     = foodEnabled && (pts - (cartRewards.useDiscount ? discountPt : 0) - (cartRewards.useDrink ? drinkPt : 0)) >= foodPt;
 
   // Build drink picker HTML
   let drinkPickerHTML = '';
@@ -3238,6 +3296,25 @@ function renderRewardsBox() {
     `;
   }
 
+  // Build food picker HTML
+  let foodPickerHTML = '';
+  if (cartRewards.useFood) {
+    foodPickerHTML = `
+      <div class="drink-picker">
+        ${(LOYALTY.FOOD_REWARD_IDS || []).map(id => {
+          const food = findItem(id)?.item;
+          if (!food) return '';
+          const active = cartRewards.selectedFoodId === id;
+          return `
+            <div class="drink-pick-btn ${active?'active':''}" onclick="selectRewardFood('${id}')">
+              ${food.name}<br><small>฿${food.price}</small>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }
+
   box.style.display = 'block';
   box.className = 'rewards-card';
   box.innerHTML = `
@@ -3247,7 +3324,7 @@ function renderRewardsBox() {
       <div class="check-circle"></div>
       <div class="body">
         <div class="title">💰 ลด ฿${Math.min(discountAmt, cartSubtotal || discountAmt)} จากบิล</div>
-        <div class="meta">${cartSubtotal === 0 ? 'ใส่ของในตะกร้าก่อน' : (canStillDiscount || cartRewards.useDiscount ? 'ใช้กับเมนูใดก็ได้' : 'แต้มไม่พอ')}</div>
+        <div class="meta">${cartSubtotal === 0 ? 'ใส่ของในตะกร้าก่อน' : (minOrder > 0 && cartSubtotal < minOrder ? `สั่งครบ ฿${minOrder} ก่อน` : (canStillDiscount || cartRewards.useDiscount ? `เมื่อสั่งครบ ฿${minOrder || 0}` : 'แต้มไม่พอ'))}</div>
       </div>
       <div class="pts-cost">−${discountPt} แต้ม</div>
     </div>
@@ -3262,6 +3339,17 @@ function renderRewardsBox() {
     </div>
     ${drinkPickerHTML}
 
+    ${foodEnabled ? `
+    <div class="reward-toggle ${cartRewards.useFood?'active':''}" onclick="toggleRewardFood()" ${!cartRewards.useFood && !canStillFood ? 'style="opacity:.5;pointer-events:none"' : ''}>
+      <div class="check-circle"></div>
+      <div class="body">
+        <div class="title">🍟 ฟรี ${foodName} 1 ชุด</div>
+        <div class="meta">${canStillFood || cartRewards.useFood ? 'แลกชุดเฟรนฟรายไก่ป๊อป' : 'แต้มไม่พอ'}</div>
+      </div>
+      <div class="pts-cost">−${foodPt} แต้ม</div>
+    </div>
+    ${foodPickerHTML}` : ''}
+
     <div class="reward-summary">
       <span>ใช้แต้ม: <b>${usedPts}</b></span>
       <span>คงเหลือ: <b>${remainingPts}</b> แต้ม</span>
@@ -3275,10 +3363,12 @@ function toggleRewardDiscount() {
     const c = loadDB().customers[phone];
     if (!c) return;
     const pts = c.points || 0;
-    const remaining = pts - (cartRewards.useDrink ? LOYALTY.REWARD_DRINK_POINTS : 0);
+    const remaining = pts - (cartRewards.useDrink ? LOYALTY.REWARD_DRINK_POINTS : 0) - (cartRewards.useFood ? (Number(LOYALTY.REWARD_FOOD_POINTS) || 0) : 0);
     if (remaining < LOYALTY.REWARD_DISCOUNT_POINTS) { toast('แต้มไม่พอ', true); return; }
     const cartSubtotal = cart.reduce((s, line) => s + calcLineTotal(line), 0);
     if (cartSubtotal <= 0) { toast('ใส่ของในตะกร้าก่อน', true); return; }
+    const minOrder = Number(LOYALTY.REWARD_DISCOUNT_MIN_ORDER) || 0;
+    if (minOrder > 0 && cartSubtotal < minOrder) { toast(`ต้องสั่งครบ ฿${minOrder} ก่อนใช้ส่วนลด`, true); return; }
   }
   cartRewards.useDiscount = !cartRewards.useDiscount;
   renderRewardsBox();
@@ -3291,7 +3381,7 @@ function toggleRewardDrink() {
     const c = loadDB().customers[phone];
     if (!c) return;
     const pts = c.points || 0;
-    const remaining = pts - (cartRewards.useDiscount ? LOYALTY.REWARD_DISCOUNT_POINTS : 0);
+    const remaining = pts - (cartRewards.useDiscount ? LOYALTY.REWARD_DISCOUNT_POINTS : 0) - (cartRewards.useFood ? (Number(LOYALTY.REWARD_FOOD_POINTS) || 0) : 0);
     if (remaining < LOYALTY.REWARD_DRINK_POINTS) { toast('แต้มไม่พอ', true); return; }
     // Auto-pick first drink as default
     if (!cartRewards.selectedDrinkId) cartRewards.selectedDrinkId = LOYALTY.DRINK_REWARD_IDS[0];
@@ -3305,6 +3395,32 @@ function toggleRewardDrink() {
 
 function selectRewardDrink(drinkId) {
   cartRewards.selectedDrinkId = drinkId;
+  renderRewardsBox();
+  renderOrderBreakdown();
+}
+
+function toggleRewardFood() {
+  const foodPt = Number(LOYALTY.REWARD_FOOD_POINTS) || 0;
+  const foodIds = Array.isArray(LOYALTY.FOOD_REWARD_IDS) ? LOYALTY.FOOD_REWARD_IDS : [];
+  if (foodPt <= 0 || !foodIds.length) return;
+  if (!cartRewards.useFood) {
+    const phone = normPhone(document.getElementById('custPhone').value);
+    const c = loadDB().customers[phone];
+    if (!c) return;
+    const pts = c.points || 0;
+    const remaining = pts - (cartRewards.useDiscount ? LOYALTY.REWARD_DISCOUNT_POINTS : 0) - (cartRewards.useDrink ? LOYALTY.REWARD_DRINK_POINTS : 0);
+    if (remaining < foodPt) { toast('แต้มไม่พอ', true); return; }
+    if (!cartRewards.selectedFoodId) cartRewards.selectedFoodId = foodIds[0];
+  } else {
+    cartRewards.selectedFoodId = null;
+  }
+  cartRewards.useFood = !cartRewards.useFood;
+  renderRewardsBox();
+  renderOrderBreakdown();
+}
+
+function selectRewardFood(foodId) {
+  cartRewards.selectedFoodId = foodId;
   renderRewardsBox();
   renderOrderBreakdown();
 }
@@ -3356,6 +3472,15 @@ function renderOrderBreakdown() {
       drinkName = drink.name;
     }
   }
+  let foodValue = 0;
+  let foodName = '';
+  if (cartRewards.useFood && cartRewards.selectedFoodId) {
+    const food = findItem(cartRewards.selectedFoodId)?.item;
+    if (food) {
+      foodValue = food.price;
+      foodName = food.name;
+    }
+  }
   const discountValue = cartRewards.useDiscount ? Math.min(discountAmt, cartSubtotal) : 0;
   // Subtotal (cart only) + drink (free) - discount
   const finalTotal = Math.max(0, cartSubtotal - discountValue);
@@ -3374,7 +3499,8 @@ function renderOrderBreakdown() {
     ${schedLine}
     <div class="breakdown-row subtotal"><span>ค่าอาหาร</span><span>฿${cartSubtotal}</span></div>
     ${cartRewards.useDrink && drinkValue > 0 ? `<div class="breakdown-row free"><span>+ ฟรี ${drinkName}</span><span>ฟรี (฿${drinkValue})</span></div>` : ''}
-    ${cartRewards.useDiscount ? `<div class="breakdown-row discount"><span>− ส่วนลด (15 แต้ม)</span><span>−฿${discountValue}</span></div>` : ''}
+    ${cartRewards.useFood && foodValue > 0 ? `<div class="breakdown-row free"><span>+ ฟรี ${foodName}</span><span>ฟรี (฿${foodValue})</span></div>` : ''}
+    ${cartRewards.useDiscount ? `<div class="breakdown-row discount"><span>− ส่วนลด (${discountPt} แต้ม)</span><span>−฿${discountValue}</span></div>` : ''}
     <div class="breakdown-row total"><span>ยอดที่ต้องจ่าย</span><span>฿${finalTotal}</span></div>
     ${ptsEarn > 0 ? `<div class="breakdown-row" style="margin-top:6px;padding-top:8px;border-top:1px dashed #d1d5db;color:#16a34a;font-weight:700"><span>⭐ แต้มที่จะได้รับ</span><span>+${ptsEarn} แต้ม</span></div>` : ''}
   `;
@@ -3501,14 +3627,33 @@ async function submitOrder() {
   //    lifetime_points with the 5-point signup default — wiping their history.
   //    (Bug fix for: customer opens menu on a fresh device, no localStorage,
   //    submits order → cloud points reset to 5.)
-  if (!customer && phone && window.cloud?.getCustomer) {
+  // 🔒 AUTHORITATIVE BALANCE — always reconcile loyalty fields from cloud before
+  //    this order is allowed to redeem points. The device's local cache can be
+  //    stale (e.g. a counter-side redemption deducted points on cloud but never
+  //    synced down to this device), which previously let a customer redeem a
+  //    reward their TRUE balance couldn't cover. We trust cloud for points /
+  //    lifetime / redeem-counters and keep local only for profile fields.
+  //    Runs for EVERY phone customer, not just first-sight-on-this-device.
+  if (phone && window.cloud?.getCustomer) {
     try {
       const cloudCust = await window.cloud.getCustomer(phone);
       if (cloudCust) {
-        customer = cloudCust;
-        db.customers[phone] = cloudCust; // mirror to local so subsequent code finds it
+        if (!customer) {
+          customer = cloudCust;
+          db.customers[phone] = cloudCust; // first sight on this device — mirror whole doc
+        } else {
+          // existing local record — overwrite ONLY the authoritative loyalty fields
+          if (typeof cloudCust.points === 'number') customer.points = cloudCust.points;
+          if (typeof cloudCust.lifetime_points === 'number') customer.lifetime_points = cloudCust.lifetime_points;
+          ['drink_redeemed_count', 'dish_redeemed_count', 'food_redeemed_count'].forEach(k => {
+            if (typeof cloudCust[k] === 'number') customer[k] = cloudCust[k];
+          });
+          if (cloudCust.signup_bonus_received) customer.signup_bonus_received = true;
+          db.customers[phone] = customer;
+        }
+        saveDB(db); // persist corrected balance so the UI reflects reality even if we abort below
       }
-    } catch (e) { console.warn('[submitOrder] cloud fetch failed — proceeding with local', e); }
+    } catch (e) { console.warn('[submitOrder] cloud balance reconcile failed — proceeding with local', e); }
   }
   let signupBonusGiven = false;
   if (!customer) {
@@ -3601,6 +3746,25 @@ async function submitOrder() {
   // Original total = sum of regular cart items (used for points calculation later)
   const cartSubtotal = items.reduce((s, it) => s + it.price * it.qty, 0);
 
+  // 🔒 REDEMPTION GUARD — with customer.points now reflecting the real cloud
+  //    balance, refuse to redeem more than the customer actually has. If a stale
+  //    cache had offered an unaffordable reward, clear the reward selections,
+  //    refresh the UI to the corrected balance, and abort so they re-confirm.
+  if (!isFactoryMode && phone) {
+    const _needTotal =
+        (cartRewards.useDrink    ? (Number(LOYALTY.REWARD_DRINK_POINTS) || 0)    : 0)
+      + (cartRewards.useDiscount ? (Number(LOYALTY.REWARD_DISCOUNT_POINTS) || 0) : 0)
+      + (cartRewards.useFood     ? (Number(LOYALTY.REWARD_FOOD_POINTS) || 0)     : 0);
+    const _have = customer.points || 0;
+    if (_needTotal > 0 && _needTotal > _have) {
+      resetCartRewards();
+      renderRewardsBox();
+      renderOrderBreakdown();
+      toast(`⚠️ แต้มไม่พอแลกรางวัล (มี ${_have} แต้ม) — เอารางวัลออกให้แล้ว กรุณากดสั่งอีกครั้ง`, true);
+      return;
+    }
+  }
+
   // Apply selected rewards (customer-driven)
   const redemptions = [];
   let discountTotal = 0;
@@ -3619,6 +3783,23 @@ async function submitOrder() {
         at: new Date().toISOString()
       });
       discountTotal += drink.price; // free drink value counts in discount
+    }
+  }
+  // Add free food set as item
+  if (cartRewards.useFood && cartRewards.selectedFoodId) {
+    const food = findItem(cartRewards.selectedFoodId)?.item;
+    if (food) {
+      items.push({
+        id: food.id, name: food.name, mainName: food.name,
+        price: food.price, qty: 1, freeQty: 1, isReward: true,
+        options: [], note: ''
+      });
+      redemptions.push({
+        type: 'food', foodId: food.id, label: food.name,
+        points_used: Number(LOYALTY.REWARD_FOOD_POINTS) || 0, value: food.price,
+        at: new Date().toISOString()
+      });
+      discountTotal += food.price; // free food value counts in discount
     }
   }
   // Apply discount
@@ -3641,6 +3822,7 @@ async function submitOrder() {
     customer.points = Math.max(0, (customer.points || 0) - totalPtsUsed);
     if (cartRewards.useDrink) customer.drink_redeemed_count = (customer.drink_redeemed_count || 0) + 1;
     if (cartRewards.useDiscount) customer.dish_redeemed_count = (customer.dish_redeemed_count || 0) + 1;
+    if (cartRewards.useFood) customer.food_redeemed_count = (customer.food_redeemed_count || 0) + 1;
     db.customers[customerId] = customer;
   }
 
@@ -3841,6 +4023,7 @@ async function submitOrder() {
   customer._redeemCounters = [];
   if (cartRewards.useDrink)    customer._redeemCounters.push('drink_redeemed_count');
   if (cartRewards.useDiscount) customer._redeemCounters.push('dish_redeemed_count');
+  if (cartRewards.useFood)     customer._redeemCounters.push('food_redeemed_count');
   if (referrerCustomer) {
     referrerCustomer._bonusDelta_points = LOYALTY.SIGNUP_BONUS;
     referrerCustomer._bonusDelta_lifetime = LOYALTY.SIGNUP_BONUS;
@@ -4466,7 +4649,7 @@ function removeOrderFromOutbox(orderId) {
 //   Loyalty changes go through applyLoyaltyDelta below, atomic.
 const _LOYALTY_BLOCKED_FOR_MERGE = new Set([
   'points', 'lifetime_points',
-  'drink_redeemed_count', 'dish_redeemed_count', 'redeemed_count',
+  'drink_redeemed_count', 'dish_redeemed_count', 'food_redeemed_count', 'redeemed_count',
   'total_referrals',
   '_bonusDelta_points', '_bonusDelta_lifetime',
   '_redeemCounters', '_referralCounter',
@@ -4494,7 +4677,7 @@ async function applyLoyaltyDelta(customerId, customer, opts) {
   const _inc = window.cloud.increment;
   const extra = {};
   for (const k of counters) {
-    if (k === 'drink_redeemed_count' || k === 'dish_redeemed_count') {
+    if (k === 'drink_redeemed_count' || k === 'dish_redeemed_count' || k === 'food_redeemed_count') {
       extra[k] = _inc ? _inc(1) : 1;
     }
   }
@@ -4539,7 +4722,7 @@ async function flushOutbox() {
         const _inc = window.cloud.increment;
         const counterExtra = {};
         for (const k of counters) {
-          if (k === 'drink_redeemed_count' || k === 'dish_redeemed_count') {
+          if (k === 'drink_redeemed_count' || k === 'dish_redeemed_count' || k === 'food_redeemed_count') {
             counterExtra[k] = _inc ? _inc(1) : 1;
           }
         }

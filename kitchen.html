@@ -586,7 +586,7 @@ function render() {
           ${o.note ? `<div class="order-note"><b>หมายเหตุรวม:</b> ${o.note}</div>` : ''}
           ${(o.redemptions && o.redemptions.length) ? `
             <div style="margin-top:8px;padding:8px 10px;background:#dcfce7;border-radius:6px;font-size:13px;color:#166534;font-weight:700">
-              🎁 ใช้แต้ม: ${o.redemptions.map(r => r.type === 'drink' ? `🥤 ${r.label}` : `💰 ลด ฿${r.value}`).join(' · ')}
+              🎁 ใช้แต้ม: ${o.redemptions.map(r => r.type === 'drink' ? `🥤 ${r.label}` : r.type === 'food' ? `🍟 ${r.label}` : `💰 ลด ฿${r.value}`).join(' · ')}
               <span style="margin-left:6px;color:#5c6982;font-weight:500">(รวม -${o.redemptions.reduce((s,r)=>s+r.points_used,0)} แต้ม)</span>
             </div>
           ` : ''}
@@ -747,7 +747,7 @@ function openPaymentPicker(orderId) {
   const baseAmount = order.original_total || order.total;
   const points = isFactoryOrder ? 0 : window.calcPointsFromAmount(baseAmount);
   const redemptionStr = (order.redemptions || []).length
-    ? ` · 🎁 ${(order.redemptions || []).map(r => r.type === 'drink' ? `${r.label} ฟรี` : `ลด ฿${r.value}`).join(', ')}`
+    ? ` · 🎁 ${(order.redemptions || []).map(r => r.type === 'drink' || r.type === 'food' ? `${r.label} ฟรี` : `ลด ฿${r.value}`).join(', ')}`
     : '';
   const ptsStr = isFactoryOrder ? ' · 🏭 ไม่บวกแต้ม' : ` · +${points}pt`;
   document.getElementById('payCustomerInfo').innerHTML =
@@ -804,19 +804,24 @@ function showRedemptionModal(order, customer, opts) {
   const drinkCount = redemptions.filter(r => r.type === 'drink').length;
   const discountCount = redemptions.filter(r => r.type === 'discount').length;
   const remainingPoints = points;
+  const foodPt = Number(LOYALTY.REWARD_FOOD_POINTS) || 0;
+  const foodIds = Array.isArray(LOYALTY.FOOD_REWARD_IDS) ? LOYALTY.FOOD_REWARD_IDS : [];
+  const minOrder = Number(LOYALTY.REWARD_DISCOUNT_MIN_ORDER) || 0;
+  const meetsMinOrder = baseTotal >= minOrder;
 
   const canDrink = remainingPoints >= LOYALTY.REWARD_DRINK_POINTS;
   const remainingForDiscount = baseTotal - (order.discount || 0);
-  const canDiscount = remainingPoints >= LOYALTY.REWARD_DISCOUNT_POINTS && remainingForDiscount > 0;
+  const canDiscount = remainingPoints >= LOYALTY.REWARD_DISCOUNT_POINTS && remainingForDiscount > 0 && meetsMinOrder;
+  const canFood = foodPt > 0 && foodIds.length > 0 && remainingPoints >= foodPt;
   const canCombo = remainingPoints >= (LOYALTY.REWARD_DRINK_POINTS + LOYALTY.REWARD_DISCOUNT_POINTS) &&
-                   remainingForDiscount > 0 && redemptions.length === 0;
+                   remainingForDiscount > 0 && meetsMinOrder && redemptions.length === 0;
 
   // Combo button — visible only if customer can use both
   const comboButton = canCombo ? `
     <div style="background:linear-gradient(135deg,#fef3c7,#fde68a);padding:4px;border-radius:14px;margin-bottom:10px;border:2px solid #f59e0b">
       <button onclick="openComboPicker('${order.id}')" style="width:100%;padding:14px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border:none;border-radius:11px;font-size:15px;font-weight:900;cursor:pointer;box-shadow:0 4px 12px rgba(245,158,11,.3);display:flex;justify-content:space-between;align-items:center">
-        <span>🎁🎁 ใช้ทั้ง 2 (ลด 50฿ + เครื่องดื่ม)</span>
-        <span style="background:rgba(255,255,255,.25);padding:3px 10px;border-radius:999px;font-size:12px">−25 แต้ม ✨</span>
+        <span>🎁🎁 ใช้ทั้ง 2 (ลด ${LOYALTY.REWARD_DISCOUNT_AMOUNT}฿ + เครื่องดื่ม)</span>
+        <span style="background:rgba(255,255,255,.25);padding:3px 10px;border-radius:999px;font-size:12px">−${LOYALTY.REWARD_DRINK_POINTS + LOYALTY.REWARD_DISCOUNT_POINTS} แต้ม ✨</span>
       </button>
       <div style="text-align:center;font-size:11px;color:#92400e;font-weight:700;padding:4px">⭐ คุ้มสุด — รับมูลค่ารวมสูงสุด</div>
     </div>
@@ -841,9 +846,25 @@ function showRedemptionModal(order, customer, opts) {
   const discountButton = canDiscount ? `
     <button onclick="applyDiscountReward('${order.id}')" style="width:100%;padding:14px;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:800;margin-bottom:8px;cursor:pointer;box-shadow:0 4px 12px rgba(22,163,74,.25);display:flex;justify-content:space-between;align-items:center">
       <span>💰 ลด ฿${Math.min(LOYALTY.REWARD_DISCOUNT_AMOUNT, remainingForDiscount)} จากยอด</span>
-      <span style="background:rgba(255,255,255,.2);padding:3px 10px;border-radius:999px;font-size:12px">−15 แต้ม</span>
+      <span style="background:rgba(255,255,255,.2);padding:3px 10px;border-radius:999px;font-size:12px">−${LOYALTY.REWARD_DISCOUNT_POINTS} แต้ม</span>
     </button>
   ` : '';
+
+  let foodButtons = '';
+  if (canFood) {
+    foodIds.forEach(foodId => {
+      const cat = MENU.find(c => c.items.some(i => i.id === foodId));
+      const food = cat?.items.find(i => i.id === foodId);
+      if (food) {
+        foodButtons += `
+          <button onclick="applyFoodReward('${order.id}', '${foodId}')" style="width:100%;padding:14px;background:linear-gradient(135deg,#ea580c,#c2410c);color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:800;margin-bottom:6px;cursor:pointer;box-shadow:0 3px 10px rgba(234,88,12,.2);display:flex;justify-content:space-between;align-items:center">
+            <span>🍟 ฟรี ${food.name} (฿${food.price})</span>
+            <span style="background:rgba(255,255,255,.2);padding:3px 10px;border-radius:999px;font-size:12px">−${foodPt} แต้ม</span>
+          </button>
+        `;
+      }
+    });
+  }
 
   let appliedList = '';
   if (redemptions.length > 0) {
@@ -853,7 +874,7 @@ function showRedemptionModal(order, customer, opts) {
         ${redemptions.map((r, idx) => `
           <div style="background:#f0fdf4;padding:10px 12px;border-radius:10px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;font-size:13px">
             <span style="font-weight:700;color:#166534">
-              ${r.type === 'drink' ? `🥤 ${r.label}` : `💰 ลด ฿${r.value}`}
+              ${r.type === 'drink' ? `🥤 ${r.label}` : r.type === 'food' ? `🍟 ${r.label}` : `💰 ลด ฿${r.value}`}
               <span style="color:#5c6982;font-weight:500;margin-left:6px">−${r.points_used} แต้ม</span>
             </span>
             <button onclick="removeRedemption('${order.id}', ${idx})" style="background:transparent;border:none;color:#dc2626;font-size:18px;cursor:pointer;padding:0 6px">×</button>
@@ -863,7 +884,7 @@ function showRedemptionModal(order, customer, opts) {
     `;
   }
 
-  const noRewardsAvailable = !canDrink && !canDiscount && redemptions.length === 0;
+  const noRewardsAvailable = !canDrink && !canDiscount && !canFood && redemptions.length === 0;
 
   const html = `
     <div style="position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:300;display:flex;align-items:flex-end;justify-content:center;padding:0" onclick="this.remove()">
@@ -889,13 +910,14 @@ function showRedemptionModal(order, customer, opts) {
         ${noRewardsAvailable ? `
           <div style="background:#fef3c7;color:#92400e;padding:14px;border-radius:10px;text-align:center;font-size:14px;margin-bottom:10px">
             ลูกค้ามี ${points} แต้ม · ยังไม่พอแลก<br>
-            <span style="font-size:12px;color:#5c6982">ต้องการ 10 แต้ม สำหรับฟรีเครื่องดื่ม / 15 แต้ม สำหรับลด 50฿</span>
+            <span style="font-size:12px;color:#5c6982">ต้องการ ${LOYALTY.REWARD_DRINK_POINTS} แต้ม ฟรีเครื่องดื่ม / ${LOYALTY.REWARD_DISCOUNT_POINTS} แต้ม ลด ${LOYALTY.REWARD_DISCOUNT_AMOUNT}฿${foodPt > 0 ? ` / ${foodPt} แต้ม ฟรีชุดอาหาร` : ''}</span>
           </div>
         ` : ''}
         ${comboButton}
         ${(canCombo && (canDrink || canDiscount)) ? '<div style="text-align:center;color:#9ca3af;font-size:11px;margin:6px 0 10px">— หรือใช้แยก —</div>' : ''}
         ${discountButton}
         ${drinkButtons}
+        ${foodButtons}
         ${appliedList}
         ${phone ? `
           <a href="tel:${phone}" style="display:block;text-align:center;padding:12px;margin-top:10px;background:#fef3c7;color:#92400e;border:1.5px solid #f59e0b;border-radius:12px;font-size:14px;font-weight:700;text-decoration:none">
@@ -988,7 +1010,75 @@ async function applyDrinkReward(orderId, drinkId) {
     }
   }
 
-  toast(`🥤 ใช้ 10 แต้ม → ฟรี ${drink.name}`);
+  toast(`🥤 ใช้ ${LOYALTY.REWARD_DRINK_POINTS} แต้ม → ฟรี ${drink.name}`);
+  render();
+}
+
+async function applyFoodReward(orderId, foodId) {
+  const foodPt = Number(LOYALTY.REWARD_FOOD_POINTS) || 0;
+  const db = loadDB();
+  const orderSrc = cloudOrders !== null ? cloudOrders : db.pendingOrders;
+  const order = orderSrc.find(o => o.id === orderId);
+  if (!order) return;
+  const customer = getCustomerForOrder(order);
+  if (!customer) return toast('⚠️ ไม่พบลูกค้า');
+  if (foodPt <= 0) return toast('⚠️ ปิดรางวัลชุดอาหารอยู่');
+  if ((customer.points || 0) < foodPt) return toast('⚠️ แต้มไม่พอ');
+
+  const cat = MENU.find(c => c.items.some(i => i.id === foodId));
+  const food = cat?.items.find(i => i.id === foodId);
+  if (!food) return toast('⚠️ ไม่พบเมนูชุดอาหาร');
+
+  document.querySelectorAll('div[style*="z-index:300"]').forEach(el => el.remove());
+
+  const newItems = JSON.parse(JSON.stringify(order.items));
+  newItems.push({
+    id: food.id, name: food.name, mainName: food.name,
+    price: food.price, qty: 1, freeQty: 1, isReward: true, options: [], note: ''
+  });
+
+  if (!order.original_items) order.original_items = JSON.parse(JSON.stringify(order.items));
+  if (!order.original_total) order.original_total = order.total;
+
+  const redemptions = [...(order.redemptions || []), {
+    type: 'food', foodId: food.id, label: food.name,
+    points_used: foodPt, value: food.price,
+    at: new Date().toISOString()
+  }];
+  const newDiscount = redemptions.reduce((s, r) => s + r.value, 0);
+  const itemsSubtotal = newItems.reduce((s, it) => s + it.price * (it.qty - (it.freeQty || 0)), 0);
+
+  const updates = {
+    items: newItems,
+    original_items: order.original_items,
+    original_total: order.original_total,
+    redemptions,
+    discount: newDiscount,
+    total: itemsSubtotal
+  };
+
+  const local = db.pendingOrders.find(o => o.id === orderId);
+  if (local) Object.assign(local, updates);
+  saveDB(db);
+
+  customer.points = (customer.points || 0) - foodPt;
+  customer.food_redeemed_count = (customer.food_redeemed_count || 0) + 1;
+  db.customers[customer.id] = customer;
+  saveDB(db);
+
+  if (window.cloud) {
+    await window.cloud.updateOrder(orderId, updates);
+    if (window.cloud.incrementCustomerPoints) {
+      const _inc = window.cloud.increment;
+      await window.cloud.incrementCustomerPoints(customer.id, -foodPt, 0, {
+        food_redeemed_count: _inc ? _inc(1) : customer.food_redeemed_count
+      });
+    } else {
+      await window.cloud.saveCustomer(customer);
+    }
+  }
+
+  toast(`🍟 ใช้ ${foodPt} แต้ม → ฟรี ${food.name}`);
   render();
 }
 
@@ -1000,7 +1090,8 @@ function openComboPicker(orderId) {
   if (!order) return;
   const customer = getCustomerForOrder(order);
   if (!customer) return toast('⚠️ ไม่พบลูกค้า');
-  if ((customer.points || 0) < 25) return toast('⚠️ แต้มไม่พอ (ต้อง 25)');
+  const _comboPts = LOYALTY.REWARD_DRINK_POINTS + LOYALTY.REWARD_DISCOUNT_POINTS;
+  if ((customer.points || 0) < _comboPts) return toast(`⚠️ แต้มไม่พอ (ต้อง ${_comboPts})`);
 
   document.querySelectorAll('div[style*="z-index:300"]').forEach(el => el.remove());
 
@@ -1022,7 +1113,7 @@ function openComboPicker(orderId) {
         <div style="text-align:center;margin-bottom:14px">
           <div style="font-size:40px">🥤</div>
           <div style="font-size:17px;font-weight:800;color:#0a1530;margin-top:4px">เลือกเครื่องดื่มฟรี</div>
-          <div style="font-size:13px;color:#5c6982;margin-top:4px">ใช้ทั้ง 2 (ลด 50฿ + เครื่องดื่ม) · −25 แต้ม</div>
+          <div style="font-size:13px;color:#5c6982;margin-top:4px">ใช้ทั้ง 2 (ลด ${LOYALTY.REWARD_DISCOUNT_AMOUNT}฿ + เครื่องดื่ม) · −${LOYALTY.REWARD_DRINK_POINTS + LOYALTY.REWARD_DISCOUNT_POINTS} แต้ม</div>
         </div>
         ${drinkButtons}
         <button onclick="this.closest('div[style*=fixed]').remove()" style="width:100%;padding:12px;margin-top:10px;background:transparent;color:#6b7280;border:none;font-size:14px;cursor:pointer">ยกเลิก</button>
@@ -1041,7 +1132,7 @@ async function applyComboReward(orderId, drinkId) {
   // Small delay to ensure state is updated
   setTimeout(async () => {
     await applyDrinkReward(orderId, drinkId);
-    toast('🎁🎁 ใช้ครบ! ลด 50฿ + ฟรีเครื่องดื่ม (−25 แต้ม)');
+    toast(`🎁🎁 ใช้ครบ! ลด ${LOYALTY.REWARD_DISCOUNT_AMOUNT}฿ + ฟรีเครื่องดื่ม (−${LOYALTY.REWARD_DRINK_POINTS + LOYALTY.REWARD_DISCOUNT_POINTS} แต้ม)`);
   }, 200);
 }
 
@@ -1053,6 +1144,8 @@ async function applyDiscountReward(orderId) {
   const customer = getCustomerForOrder(order);
   if (!customer) return toast('⚠️ ไม่พบลูกค้า');
   if ((customer.points || 0) < LOYALTY.REWARD_DISCOUNT_POINTS) return toast('⚠️ แต้มไม่พอ');
+  const _minOrder = Number(LOYALTY.REWARD_DISCOUNT_MIN_ORDER) || 0;
+  if (_minOrder > 0 && (order.original_total || order.total) < _minOrder) return toast(`⚠️ ต้องสั่งครบ ฿${_minOrder} ก่อนใช้ส่วนลด`);
 
   document.querySelectorAll('div[style*="z-index:300"]').forEach(el => el.remove());
 
@@ -1108,7 +1201,7 @@ async function applyDiscountReward(orderId) {
     }
   }
 
-  toast(`💰 ใช้ 15 แต้ม → ลด ฿${discountValue}`);
+  toast(`💰 ใช้ ${LOYALTY.REWARD_DISCOUNT_POINTS} แต้ม → ลด ฿${discountValue}`);
   render();
 }
 
@@ -1124,10 +1217,11 @@ async function removeRedemption(orderId, idx) {
   document.querySelectorAll('div[style*="z-index:300"]').forEach(el => el.remove());
 
   let newItems = JSON.parse(JSON.stringify(order.items));
-  if (removed.type === 'drink') {
-    // Remove the free drink item (find from end — most recently added)
+  if (removed.type === 'drink' || removed.type === 'food') {
+    // Remove the free reward item (find from end — most recently added)
+    const rewardItemId = removed.type === 'drink' ? removed.drinkId : removed.foodId;
     for (let i = newItems.length - 1; i >= 0; i--) {
-      if (newItems[i].id === removed.drinkId && newItems[i].isReward && newItems[i].freeQty) {
+      if (newItems[i].id === rewardItemId && newItems[i].isReward && newItems[i].freeQty) {
         newItems.splice(i, 1);
         break;
       }

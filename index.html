@@ -7852,6 +7852,12 @@ function renderLoyaltyAdmin() {
         <label style="font-size:12px;color:#5c6982">💵 ส่วนลด (บาท)
           <input type="number" min="1" id="loy_discAmt" value="${Number(base.REWARD_DISCOUNT_AMOUNT) || 50}" style="width:100%;padding:7px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;margin-top:3px">
         </label>
+        <label style="font-size:12px;color:#5c6982">🧾 ส่วนลดเมื่อสั่งครบ (บาท, 0=ไม่จำกัด)
+          <input type="number" min="0" id="loy_discMin" value="${Number(base.REWARD_DISCOUNT_MIN_ORDER) || 0}" style="width:100%;padding:7px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;margin-top:3px">
+        </label>
+        <label style="font-size:12px;color:#5c6982">🍟 แลกชุดอาหาร (แต้ม, 0=ปิด)
+          <input type="number" min="0" id="loy_foodPts" value="${Number(base.REWARD_FOOD_POINTS) || 0}" style="width:100%;padding:7px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;margin-top:3px">
+        </label>
         <label style="font-size:12px;color:#5c6982">⭐ ทุก [xx] บาท = 1 แต้ม
           <input type="number" min="1" id="loy_perBaht" value="${base.POINTS_PER_BAHT ? Math.round(1 / Number(base.POINTS_PER_BAHT)) : 50}" style="width:100%;padding:7px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;margin-top:3px">
         </label>
@@ -7913,6 +7919,12 @@ function renderLoyaltyAdmin() {
                 <label style="font-size:11px;color:#5c6982">💵 ส่วนลด (บาท)
                   <input type="number" min="1" data-loy-promo-ov="${i}|REWARD_DISCOUNT_AMOUNT" value="${ov.REWARD_DISCOUNT_AMOUNT ?? ''}" placeholder="${base.REWARD_DISCOUNT_AMOUNT}" style="width:100%;padding:6px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;margin-top:2px">
                 </label>
+                <label style="font-size:11px;color:#5c6982">🧾 ส่วนลดเมื่อสั่งครบ (บาท)
+                  <input type="number" min="0" data-loy-promo-ov="${i}|REWARD_DISCOUNT_MIN_ORDER" value="${ov.REWARD_DISCOUNT_MIN_ORDER ?? ''}" placeholder="${base.REWARD_DISCOUNT_MIN_ORDER || 0}" style="width:100%;padding:6px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;margin-top:2px">
+                </label>
+                <label style="font-size:11px;color:#5c6982">🍟 แลกชุดอาหาร (แต้ม)
+                  <input type="number" min="0" data-loy-promo-ov="${i}|REWARD_FOOD_POINTS" value="${ov.REWARD_FOOD_POINTS ?? ''}" placeholder="${base.REWARD_FOOD_POINTS || 0}" style="width:100%;padding:6px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;margin-top:2px">
+                </label>
                 <label style="font-size:11px;color:#5c6982">⭐ ทุก [xx] บาท
                   <input type="number" min="1" data-loy-promo-perbaht="${i}" value="${ov.POINTS_PER_BAHT ? Math.round(1 / Number(ov.POINTS_PER_BAHT)) : ''}" placeholder="${base.POINTS_PER_BAHT ? Math.round(1 / Number(base.POINTS_PER_BAHT)) : 50}" style="width:100%;padding:6px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;margin-top:2px">
                 </label>
@@ -7925,12 +7937,15 @@ function renderLoyaltyAdmin() {
         `;
       }).join('');
 
+  const _effMin = Number(eff.REWARD_DISCOUNT_MIN_ORDER) || 0;
+  const _effFood = Number(eff.REWARD_FOOD_POINTS) || 0;
+  const effSummary = `${eff.REWARD_DRINK_POINTS} แต้มแลกฟรี · ${eff.REWARD_DISCOUNT_POINTS} แต้มลด ${eff.REWARD_DISCOUNT_AMOUNT}฿${_effMin > 0 ? ` (สั่งครบ ${_effMin}฿)` : ''}${_effFood > 0 ? ` · ${_effFood} แต้มแลกชุดอาหาร` : ''}`;
   const activeLine = active
     ? `<div style="background:linear-gradient(135deg,#dcfce7,#bbf7d0);border-left:4px solid #16a34a;padding:8px 12px;border-radius:8px;margin-bottom:10px;font-size:12px;color:#166534">
-         🟢 <b>กำลังใช้งาน:</b> ${escapeHtml(active.name || '(ไม่มีชื่อ)')} · ${eff.REWARD_DRINK_POINTS} แต้มแลกฟรี · ${eff.REWARD_DISCOUNT_POINTS} แต้มลด ${eff.REWARD_DISCOUNT_AMOUNT}฿
+         🟢 <b>กำลังใช้งาน:</b> ${escapeHtml(active.name || '(ไม่มีชื่อ)')} · ${effSummary}
        </div>`
     : `<div style="background:#f1f5f9;border-left:4px solid #94a3b8;padding:8px 12px;border-radius:8px;margin-bottom:10px;font-size:12px;color:#475569">
-         ⏸️ ไม่มีโปรโมชันที่กำลังใช้งาน · ใช้ค่าฐาน (${eff.REWARD_DRINK_POINTS} แต้มแลกฟรี · ${eff.REWARD_DISCOUNT_POINTS} แต้มลด ${eff.REWARD_DISCOUNT_AMOUNT}฿)
+         ⏸️ ไม่มีโปรโมชันที่กำลังใช้งาน · ใช้ค่าฐาน (${effSummary})
        </div>`;
 
   wrap.innerHTML = activeLine + baseBlock + `
@@ -7946,6 +7961,8 @@ async function saveLoyaltyBase() {
   const drinkPts = parseInt(document.getElementById('loy_drinkPts').value) || 10;
   const discPts = parseInt(document.getElementById('loy_discPts').value) || 15;
   const discAmt = parseInt(document.getElementById('loy_discAmt').value) || 50;
+  const discMin = parseInt(document.getElementById('loy_discMin').value) || 0;
+  const foodPts = parseInt(document.getElementById('loy_foodPts').value) || 0;
   const perBahtN = parseInt(document.getElementById('loy_perBaht').value) || 50;
   const signup = parseInt(document.getElementById('loy_signup').value) || 0;
   const drinkIds = Array.from(document.querySelectorAll('[data-loy-drink]'))
@@ -7954,6 +7971,8 @@ async function saveLoyaltyBase() {
     REWARD_DRINK_POINTS: drinkPts,
     REWARD_DISCOUNT_POINTS: discPts,
     REWARD_DISCOUNT_AMOUNT: discAmt,
+    REWARD_DISCOUNT_MIN_ORDER: discMin,
+    REWARD_FOOD_POINTS: foodPts,
     POINTS_PER_BAHT: 1 / perBahtN,
     SIGNUP_BONUS: signup,
     DRINK_REWARD_IDS: drinkIds,

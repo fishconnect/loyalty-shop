@@ -564,9 +564,16 @@ function renderDone(order, db) {
   const customer = db.customers[order.customer_id];
   const points = customer?.points || 0;
   const lifetime = customer?.lifetime_points || 0;
-  const DRINK_PT = 10, DISCOUNT_PT = 15;
+  const DRINK_PT = Number(window.LOYALTY?.REWARD_DRINK_POINTS) || 10;
+  const DISCOUNT_PT = Number(window.LOYALTY?.REWARD_DISCOUNT_POINTS) || 15;
+  const DISCOUNT_AMT = Number(window.LOYALTY?.REWARD_DISCOUNT_AMOUNT) || 50;
+  const DISCOUNT_MIN = Number(window.LOYALTY?.REWARD_DISCOUNT_MIN_ORDER) || 0;
+  const FOOD_PT = Number(window.LOYALTY?.REWARD_FOOD_POINTS) || 0;
+  const FOOD_ON = FOOD_PT > 0;
+  const discLabel = `ลด ${DISCOUNT_AMT}฿${DISCOUNT_MIN > 0 ? ` (สั่งครบ ${DISCOUNT_MIN}฿)` : ''}`;
   const canDrink = points >= DRINK_PT;
   const canDiscount = points >= DISCOUNT_PT;
+  const canFood = FOOD_ON && points >= FOOD_PT;
 
   // Recent orders (last 5)
   const myOrders = (db.pendingOrders || [])
@@ -599,10 +606,12 @@ function renderDone(order, db) {
   }).join('');
 
   let rewardBanner = '';
-  if (canDiscount) {
-    rewardBanner = `<div class="reward-banner"><div class="big">🎁 ใช้ 15 แต้ม → ลด 50฿ ในคราวหน้า!</div><div style="font-size:13px;font-weight:500">หรือ 10 แต้ม → ฟรีเครื่องดื่ม</div></div>`;
+  if (canFood) {
+    rewardBanner = `<div class="reward-banner"><div class="big">🍟 ใช้ ${FOOD_PT} แต้ม → ฟรีชุดเฟรนฟรายไก่ป๊อป!</div><div style="font-size:13px;font-weight:500">หรือ ${DISCOUNT_PT} แต้ม → ${discLabel} · ${DRINK_PT} แต้ม → ฟรีเครื่องดื่ม</div></div>`;
+  } else if (canDiscount) {
+    rewardBanner = `<div class="reward-banner"><div class="big">🎁 ใช้ ${DISCOUNT_PT} แต้ม → ${discLabel} ในคราวหน้า!</div><div style="font-size:13px;font-weight:500">หรือ ${DRINK_PT} แต้ม → ฟรีเครื่องดื่ม</div></div>`;
   } else if (canDrink) {
-    rewardBanner = `<div class="reward-banner"><div class="big">🥤 ใช้ 10 แต้ม → ฟรีเครื่องดื่ม!</div><div style="font-size:13px;font-weight:500">แจ้งทางร้านตอนสั่งคราวหน้า</div></div>`;
+    rewardBanner = `<div class="reward-banner"><div class="big">🥤 ใช้ ${DRINK_PT} แต้ม → ฟรีเครื่องดื่ม!</div><div style="font-size:13px;font-weight:500">แจ้งทางร้านตอนสั่งคราวหน้า</div></div>`;
   }
 
   document.getElementById('content').innerHTML = `
@@ -746,6 +755,14 @@ window.enableNotifications = enableNotifications;
 
 // Subscribe to real-time updates from cloud
 whenCloudReady(() => {
+  // 🎁 Apply admin-edited base + active promo overrides so the reward banner
+  //    reflects the live promotion (e.g. food-set reward, 30฿/100฿ discount).
+  if (window.cloud?.onLoyaltyConfig) {
+    window.cloud.onLoyaltyConfig(config => {
+      if (typeof window.applyLoyaltyConfig === 'function') window.applyLoyaltyConfig(config);
+      render();
+    });
+  }
   if (orderId) {
     window.cloud.onOrder(orderId, async order => {
       if (order) {

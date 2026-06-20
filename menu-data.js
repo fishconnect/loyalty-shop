@@ -919,6 +919,8 @@ window.LOYALTY = {
   REWARD_DRINK_POINTS: 10,           // 10 แต้ม = ฟรีเครื่องดื่ม
   REWARD_DISCOUNT_POINTS: 15,        // 15 แต้ม = ลด 50฿
   REWARD_DISCOUNT_AMOUNT: 50,
+  REWARD_DISCOUNT_MIN_ORDER: 0,      // ยอดขั้นต่ำที่แลกส่วนลดได้ (0 = ไม่จำกัด)
+  REWARD_FOOD_POINTS: 0,             // แต้มแลกชุดอาหาร (0 = ปิดรางวัลนี้)
   AWARD_ON_STATUS: 'delivered',
   // เครื่องดื่มที่ใช้แลกได้ด้วย 10 แต้ม
   // ชานมไต้หวั่น 25฿ + แก้วโอ่ง 20฿ ทุกตัว (ยกเว้นน้ำแข็งเปล่า)
@@ -929,6 +931,10 @@ window.LOYALTY = {
     'dr-203',  // น้ำเขียวแฟนต้าแก้วโอ่ง 20
     'dr-204',  // น้ำส้มแฟนต้าแก้วโอ่ง 20
     'dr-205',  // สไปร์แก้วโอ่ง 20
+  ],
+  // ชุดอาหารที่ใช้แลกได้ด้วย REWARD_FOOD_POINTS แต้ม
+  FOOD_REWARD_IDS: [
+    'tn-004',  // เฟร์นฟรายทอด + ไก่ป๊อบ 59
   ],
 };
 
@@ -1000,12 +1006,16 @@ window.applyLoyaltyConfig = function(config) {
   const merged = { ...window._loyaltyDefaults, ...base, ...overrides };
   // Coerce numeric fields so admin string input doesn't break math
   ['POINTS_PER_BAHT','SIGNUP_BONUS','REWARD_DRINK_POINTS',
-   'REWARD_DISCOUNT_POINTS','REWARD_DISCOUNT_AMOUNT'].forEach(k => {
+   'REWARD_DISCOUNT_POINTS','REWARD_DISCOUNT_AMOUNT',
+   'REWARD_DISCOUNT_MIN_ORDER','REWARD_FOOD_POINTS'].forEach(k => {
     if (merged[k] != null) merged[k] = Number(merged[k]);
   });
-  // Keep DRINK_REWARD_IDS as array
+  // Keep reward-item lists as arrays
   if (merged.DRINK_REWARD_IDS && !Array.isArray(merged.DRINK_REWARD_IDS)) {
     merged.DRINK_REWARD_IDS = [];
+  }
+  if (merged.FOOD_REWARD_IDS && !Array.isArray(merged.FOOD_REWARD_IDS)) {
+    merged.FOOD_REWARD_IDS = [];
   }
   window.LOYALTY = merged;
   window._activeLoyaltyPromo = active || null;
