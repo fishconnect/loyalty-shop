@@ -332,7 +332,7 @@ let cloudCustomers = null;
 // 🚀 APP_BUILD — keep in sync with /version.json and the other pages on EVERY
 //   logic deploy. Force-reloads the staff device onto new code (load + on focus)
 //   so kitchen-side guards stay current without a manual hard reload.
-const APP_BUILD = '20260623-1';
+const APP_BUILD = '20260623-2';
 async function checkAppVersion() {
   try {
     const r = await fetch('version.json?_=' + Date.now(), { cache: 'no-store' });
@@ -607,12 +607,17 @@ function render() {
             const _redUsed = o.redemptions.reduce((s, r) => s + r.points_used, 0);
             const _deficit = customerRedeemDeficit(o);
             if (_deficit > 0) {
-              // ⛔ Over-redemption detected — staff must NOT hand over the free item.
+              // ⛔ Over-redemption detected — completion is HARD-BLOCKED until
+              //    staff press "ข้ามคำเตือน" (ackOverRedeem) to consciously allow it.
+              const _acked = overRedeemAck.has(o.id);
               return `
-            <div style="margin-top:8px;padding:11px 12px;background:#fee2e2;border:2px solid #dc2626;border-radius:8px;font-size:13px;color:#991b1b;font-weight:800;animation:orderFlashKf 1s ease-in-out infinite">
+            <div style="margin-top:8px;padding:11px 12px;background:#fee2e2;border:2px solid #dc2626;border-radius:8px;font-size:13px;color:#991b1b;font-weight:800;${_acked ? '' : 'animation:orderFlashKf 1s ease-in-out infinite'}">
               ⛔ ลูกค้าแลกเกินสิทธิ์! แต้มสะสมจริงไม่พอ (ขาด ${_deficit} แต้ม)
               <div style="margin-top:4px;font-weight:700">🎁 ${_redLabels} <span style="color:#7f1d1d;font-weight:500">(-${_redUsed} แต้ม)</span></div>
-              <div style="margin-top:5px;font-size:12px;font-weight:800;background:#dc2626;color:#fff;padding:4px 8px;border-radius:6px;display:inline-block">⚠️ ห้ามแจกของฟรีนี้ — เช็กกับลูกค้าก่อน</div>
+              ${_acked
+                ? `<div style="margin-top:6px;font-size:12px;font-weight:800;background:#16a34a;color:#fff;padding:5px 9px;border-radius:6px;display:inline-block">✅ พนักงานยืนยันแจกฟรีแล้ว — ดำเนินการต่อได้</div>`
+                : `<div style="margin-top:5px;font-size:12px;font-weight:800;background:#dc2626;color:#fff;padding:5px 9px;border-radius:6px;display:inline-block">⚠️ ห้ามแจกของฟรีนี้ · ทำออเดอร์ต่อไม่ได้จนกว่าจะยืนยัน</div>
+                   <div style="margin-top:8px"><button onclick="event.stopPropagation();ackOverRedeem('${o.id}')" style="background:#fff;color:#dc2626;border:2px solid #dc2626;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:800;font-family:inherit;cursor:pointer">🔓 ข้ามคำเตือน — ยืนยันจะแจกฟรี</button></div>`}
             </div>`;
             }
             return `
@@ -681,6 +686,10 @@ async function advanceStatus(orderId, nextStatus) {
   const orderSrc = cloudOrders !== null ? cloudOrders : db.pendingOrders;
   const order = orderSrc.find(o => o.id === orderId);
   if (!order) return;
+
+  // 🚧 Over-redemption hard gate — can't move the order forward (toward handing
+  //    over the free item) until staff acknowledge the warning on the card.
+  if (blockedByOverRedeem(orderId)) return;
 
   // Final stage = delivered → MUST pick payment method first → then award points
   if (nextStatus === 'delivered') {
@@ -773,6 +782,8 @@ function openPaymentPicker(orderId) {
   const orderSrc = cloudOrders !== null ? cloudOrders : db.pendingOrders;
   const order = orderSrc.find(o => o.id === orderId);
   if (!order) return;
+  // 🚧 Over-redemption hard gate — block completing/charging until acknowledged.
+  if (blockedByOverRedeem(orderId)) return;
   _payOrderId = orderId;
   const isFactoryOrder = order.source === 'factory';
   const baseAmount = order.original_total || order.total;
@@ -824,6 +835,45 @@ function customerRedeemDeficit(order) {
   all.forEach(o => (o.redemptions || []).forEach(r => { redeemed += (r.points_used || 0); }));
   return Math.max(0, redeemed - cust.lifetime_points);
 }
+
+// Orders where staff EXPLICITLY pressed "ข้ามคำเตือน" to allow the free item
+// despite the over-redemption flag. Per-session (resets on reload) so a fresh
+// shift must consciously re-acknowledge — the safe default.
+const overRedeemAck = new Set();
+
+function _findOrder(orderId) {
+  const db = loadDB();
+  const src = cloudOrders !== null ? cloudOrders : (db.pendingOrders || []);
+  return src.find(o => o.id === orderId) || null;
+}
+
+// 🚧 HARD GATE — returns true (and warns) when an order carries an over-redeemed
+//   reward that staff have NOT acknowledged. Called at the top of every action
+//   that completes/advances the order, so an over-redemption can't be tapped
+//   through by accident — staff must press the override button first.
+function blockedByOverRedeem(orderId) {
+  const order = _findOrder(orderId);
+  if (!order) return false;
+  if (overRedeemAck.has(orderId)) return false;
+  if (customerRedeemDeficit(order) <= 0) return false;
+  toast('⛔ ออเดอร์นี้แลกเกินสิทธิ์ — กดปุ่ม "ข้ามคำเตือน" ในการ์ดก่อน');
+  return true;
+}
+
+// Staff explicitly override the block for ONE order (double-confirmed).
+function ackOverRedeem(orderId) {
+  const order = _findOrder(orderId);
+  if (!order) return;
+  const deficit = customerRedeemDeficit(order);
+  const labels = (order.redemptions || []).map(r => r.type === 'drink' ? `🥤 ${r.label}` : r.type === 'food' ? `🍟 ${r.label}` : `💰 ลด ฿${r.value}`).join(', ');
+  const ok = confirm(`⛔ ลูกค้าแลกเกินสิทธิ์ (ขาด ${deficit} แต้ม)\n\nของฟรีในออเดอร์นี้: ${labels}\nแต้มสะสมจริงของลูกค้าไม่พอ\n\nยืนยันว่าจะ "แจกของฟรีนี้" จริงไหม?\n\nOK = แจก (ปลดล็อก)\nCancel = ไม่แจก ไปคุยกับลูกค้าก่อน`);
+  if (ok) {
+    overRedeemAck.add(orderId);
+    toast('🔓 ปลดล็อกแล้ว — ดำเนินการต่อได้');
+    render();
+  }
+}
+window.ackOverRedeem = ackOverRedeem;
 function getRewardInfo(order) {
   const customer = getCustomerForOrder(order);
   if (!customer) return { points: 0, canDrink: false, canDiscount: false, customer: null };
