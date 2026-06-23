@@ -3798,11 +3798,19 @@ async function recomputePoints(customerId, opts) {
 
   const correctLifetime = signup + earned;
   const correctPoints = Math.max(0, correctLifetime - used);
+  // 🛡️ Over-redemption write-off — when redemptions exceed earnings the balance
+  //   clamps at 0 and the shop absorbs the difference. Stamping
+  //   points_writeoff_amount makes the stamp-card ledger reconcile back to 0
+  //   (a "📝 ทางร้านรับขาดทุน" row); without it the ledger ends negative while
+  //   the top balance shows 0 — the mismatch reported on 2026-06-23.
+  const correctWriteoff = Math.max(0, used - correctLifetime);
 
   const oldPoints = c.points || 0;
   const oldLifetime = c.lifetime_points || 0;
+  const oldWriteoff = Number(c.points_writeoff_amount || 0);
   const ptsDiff = correctPoints - oldPoints;
   const lifeDiff = correctLifetime - oldLifetime;
+  const woDiff = correctWriteoff - oldWriteoff;
 
   if (!silent) {
     const breakdown =
@@ -3813,18 +3821,22 @@ async function recomputePoints(customerId, opts) {
       `• ใช้แลกไป:        −${used}\n` +
       `─────────────────\n` +
       `• คงเหลือควรเป็น:  ${correctPoints} แต้ม\n` +
-      `• Lifetime ควรเป็น: ${correctLifetime} แต้ม\n\n` +
-      `📌 ปัจจุบัน:\n` +
+      `• Lifetime ควรเป็น: ${correctLifetime} แต้ม\n` +
+      (correctWriteoff > 0 ? `• ทางร้านรับขาดทุน: ${correctWriteoff} แต้ม (แลกเกินสิทธิ์)\n` : '') +
+      `\n📌 ปัจจุบัน:\n` +
       `• คงเหลือ: ${oldPoints}  (Δ ${ptsDiff >= 0 ? '+' : ''}${ptsDiff})\n` +
       `• Lifetime: ${oldLifetime}  (Δ ${lifeDiff >= 0 ? '+' : ''}${lifeDiff})\n\n` +
-      (ptsDiff === 0 && lifeDiff === 0 ? '✅ ตรงอยู่แล้ว ไม่ต้องแก้' : '⚠️ ตัวเลขเพี้ยน — ยืนยันแก้?');
-    if (ptsDiff === 0 && lifeDiff === 0) { alert(breakdown); return { points: correctPoints, lifetime: correctLifetime, drift: 0 }; }
+      (ptsDiff === 0 && lifeDiff === 0 && woDiff === 0 ? '✅ ตรงอยู่แล้ว ไม่ต้องแก้' : '⚠️ ตัวเลขเพี้ยน — ยืนยันแก้?');
+    if (ptsDiff === 0 && lifeDiff === 0 && woDiff === 0) { alert(breakdown); return { points: correctPoints, lifetime: correctLifetime, drift: 0 }; }
     if (!confirm(breakdown)) return null;
   }
 
   // Apply fix locally
   c.points = correctPoints;
   c.lifetime_points = correctLifetime;
+  // Stamp the write-off so the stamp-card ledger reconciles to 0 (0 = no row).
+  c.points_writeoff_amount = correctWriteoff;
+  if (correctWriteoff > 0 && !c.points_writeoff_at) c.points_writeoff_at = new Date().toISOString();
   // Don't touch signup_bonus_received — we used the order presence as the source of truth
   if (signup > 0) c.signup_bonus_received = true;
   saveDB();
