@@ -1332,6 +1332,35 @@ function findItem(id) {
 // so browsers re-fetch instead of using their 10-min cached copy. Without
 // this, replacing a photo wouldn't appear to the customer for up to 10 min.
 const MENU_IMG_VERSION = '20260503-6';
+
+// 🚀 APP_BUILD — bump on EVERY deploy that changes app logic, and set the same
+//   value in /version.json. A static site has no service worker, so a customer
+//   who keeps the web-app open (home-screen bookmark / long-lived tab) keeps
+//   running whatever JS was loaded that day — a deployed fix never reaches them
+//   until a hard reload. This gate fetches version.json (bypassing cache) on
+//   load and whenever the tab regains focus; if the server build differs from
+//   the running one, it force-reloads ONCE so integrity fixes (e.g. the reward
+//   over-redemption guard) actually take effect on the device.
+const APP_BUILD = '20260623-1';
+async function checkAppVersion() {
+  try {
+    const r = await fetch('version.json?_=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) return;
+    const data = await r.json();
+    const serverBuild = data && data.build;
+    if (!serverBuild || serverBuild === APP_BUILD) return;
+    // New build available — reload ONCE per target build per session so a CDN
+    // that briefly serves new version.json + old HTML can't cause a reload loop.
+    const key = 'app_reloaded_for_' + serverBuild;
+    if (!sessionStorage.getItem(key)) {
+      sessionStorage.setItem(key, '1');
+      location.reload();
+    }
+  } catch (e) { /* offline / fetch blocked — ignore, try again on next focus */ }
+}
+document.addEventListener('DOMContentLoaded', checkAppVersion);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkAppVersion(); });
+
 function imgSrc(it) {
   if (it.image) return it.image;            // base64 doesn't need versioning
   return `assets/menu/${it.id}.jpg?v=${MENU_IMG_VERSION}`;
@@ -3634,10 +3663,12 @@ async function submitOrder() {
   //    reward their TRUE balance couldn't cover. We trust cloud for points /
   //    lifetime / redeem-counters and keep local only for profile fields.
   //    Runs for EVERY phone customer, not just first-sight-on-this-device.
+  let cloudBalanceConfirmed = false;   // did we actually read the real balance this submit?
   if (phone && window.cloud?.getCustomer) {
     try {
       const cloudCust = await window.cloud.getCustomer(phone);
       if (cloudCust) {
+        cloudBalanceConfirmed = true;   // we have the authoritative doc in hand
         if (!customer) {
           customer = cloudCust;
           db.customers[phone] = cloudCust; // first sight on this device — mirror whole doc
@@ -3755,13 +3786,26 @@ async function submitOrder() {
         (cartRewards.useDrink    ? (Number(LOYALTY.REWARD_DRINK_POINTS) || 0)    : 0)
       + (cartRewards.useDiscount ? (Number(LOYALTY.REWARD_DISCOUNT_POINTS) || 0) : 0)
       + (cartRewards.useFood     ? (Number(LOYALTY.REWARD_FOOD_POINTS) || 0)     : 0);
-    const _have = customer.points || 0;
-    if (_needTotal > 0 && _needTotal > _have) {
-      resetCartRewards();
-      renderRewardsBox();
-      renderOrderBreakdown();
-      toast(`⚠️ แต้มไม่พอแลกรางวัล (มี ${_have} แต้ม) — เอารางวัลออกให้แล้ว กรุณากดสั่งอีกครั้ง`, true);
-      return;
+    if (_needTotal > 0) {
+      // 🔒 FAIL-CLOSED — if we could NOT confirm the real cloud balance this
+      //    submit (cloud unavailable / read failed), refuse to redeem rather
+      //    than trust a possibly-stale local cache. The order still goes through
+      //    without the reward; the customer can retry when back online.
+      if (!cloudBalanceConfirmed) {
+        resetCartRewards();
+        renderRewardsBox();
+        renderOrderBreakdown();
+        toast('⚠️ เช็กแต้มไม่สำเร็จ (เน็ตไม่เสถียร) — เอารางวัลออกให้ก่อน ลองแลกใหม่อีกครั้ง', true);
+        return;
+      }
+      const _have = customer.points || 0;
+      if (_needTotal > _have) {
+        resetCartRewards();
+        renderRewardsBox();
+        renderOrderBreakdown();
+        toast(`⚠️ แต้มไม่พอแลกรางวัล (มี ${_have} แต้ม) — เอารางวัลออกให้แล้ว กรุณากดสั่งอีกครั้ง`, true);
+        return;
+      }
     }
   }
 

@@ -1,0 +1,4 @@
+{
+  "build": "20260623-1",
+  "note": "Bump this AND the APP_BUILD constant in menu.html together on every logic deploy. Customer devices fetch this (no-store) to force-reload onto new code."
+}
