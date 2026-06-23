@@ -53,8 +53,17 @@ service cloud.firestore {
       allow create: if request.resource.data.keys().hasAll(['name'])
                     && request.resource.data.name is string
                     && request.resource.data.name.size() < 100;
+      // 🛡️ Server-side backstop: a customer's balance can never be written
+      //    negative, no matter how stale/buggy the client is. The app already
+      //    clamps points at 0, so legit writes pass; this just rejects any
+      //    attempt (incl. FieldValue.increment results) that would leave
+      //    points / lifetime_points below zero.
       allow update: if request.resource.data.name is string
-                    && request.resource.data.name.size() < 100;
+                    && request.resource.data.name.size() < 100
+                    && (!('points' in request.resource.data)
+                        || request.resource.data.points >= 0)
+                    && (!('lifetime_points' in request.resource.data)
+                        || request.resource.data.lifetime_points >= 0);
       // Customers should never be hard-deleted (use anonymize tool instead)
       allow delete: if false;
     }
