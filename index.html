@@ -1665,14 +1665,18 @@ function getCustomer(id) { return db.customers[id] || null; }
 function rewardsAvailable(c) {
   if (!c) return 0;
   const goal = db.settings.goal || 20;
-  return Math.floor(c.total_boxes / goal) - c.redeemed_count;
+  // ⛑️ Null-safe: customers who only earn points (never the box/stamp system)
+  //    have no total_boxes/redeemed_count → these were undefined, making the
+  //    detail view show "undefined แลกไป · NaN สิทธิ์ฟรี".
+  return Math.floor((c.total_boxes || 0) / goal) - (c.redeemed_count || 0);
 }
 
 function progressToNext(c) {
   const goal = db.settings.goal || 20;
   if (!c) return { current: 0, goal, pct: 0 };
-  const earnedRewards = Math.floor(c.total_boxes / goal);
-  const remainder = c.total_boxes - earnedRewards * goal;
+  const boxes = c.total_boxes || 0;
+  const earnedRewards = Math.floor(boxes / goal);
+  const remainder = boxes - earnedRewards * goal;
   const display = (rewardsAvailable(c) > 0 && remainder === 0) ? goal : remainder;
   return { current: display, goal, pct: Math.min(100, (display / goal) * 100) };
 }
@@ -3661,8 +3665,8 @@ function renderCustomerDetail() {
         <div class="progress-text">${prog.current} / ${prog.goal} กล่อง</div>
       </div>
       <div class="stat" style="margin-top:10px">
-        <div class="stat-box"><div class="num">${c.total_boxes}</div><div class="lbl">สะสมรวม</div></div>
-        <div class="stat-box"><div class="num">${c.redeemed_count}</div><div class="lbl">แลกไป</div></div>
+        <div class="stat-box"><div class="num">${c.total_boxes || 0}</div><div class="lbl">สะสมรวม</div></div>
+        <div class="stat-box"><div class="num">${c.redeemed_count || 0}</div><div class="lbl">แลกไป</div></div>
         <div class="stat-box"><div class="num" style="color:${r>0?'#16a34a':'#1652F0'}">${r}</div><div class="lbl">สิทธิ์ฟรี</div></div>
       </div>
       ${r > 0 ? `<button class="btn-success" style="width:100%;margin-top:8px" onclick="redeem('${c.id}')">🎁 แลกข้าวฟรี 1 กล่อง</button>` : ''}
