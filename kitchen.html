@@ -329,6 +329,24 @@ let lastPendingCount = 0;
 let cloudOrders = null; // null = not yet loaded; otherwise array
 let cloudCustomers = null;
 
+// 🚀 APP_BUILD — keep in sync with /version.json and the other pages on EVERY
+//   logic deploy. Force-reloads the staff device onto new code (load + on focus)
+//   so kitchen-side guards stay current without a manual hard reload.
+const APP_BUILD = '20260623-1';
+async function checkAppVersion() {
+  try {
+    const r = await fetch('version.json?_=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) return;
+    const data = await r.json();
+    const serverBuild = data && data.build;
+    if (!serverBuild || serverBuild === APP_BUILD) return;
+    const key = 'app_reloaded_for_' + serverBuild;
+    if (!sessionStorage.getItem(key)) { sessionStorage.setItem(key, '1'); location.reload(); }
+  } catch (e) { /* offline — retry on next focus */ }
+}
+document.addEventListener('DOMContentLoaded', checkAppVersion);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkAppVersion(); });
+
 function loadDB() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -584,12 +602,25 @@ function render() {
             </div>
           `;}).join('')}
           ${o.note ? `<div class="order-note"><b>หมายเหตุรวม:</b> ${o.note}</div>` : ''}
-          ${(o.redemptions && o.redemptions.length) ? `
+          ${(o.redemptions && o.redemptions.length) ? (() => {
+            const _redLabels = o.redemptions.map(r => r.type === 'drink' ? `🥤 ${r.label}` : r.type === 'food' ? `🍟 ${r.label}` : `💰 ลด ฿${r.value}`).join(' · ');
+            const _redUsed = o.redemptions.reduce((s, r) => s + r.points_used, 0);
+            const _deficit = customerRedeemDeficit(o);
+            if (_deficit > 0) {
+              // ⛔ Over-redemption detected — staff must NOT hand over the free item.
+              return `
+            <div style="margin-top:8px;padding:11px 12px;background:#fee2e2;border:2px solid #dc2626;border-radius:8px;font-size:13px;color:#991b1b;font-weight:800;animation:orderFlashKf 1s ease-in-out infinite">
+              ⛔ ลูกค้าแลกเกินสิทธิ์! แต้มสะสมจริงไม่พอ (ขาด ${_deficit} แต้ม)
+              <div style="margin-top:4px;font-weight:700">🎁 ${_redLabels} <span style="color:#7f1d1d;font-weight:500">(-${_redUsed} แต้ม)</span></div>
+              <div style="margin-top:5px;font-size:12px;font-weight:800;background:#dc2626;color:#fff;padding:4px 8px;border-radius:6px;display:inline-block">⚠️ ห้ามแจกของฟรีนี้ — เช็กกับลูกค้าก่อน</div>
+            </div>`;
+            }
+            return `
             <div style="margin-top:8px;padding:8px 10px;background:#dcfce7;border-radius:6px;font-size:13px;color:#166534;font-weight:700">
-              🎁 ใช้แต้ม: ${o.redemptions.map(r => r.type === 'drink' ? `🥤 ${r.label}` : r.type === 'food' ? `🍟 ${r.label}` : `💰 ลด ฿${r.value}`).join(' · ')}
-              <span style="margin-left:6px;color:#5c6982;font-weight:500">(รวม -${o.redemptions.reduce((s,r)=>s+r.points_used,0)} แต้ม)</span>
-            </div>
-          ` : ''}
+              🎁 ใช้แต้ม: ${_redLabels}
+              <span style="margin-left:6px;color:#5c6982;font-weight:500">(รวม -${_redUsed} แต้ม)</span>
+            </div>`;
+          })() : ''}
         </div>
         <div class="order-foot">
           <span style="color:#6b7280;font-size:13px">ยอด ฿${o.total} = ${window.calcOrderEarningPoints ? window.calcOrderEarningPoints(o) : window.calcPointsFromAmount(o.total)} แต้ม</span>
@@ -771,6 +802,27 @@ function getCustomerForOrder(order) {
   let customer = db.customers[order.customer_id];
   if (!customer && cloudCustomers && cloudCustomers[order.customer_id]) customer = cloudCustomers[order.customer_id];
   return customer || null;
+}
+
+// 🛡️ SERVER-SIDE-OF-THE-COUNTER GUARD — runs on the staff device (which the
+//   owner controls and can always keep updated), using authoritative cloud
+//   data the kitchen already holds. A customer can only ever spend what they
+//   EARNED: lifetime_points is monotonic (every point ever credited, incl. the
+//   +5 signup) and total redeemed = Σ points_used across ALL their orders. If
+//   redeemed > lifetime, they've taken more free rewards than they earned —
+//   regardless of how stale their phone's app is. Returns the point deficit
+//   (0 = fine). We only judge when we actually have their lifetime figure, so
+//   missing/loading data never raises a false alarm.
+function customerRedeemDeficit(order) {
+  const phone = (order.customer_phone || '').replace(/\D/g, '');
+  const cust = (cloudCustomers && (cloudCustomers[phone] || cloudCustomers[order.customer_id])) || null;
+  if (!cust || typeof cust.lifetime_points !== 'number') return 0; // can't verify → stay silent
+  const all = (cloudOrders || []).filter(o =>
+    (phone && (o.customer_phone || '').replace(/\D/g, '') === phone) ||
+    (order.customer_id && o.customer_id === order.customer_id));
+  let redeemed = 0;
+  all.forEach(o => (o.redemptions || []).forEach(r => { redeemed += (r.points_used || 0); }));
+  return Math.max(0, redeemed - cust.lifetime_points);
 }
 function getRewardInfo(order) {
   const customer = getCustomerForOrder(order);
