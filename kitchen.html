@@ -332,7 +332,7 @@ let cloudCustomers = null;
 // 🚀 APP_BUILD — keep in sync with /version.json and the other pages on EVERY
 //   logic deploy. Force-reloads the staff device onto new code (load + on focus)
 //   so kitchen-side guards stay current without a manual hard reload.
-const APP_BUILD = '20260623-2';
+const APP_BUILD = '20260623-3';
 async function checkAppVersion() {
   try {
     const r = await fetch('version.json?_=' + Date.now(), { cache: 'no-store' });
@@ -833,7 +833,12 @@ function customerRedeemDeficit(order) {
     (order.customer_id && o.customer_id === order.customer_id));
   let redeemed = 0;
   all.forEach(o => (o.redemptions || []).forEach(r => { redeemed += (r.points_used || 0); }));
-  return Math.max(0, redeemed - cust.lifetime_points);
+  // "Allowed" = points earned (lifetime) + points the shop has already absorbed
+  //   via write-off. Once an over-redemption is written off it's SETTLED, so it
+  //   must stop flagging — otherwise the customer is blocked forever for a debt
+  //   the shop already cleared.
+  const allowed = cust.lifetime_points + (Number(cust.points_writeoff_amount) || 0);
+  return Math.max(0, redeemed - allowed);
 }
 
 // Orders where staff EXPLICITLY pressed "ข้ามคำเตือน" to allow the free item
@@ -854,6 +859,9 @@ function _findOrder(orderId) {
 function blockedByOverRedeem(orderId) {
   const order = _findOrder(orderId);
   if (!order) return false;
+  // Only orders that actually hand over a free reward can be over-redemptions —
+  // a plain paid order must never be blocked just because of past history.
+  if (!(order.redemptions || []).length) return false;
   if (overRedeemAck.has(orderId)) return false;
   if (customerRedeemDeficit(order) <= 0) return false;
   toast('⛔ ออเดอร์นี้แลกเกินสิทธิ์ — กดปุ่ม "ข้ามคำเตือน" ในการ์ดก่อน');
