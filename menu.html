@@ -1341,7 +1341,7 @@ const MENU_IMG_VERSION = '20260503-6';
 //   load and whenever the tab regains focus; if the server build differs from
 //   the running one, it force-reloads ONCE so integrity fixes (e.g. the reward
 //   over-redemption guard) actually take effect on the device.
-const APP_BUILD = '20260623-3';
+const APP_BUILD = '20260712-1';
 async function checkAppVersion() {
   try {
     const r = await fetch('version.json?_=' + Date.now(), { cache: 'no-store' });
@@ -2022,6 +2022,7 @@ whenCloudReady(async () => {
       updateCartBar();
       renderHeroChips();
       checkShopClosedOverlay();
+      try { maybePromoPopup(); } catch (e) {}
     });
     // 🖼️ Listen for image updates from menu_images collection
     if (window.cloud?.onMenuImages) {
@@ -2032,6 +2033,7 @@ whenCloudReady(async () => {
         EFFECTIVE_MENU = window.applyMenuConfig(menuConfig);
         if (!isFactoryMode) window._regularEffectiveMenu = EFFECTIVE_MENU;
         renderMenu();
+        try { maybePromoPopup(); } catch (e) {}
       });
     }
   }
@@ -2077,6 +2079,63 @@ function _mergeImagesInto(cfg, imagesById) {
     if (!cfg.overrides[id]) cfg.overrides[id] = {};
     cfg.overrides[id].image = dataUrl;
   });
+}
+
+// 📣 Promo popup — dismissible full-screen advert the owner uploads from the
+//    admin page. Shows ONCE per page-load (owner chose "เด้งทุกครั้งที่เปิดหน้า"):
+//    after the customer taps ✕ / the backdrop it stays closed until reload.
+//    Image lives in menu_images/__promo__ (via window._menuImagesCache); the
+//    on/off switch is menuConfig.promoPopup.enabled. Never shows on the staff
+//    walk-in terminal (mode=shop) or the factory menu.
+window._promoShownThisLoad = false;
+function maybePromoPopup() {
+  if (window._promoShownThisLoad) return;
+  if (document.getElementById('promoPopupOverlay')) return;
+  const _mode = new URLSearchParams(location.search).get('mode');
+  if (_mode === 'shop' || (typeof isFactoryMode !== 'undefined' && isFactoryMode)) return;
+
+  const cfg = (typeof menuConfig === 'object' && menuConfig)
+            ? menuConfig
+            : JSON.parse(localStorage.getItem('menuConfig') || '{}');
+  if (!cfg.promoPopup || cfg.promoPopup.enabled !== true) return;
+
+  const img = window._menuImagesCache && window._menuImagesCache['promo_popup'];
+  if (!img) return; // enabled but no image uploaded yet → nothing to show
+
+  // Don't fight the holiday overlay — that full-screen block takes priority.
+  if (typeof isShopOnHoliday === 'function' && isShopOnHoliday()) return;
+
+  window._promoShownThisLoad = true;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'promoPopupOverlay';
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-label', 'โปรโมชัน');
+  overlay.style.cssText = [
+    'position:fixed', 'inset:0', 'z-index:9998',
+    'background:rgba(10,21,48,.72)', 'backdrop-filter:blur(4px)',
+    '-webkit-backdrop-filter:blur(4px)',
+    'display:flex', 'align-items:center', 'justify-content:center',
+    'padding:28px 18px', 'overflow-y:auto', 'overscroll-behavior:contain',
+  ].join(';');
+
+  const restore = () => {
+    // Only release the scroll-lock if the holiday overlay isn't also up.
+    if (!document.getElementById('shopHolidayOverlay')) document.body.style.overflow = '';
+  };
+  const closePopup = () => { overlay.remove(); restore(); };
+
+  overlay.innerHTML = `
+    <div style="position:relative;max-width:min(94vw,460px);width:100%;display:flex;justify-content:center">
+      <img src="${escAttr(img)}" alt="โปรโมชัน" onerror="this.style.display='none'" style="display:block;max-width:100%;max-height:82vh;width:auto;height:auto;border-radius:18px;box-shadow:0 16px 48px rgba(0,0,0,.32);background:#fff">
+      <button type="button" id="promoPopupClose" aria-label="ปิด" style="position:absolute;top:-14px;right:-14px;width:42px;height:42px;border-radius:999px;border:none;background:#fff;color:#0a1530;font-size:22px;font-weight:800;line-height:1;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.30);display:flex;align-items:center;justify-content:center">✕</button>
+    </div>`;
+
+  // Tap the dim backdrop (outside the image) to close.
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closePopup(); });
+  document.body.appendChild(overlay);
+  document.body.style.overflow = 'hidden';
+  document.getElementById('promoPopupClose')?.addEventListener('click', closePopup);
 }
 
 // 🏖️ Holiday-mode guard — used by addToCart / openCart / submitOrder to

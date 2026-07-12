@@ -1190,6 +1190,28 @@
     </div>
   </div>
 
+  <!-- 📣 Promo popup — full-screen dismissible advert the customer sees when
+       opening the menu. Image lives in menu_images/__promo__ (same store +
+       compression as menu photos); on/off is menuConfig.promoPopup.enabled. -->
+  <div class="card" id="promoPopupCard">
+    <h2>📣 ป๊อปอัปโฆษณา (เด้งหน้าเมนู)</h2>
+    <p class="hint">อัปโหลดรูปโปรโมชัน — ลูกค้าจะเห็นรูปเด้งเต็มจอตอนเปิดหน้าเมนู กด ✕ ปิดแล้วสั่งอาหารต่อได้</p>
+    <div class="toggle-row" style="margin:8px 0">
+      <input type="checkbox" id="promoPopupToggle" onchange="savePromoPopupEnabled()">
+      <label for="promoPopupToggle" style="margin:0;font-weight:800;font-size:15px">📣 เปิดป๊อปอัปโฆษณา</label>
+    </div>
+    <div id="promoPopupStatus" style="font-size:12px;color:#64748B;font-weight:600;margin-bottom:8px">ปิดอยู่ — ลูกค้าไม่เห็นป๊อปอัป</div>
+    <div id="promoPopupPreview" style="display:none;text-align:center;margin:8px 0">
+      <img id="promoPopupPreviewImg" alt="ตัวอย่างรูปโฆษณา" style="max-width:100%;max-height:260px;border-radius:12px;border:1px solid #E2E8F0;background:#F8FAFC">
+    </div>
+    <button class="btn-primary" onclick="pickPromoPopupImage()" style="width:100%;background:linear-gradient(135deg,#7c3aed,#5b21b6)">🖼️ อัปโหลด / เปลี่ยนรูป</button>
+    <button class="btn-secondary" id="promoPopupRemoveBtn" onclick="removePromoPopupImage()" style="width:100%;margin-top:6px;display:none;background:#fee2e2;color:#b91c1c;border:1.5px solid #fca5a5">🗑️ ลบรูป</button>
+    <div class="hint" style="font-size:11px;margin-top:8px;line-height:1.5">
+      💡 แนะนำรูปแนวตั้งหรือจัตุรัส · ระบบย่อรูปอัตโนมัติให้โหลดไว · เปลี่ยนรูปได้ทุกวัน (เช่น "วันนี้มีลูกชิ้นปิ้ง 🍢")<br>
+      ⭐ อัปโหลดรูปแล้วระบบจะ<b>เปิดใช้งานให้อัตโนมัติ</b> · กดสวิตช์ปิดได้เมื่อไม่ต้องการโชว์
+    </div>
+  </div>
+
   <!-- 🏭 Factory menu manager — same item editor as regular, scoped to factoryConfig -->
   <div class="card">
     <h2>🏭 จัดการเมนูโรงงาน</h2>
@@ -1697,6 +1719,7 @@ document.querySelectorAll('.tab').forEach(t => {
       renderMenuManager();
       if (typeof renderFactoryMenuManager === 'function') try { renderFactoryMenuManager(); } catch (e) {}
       if (typeof renderPromoCardsList === 'function') try { renderPromoCardsList(); } catch (e) {}
+      if (typeof refreshPromoPopupStatus === 'function') try { refreshPromoPopupStatus(); } catch (e) {}
       if (typeof renderLoyaltyAdmin === 'function') try { renderLoyaltyAdmin(); } catch (e) {}
       initPrinterToggle();
     }
@@ -7539,6 +7562,7 @@ function initPrinterToggle() {
   if (typeof refreshPaymentQrPreview === 'function') refreshPaymentQrPreview();
   // Init shop open/closed status
   if (typeof refreshShopOpenStatus === 'function') refreshShopOpenStatus();
+  if (typeof refreshPromoPopupStatus === 'function') refreshPromoPopupStatus();
   updateBTStatus();
   if (typeof initNotifSettingsUI === 'function') initNotifSettingsUI();
 }
@@ -7691,6 +7715,117 @@ function refreshShopHolidayStatus() {
       img.src = '';
     }
   }
+}
+
+// 📣 Promo popup — full-screen dismissible advert the customer sees on the menu
+//    page. Image is stored in the menu_images collection under the reserved id
+//    `__promo__` (same store + compression as menu photos, so it bypasses the
+//    1MB menuConfig doc limit). The on/off switch is menuConfig.promoPopup.enabled.
+// NB: must NOT start & end with "__" — Firestore reserves those ids/field names.
+const PROMO_POPUP_IMAGE_ID = 'promo_popup';
+
+async function savePromoPopupEnabled() {
+  const checked = document.getElementById('promoPopupToggle').checked;
+  const cfg = JSON.parse(localStorage.getItem('menuConfig') || '{"overrides":{},"custom":[]}');
+  cfg.promoPopup = Object.assign({}, cfg.promoPopup, { enabled: !!checked });
+  localStorage.setItem('menuConfig', JSON.stringify(cfg));
+  if (typeof menuConfig === 'object' && menuConfig) menuConfig.promoPopup = cfg.promoPopup;
+  if (window.cloud?.saveMenuConfig) { try { await window.cloud.saveMenuConfig(cfg); } catch (e) {} }
+  refreshPromoPopupStatus();
+  if (typeof toast === 'function') {
+    const hasImg = !!(window._menuImagesCache && window._menuImagesCache[PROMO_POPUP_IMAGE_ID]);
+    if (checked && !hasImg) toast('📣 เปิดแล้ว — แต่ยังไม่มีรูป กรุณาอัปโหลดรูปโฆษณา');
+    else toast(checked ? '📣 เปิดป๊อปอัปโฆษณาแล้ว — ลูกค้าจะเห็นตอนเปิดหน้าเมนู' : '✅ ปิดป๊อปอัปโฆษณาแล้ว');
+  }
+}
+
+function pickPromoPopupImage() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.style.display = 'none';
+  document.body.appendChild(input);
+  const cleanup = () => { try { input.remove(); } catch (e) {} };
+  input.onchange = async (e) => {
+    try {
+      const file = e.target.files?.[0];
+      if (!file) { cleanup(); return; }
+      const lname = (file.name || '').toLowerCase();
+      if (file.type === 'image/heic' || file.type === 'image/heif'
+          || lname.endsWith('.heic') || lname.endsWith('.heif')) {
+        alert('⚠️ ไฟล์ HEIC ไม่รองรับ\n\nบน iPhone → Settings → Camera → Formats → Most Compatible\nแล้วถ่ายรูปใหม่ครับ');
+        cleanup(); return;
+      }
+      const fileMB = file.size / 1024 / 1024;
+      if (fileMB > IMG_MAX_FILE_SIZE_MB) {
+        alert(`⚠️ ไฟล์ใหญ่เกินไป\n\nไฟล์ของคุณ: ${fileMB.toFixed(1)} MB\nสูงสุดที่รับได้: ${IMG_MAX_FILE_SIZE_MB} MB\n\nกรุณาเลือกรูปเล็กกว่านี้`);
+        cleanup(); return;
+      }
+      const st = document.getElementById('promoPopupStatus');
+      if (st) { st.textContent = '⏳ กำลังประมวลผลรูป...'; st.style.color = '#1652F0'; }
+      // Larger target width than menu items (the popup shows big); the
+      // compressor still caps output under ~250KB so it fits the Firestore
+      // per-doc limit.
+      const dataUrl = await compressImageToDataURL(file, 800, 0.6);
+      if (window.cloud?.saveMenuImage) {
+        const ok = await window.cloud.saveMenuImage(PROMO_POPUP_IMAGE_ID, dataUrl);
+        if (!ok) alert('⚠️ บันทึกรูปขึ้นคลาวด์ไม่สำเร็จ — ลองใหม่อีกครั้ง');
+      }
+      window._menuImagesCache = window._menuImagesCache || {};
+      window._menuImagesCache[PROMO_POPUP_IMAGE_ID] = dataUrl;
+      // Auto-enable on upload so the picture actually shows without a 2nd tap.
+      const cfg = JSON.parse(localStorage.getItem('menuConfig') || '{"overrides":{},"custom":[]}');
+      cfg.promoPopup = Object.assign({}, cfg.promoPopup, { enabled: true });
+      localStorage.setItem('menuConfig', JSON.stringify(cfg));
+      if (typeof menuConfig === 'object' && menuConfig) menuConfig.promoPopup = cfg.promoPopup;
+      if (window.cloud?.saveMenuConfig) { try { await window.cloud.saveMenuConfig(cfg); } catch (e) {} }
+      const kb = Math.round(dataUrl.length / 1024);
+      if (typeof toast === 'function') toast(`✅ อัปโหลดรูปโฆษณาแล้ว · ${kb} KB — เปิดใช้งานอัตโนมัติ`);
+      refreshPromoPopupStatus();
+    } catch (err) {
+      console.error('[promo] image failed:', err);
+      alert('⚠️ ใช้รูปนี้ไม่ได้\n\n' + (err?.message || err) + '\n\nลองรูปอื่น หรือลด resolution ก่อน');
+      refreshPromoPopupStatus();
+    } finally { cleanup(); }
+  };
+  setTimeout(cleanup, 120000); // safety cleanup after 2 min
+  input.click();
+}
+
+async function removePromoPopupImage() {
+  if (!confirm('ลบรูปโฆษณา? ป๊อปอัปจะไม่แสดงจนกว่าจะอัปโหลดรูปใหม่')) return;
+  if (window.cloud?.deleteMenuImage) { try { await window.cloud.deleteMenuImage(PROMO_POPUP_IMAGE_ID); } catch (e) {} }
+  if (window._menuImagesCache) delete window._menuImagesCache[PROMO_POPUP_IMAGE_ID];
+  // Turn the popup off too so an "enabled but empty" state can't linger.
+  const cfg = JSON.parse(localStorage.getItem('menuConfig') || '{"overrides":{},"custom":[]}');
+  cfg.promoPopup = Object.assign({}, cfg.promoPopup, { enabled: false });
+  localStorage.setItem('menuConfig', JSON.stringify(cfg));
+  if (typeof menuConfig === 'object' && menuConfig) menuConfig.promoPopup = cfg.promoPopup;
+  if (window.cloud?.saveMenuConfig) { try { await window.cloud.saveMenuConfig(cfg); } catch (e) {} }
+  if (typeof toast === 'function') toast('🗑️ ลบรูปโฆษณาแล้ว');
+  refreshPromoPopupStatus();
+}
+
+function refreshPromoPopupStatus() {
+  const t   = document.getElementById('promoPopupToggle');
+  const s   = document.getElementById('promoPopupStatus');
+  const pv  = document.getElementById('promoPopupPreview');
+  const img = document.getElementById('promoPopupPreviewImg');
+  const rm  = document.getElementById('promoPopupRemoveBtn');
+  if (!t || !s) return;
+  const cfg = JSON.parse(localStorage.getItem('menuConfig') || '{}');
+  const on  = !!(cfg.promoPopup && cfg.promoPopup.enabled === true);
+  const dataUrl = window._menuImagesCache && window._menuImagesCache[PROMO_POPUP_IMAGE_ID];
+  t.checked = on;
+  if (pv && img) {
+    if (dataUrl) { img.src = dataUrl; pv.style.display = 'block'; }
+    else { pv.style.display = 'none'; img.src = ''; }
+  }
+  if (rm) rm.style.display = dataUrl ? 'block' : 'none';
+  if (on && dataUrl)       { s.innerHTML = '📣 เปิดอยู่ · ลูกค้าเห็นป๊อปอัปตอนเปิดหน้าเมนู'; s.style.color = '#7c3aed'; }
+  else if (on && !dataUrl)  { s.innerHTML = 'ℹ️ เปิดอยู่แต่ยังไม่มีรูป — กรุณาอัปโหลดรูป'; s.style.color = '#B45309'; }
+  else if (!on && dataUrl)  { s.innerHTML = 'ปิดอยู่ · มีรูปพร้อมแล้ว เปิดสวิตช์เพื่อแสดง'; s.style.color = '#64748B'; }
+  else                      { s.innerHTML = 'ปิดอยู่ — ลูกค้าไม่เห็นป๊อปอัป'; s.style.color = '#64748B'; }
 }
 
 // 📢 Promo strip editor — admin manages the cards that scroll on the customer
@@ -8970,6 +9105,9 @@ whenCloudReady(() => {
         try { renderMenuManager(); } catch (e) {}
         if (typeof renderFactoryMenuManager === 'function') try { renderFactoryMenuManager(); } catch (e) {}
       }
+      // 📣 Keep the promo-popup preview + toggle in sync when the __promo__
+      //    image is added/removed from another device.
+      if (typeof refreshPromoPopupStatus === 'function') try { refreshPromoPopupStatus(); } catch (e) {}
     });
   }
   // 🎁 Loyalty config — admin-edited base + active promo overrides.
