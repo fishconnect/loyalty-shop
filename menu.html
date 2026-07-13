@@ -1341,7 +1341,7 @@ const MENU_IMG_VERSION = '20260503-6';
 //   load and whenever the tab regains focus; if the server build differs from
 //   the running one, it force-reloads ONCE so integrity fixes (e.g. the reward
 //   over-redemption guard) actually take effect on the device.
-const APP_BUILD = '20260712-1';
+const APP_BUILD = '20260713-1';
 async function checkAppVersion() {
   try {
     const r = await fetch('version.json?_=' + Date.now(), { cache: 'no-store' });
