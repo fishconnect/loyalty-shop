@@ -2,7 +2,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import {
   getFirestore, doc, collection, setDoc, getDoc, getDocs,
-  onSnapshot, query, orderBy, updateDoc, deleteDoc, where,
+  onSnapshot, query, orderBy, updateDoc, deleteDoc, where, limit,
   increment
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import {
@@ -223,8 +223,15 @@ window.cloud = {
       return true;
     } catch (e) { console.warn('[cloud] cancelOrderByCustomer', e); return false; }
   },
+  // 🪙 Live order feed — capped to the most recent 500 orders. A real-time
+  //    listener on the FULL orders collection re-reads every doc on each
+  //    attach/reconnect; with the collection at ~1600+ and several pages
+  //    (kitchen / menu / admin / status) subscribing, that burns the Firestore
+  //    daily read quota fast (and every read costs money on Blaze). 500 recent
+  //    orders covers all active + many days of "done today" for every live
+  //    view; full-history needs use getAllOrders() on demand instead.
   onOrders(cb) {
-    return onSnapshot(query(collection(fdb, 'orders'), orderBy('date', 'desc')), snap => {
+    return onSnapshot(query(collection(fdb, 'orders'), orderBy('date', 'desc'), limit(500)), snap => {
       const out = [];
       snap.forEach(d => out.push(d.data()));
       cb(out);

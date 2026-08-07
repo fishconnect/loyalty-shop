@@ -332,7 +332,7 @@ let cloudCustomers = null;
 // 🚀 APP_BUILD — keep in sync with /version.json and the other pages on EVERY
 //   logic deploy. Force-reloads the staff device onto new code (load + on focus)
 //   so kitchen-side guards stay current without a manual hard reload.
-const APP_BUILD = '20260713-1';
+const APP_BUILD = '20260713-2';
 async function checkAppVersion() {
   try {
     const r = await fetch('version.json?_=' + Date.now(), { cache: 'no-store' });
