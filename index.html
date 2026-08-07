@@ -3821,9 +3821,30 @@ async function recomputePoints(customerId, opts) {
   const c = getCustomer(customerId);
   if (!c) { if (!silent) toast('⚠️ ไม่พบลูกค้า', true); return null; }
 
-  // All orders attributed to this customer (legacy + pending)
+  // All orders attributed to this customer. ⚠️ MUST use the per-customer server
+  // query for COMPLETE history — db.pendingOrders is the live feed capped to the
+  // 500 most-recent orders, so recomputing from it undercounts earnings for
+  // anyone with older orders and WRITES a wrong (too-low) balance, corrupting
+  // long-time customers. If the full fetch is unavailable we ABORT rather than
+  // fall back to the capped feed — a bad write is worse than no write.
+  if (!window.cloud?.getOrdersForCustomer) {
+    console.warn('[recompute] getOrdersForCustomer unavailable — aborting to avoid capped-feed corruption');
+    if (!silent) toast('⚠️ cloud ไม่พร้อม — ยกเลิกคำนวณเพื่อกันข้อมูลพัง', true);
+    return null;
+  }
+  let _fetched = [];
+  try {
+    _fetched = await window.cloud.getOrdersForCustomer(customerId) || [];
+    if (c.phone && c.phone !== customerId) {
+      _fetched = _fetched.concat(await window.cloud.getOrdersForCustomer(c.phone) || []);
+    }
+  } catch (e) {
+    console.warn('[recompute] getOrdersForCustomer failed — aborting', e);
+    if (!silent) toast('⚠️ ดึงประวัติไม่สำเร็จ — ยกเลิกคำนวณ', true);
+    return null;
+  }
   const allOrders = [
-    ...((db.pendingOrders || []).filter(o => o.customer_id === customerId || (c.phone && o.customer_phone === c.phone))),
+    ..._fetched,
     ...((db.orders || []).filter(o => o.customer_id === customerId || (c.phone && o.customer_phone === c.phone)))
   ];
   // Dedup by id
