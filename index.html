@@ -1646,11 +1646,25 @@ function migrateFromV1(v1) {
   return out;
 }
 
+// 🪙 Tracks the last-synced JSON of each customer so saveDB() only writes the
+//    ones that actually changed. Seeded from the onCustomers cloud snapshot so
+//    we never re-write customers that are already in sync.
+let _syncedCustomerHash = Object.create(null);
 function saveDB() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
-  // Sync customers to cloud (fire-and-forget)
+  // Sync ONLY changed customers to cloud (fire-and-forget). This used to write
+  // EVERY customer on every saveDB() call — with hundreds of customers and
+  // dozens of admin actions/day that blew past Firestore's 20k/day write free
+  // tier (→ resource-exhausted, orders stop saving). A changed customer always
+  // produces a different JSON string, so genuine edits are never skipped.
   if (window.cloud?.ready) {
-    Object.values(db.customers).forEach(c => window.cloud.saveCustomer(c).catch(()=>{}));
+    Object.values(db.customers).forEach(c => {
+      if (!c || c.id == null) return;
+      const snap = JSON.stringify(c);
+      if (_syncedCustomerHash[c.id] === snap) return;   // unchanged → skip write
+      _syncedCustomerHash[c.id] = snap;
+      window.cloud.saveCustomer(c).catch(()=>{});
+    });
   }
 }
 
@@ -9600,6 +9614,12 @@ whenCloudReady(() => {
       }
     });
     localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); // direct save (no cloud loop)
+    // Seed the sync-hash from this cloud snapshot so saveDB() won't needlessly
+    // re-write customers that are already in sync — only genuine local edits
+    // after this differ and get written. (Prevents write-quota amplification.)
+    Object.keys(customers).forEach(id => {
+      if (db.customers[id]) _syncedCustomerHash[id] = JSON.stringify(db.customers[id]);
+    });
     if (typeof renderCustomers === 'function') try { renderCustomers(); } catch(e){}
     if (typeof renderCustomerDetail === 'function' && checkSelectedId) try { renderCustomerDetail(); } catch(e){}
     if (typeof renderReports === 'function') try { renderReports(); } catch(e){}
