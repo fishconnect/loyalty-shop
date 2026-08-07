@@ -3255,11 +3255,29 @@ function setCustFilter(f) {
   renderCustomers();
 }
 
+// 🗂️ Cache of the selected customer's COMPLETE order history, fetched with a
+//    per-customer server query. getCompletedOrdersForCustomer() prefers this
+//    over db.pendingOrders, which is capped to the 500 most-recent orders
+//    (read-quota fix) and would otherwise truncate the stamp-card ledger →
+//    missing "ซื้อ" rows and negative running balances.
+window._selCustOrders = { id: null, orders: null };
+async function loadFullOrdersForSelectedCustomer(id) {
+  if (!window.cloud?.getOrdersForCustomer) return;
+  try {
+    const orders = await window.cloud.getOrdersForCustomer(id);
+    if (checkSelectedId !== id) return;   // admin moved on while we fetched
+    window._selCustOrders = { id, orders: Array.isArray(orders) ? orders : [] };
+    renderCustomerDetail();
+  } catch (e) { console.warn('[customer-detail] full-orders fetch failed', e); }
+}
+
 function openCustomerDetail(id) {
   checkSelectedId = id;
+  window._selCustOrders = { id: null, orders: null };   // invalidate stale cache
   document.getElementById('cust-list-view').style.display = 'none';
   document.getElementById('cust-detail-view').style.display = 'block';
-  renderCustomerDetail();
+  renderCustomerDetail();                 // fast first paint (may be truncated)
+  loadFullOrdersForSelectedCustomer(id);  // then re-render with full history
   // Switch to ลูกค้า tab if not already there
   const custTab = document.querySelector('[data-page=customers]');
   if (!custTab.classList.contains('active')) custTab.click();
@@ -3268,6 +3286,7 @@ function openCustomerDetail(id) {
 
 function closeCustomerDetail() {
   checkSelectedId = null;
+  window._selCustOrders = { id: null, orders: null };
   document.getElementById('cust-list-view').style.display = 'block';
   document.getElementById('cust-detail-view').style.display = 'none';
   renderCustomers();
@@ -3283,8 +3302,17 @@ function shortDate(iso) {
 function getCompletedOrdersForCustomer(customerId) {
   const out = [];
   const seen = new Set();
-  // pendingOrders done → richer (has items, total, completed_at)
-  (db.pendingOrders || []).filter(o => o.customer_id === customerId && o.status === 'done').forEach(o => {
+  // Prefer this customer's COMPLETE history (fetched per-customer on select).
+  // db.pendingOrders is the live feed, capped to 500 recent orders — using it
+  // alone truncated the stamp-card ledger for anyone with older orders.
+  const _cache = window._selCustOrders;
+  const sourceOrders = (_cache && _cache.id === customerId && Array.isArray(_cache.orders))
+    ? _cache.orders
+    : (db.pendingOrders || []);
+  // Match by customer_id OR customer_phone (some orders set only one).
+  const _mine = o => o.customer_id === customerId || o.customer_phone === customerId;
+  // pendingOrders/full-history done → richer (has items, total, completed_at)
+  sourceOrders.filter(o => _mine(o) && o.status === 'done').forEach(o => {
     out.push({
       _src: 'pending', id: o.id,
       date: o.completed_at || o.date,

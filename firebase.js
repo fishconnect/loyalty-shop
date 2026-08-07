@@ -130,17 +130,21 @@ window.cloud = {
     } catch (e) { console.warn('[cloud] getAllOrders', e); return []; }
   },
 
-  // Fetch all orders that belong to a phone — for diagnostic display
+  // Fetch all orders that belong to a phone. Uses per-customer server-side
+  // queries (customer_id OR customer_phone) instead of scanning the whole
+  // orders collection — reads only this customer's ~dozen docs, not ~1600.
+  // Single-field equality queries need only Firestore's automatic indexes.
   async getOrdersForCustomer(phoneOrId) {
+    const target = String(phoneOrId);
     try {
-      const snap = await getDocs(collection(fdb, 'orders'));
-      const out = [];
-      const target = String(phoneOrId);
-      snap.forEach(d => {
-        const o = d.data();
-        if (o.customer_id === target || o.customer_phone === target) out.push(o);
-      });
-      return out;
+      const [byId, byPhone] = await Promise.all([
+        getDocs(query(collection(fdb, 'orders'), where('customer_id', '==', target))),
+        getDocs(query(collection(fdb, 'orders'), where('customer_phone', '==', target))),
+      ]);
+      const out = {};                       // dedupe by doc id (a doc can match both)
+      byId.forEach(d => { out[d.id] = d.data(); });
+      byPhone.forEach(d => { out[d.id] = d.data(); });
+      return Object.values(out);
     } catch (e) { console.warn('[cloud] getOrdersForCustomer', e); return []; }
   },
 
