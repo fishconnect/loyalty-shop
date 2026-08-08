@@ -1726,7 +1726,7 @@ document.querySelectorAll('.tab').forEach(t => {
     document.getElementById('page-' + t.dataset.page).classList.add('active');
     if (t.dataset.page === 'customers') renderCustomers();
     if (t.dataset.page === 'expenses') renderExpensesPage();
-    if (t.dataset.page === 'reports') renderReports();
+    if (t.dataset.page === 'reports') { renderReports(); loadReportOrders(); }
     if (t.dataset.page === 'settings') {
       document.getElementById('settingGoal').value = db.settings.goal;
       document.getElementById('settingPrice').value = db.settings.pricePerBox || 50;
@@ -4746,6 +4746,24 @@ async function refreshCustomerPdpa(customerId) {
 window.loadConsentLogsFor = loadConsentLogsFor;
 window.refreshCustomerPdpa = refreshCustomerPdpa;
 
+// 📊 Fetch ALL orders once and cache them for the reports P&L, then re-render.
+//    Called when the reports tab opens. Without this the report reads only the
+//    live feed (capped to 500 recent orders) and undercounts older revenue.
+let _reportOrdersFetchedAt = 0;
+async function loadReportOrders(force) {
+  if (!window.cloud?.getAllOrders) return;
+  const now = Date.now();
+  if (!force && Array.isArray(window._reportOrdersCache) && (now - _reportOrdersFetchedAt) < 60000) return;
+  try {
+    const all = await window.cloud.getAllOrders();
+    if (Array.isArray(all) && all.length) {
+      window._reportOrdersCache = all;
+      _reportOrdersFetchedAt = now;
+      if (document.querySelector('[data-page=reports]')?.classList.contains('active')) renderReports();
+    }
+  } catch (e) { console.warn('[reports] getAllOrders failed', e); }
+}
+
 function renderReports() {
   // 🌟 Today's Pulse — render before mode-specific reports so it always shows
   try { renderTodaysPulse(); } catch (e) { console.warn('[pulse]', e); }
@@ -4772,13 +4790,27 @@ function renderReports() {
   const includeFactory = reportMode === 'combined';
   const passFilter = o => includeFactory || !isFact(o);
 
+  // 📚 Full history for revenue: merge the all-orders cache (fetched when the
+  //   reports tab opens, see loadReportOrders) with the live feed, so the P&L
+  //   covers EVERY order since opening AND reflects brand-new ones. Using
+  //   db.pendingOrders alone (capped to 500 recent orders) undercounts older
+  //   revenue — e.g. it hid ~995 orders / ฿145k before this fix.
+  const _reportOrders = (() => {
+    const cache = Array.isArray(window._reportOrdersCache) ? window._reportOrdersCache : [];
+    if (!cache.length) return (db.pendingOrders || []);
+    const byId = {};
+    cache.forEach(o => { if (o && o.id) byId[o.id] = o; });
+    (db.pendingOrders || []).forEach(o => { if (o && o.id) byId[o.id] = o; }); // live feed adds newest
+    return Object.values(byId);
+  })();
+
   const allCompleted = [
-    ...(db.pendingOrders || []).filter(o => o.status === 'done' && passFilter(o)).map(o => ({
+    ..._reportOrders.filter(o => o.status === 'done' && passFilter(o)).map(o => ({
       ...o,
       _useDate: o.completed_at || o.date,
       boxes: o.boxes || (window.countMainDishes ? window.countMainDishes(o.items || []) : 0)
     })),
-    ...((db.orders || []).filter(o => passFilter(o) && !(db.pendingOrders || []).some(po =>
+    ...((db.orders || []).filter(o => passFilter(o) && !_reportOrders.some(po =>
       po.status === 'done' && po.customer_id === o.customer_id && po.completed_at === o.completed_at
     )).map(o => ({ ...o, _useDate: o.completed_at || o.date })))
   ];
